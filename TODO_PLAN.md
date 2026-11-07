@@ -20,19 +20,21 @@
 
 ## Where Things Stand
 
-The concept, design and architecture records are drafted and under panel
-review. The repository has a toolchain and no product code yet. The core
-is built domain-first: pure protocol, grouping and issue rules, then the
-use cases over in-memory fakes, then the Workers that compose them on the
-local Wrangler runtime.
+The domain core is in place and tested: protocol, sign-in, grouping,
+issue lifecycle, ingest admission, event processing, reports, tracker,
+alerts, monitors and search (`src/domain/`). Use cases exist for
+admission and the issue lifecycle (`src/application/`). The ingest
+Worker runs on local Wrangler with the `LogDO` stand-in for K2, R2, KV
+and Durable Object adapters (`src/workers/ingest`, `pnpm dev`). Report
+use cases and the report widget are in flight.
 
 ## Now
 
-- task-002 -- the adherence declaration must land before product code.
-- task-003 -- the protocol domain every ingest path depends on.
-- task-005, task-006 -- grouping and issue rules, independent of ingest.
-- task-004 -- admitArrival once the protocol exists.
-- task-007 -- assignEvent joins grouping and the issue lifecycle.
+- task-009 -- report use cases; defines `ProjectClient` and `ControlStore`.
+- task-020 -- the report widget.
+- task-008 -- processArrival over the processing domain; needs task-009's ports.
+- task-012 -- the core Worker (`ProjectDO`, `LogDO`, `QuotaDO`) and the pump.
+- task-011 -- GitHub sync use cases over the tracker domain.
 
 ## Blockers
 
