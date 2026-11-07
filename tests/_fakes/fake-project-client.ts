@@ -19,7 +19,7 @@ import type { IssuePolicies } from '../../src/domain/issue/policies.js';
 import type { IssueChange, IssueState, Member } from '../../src/domain/issue/state.js';
 import type { Refusal } from '../../src/domain/refusal.js';
 import type { Release, ReleaseFirstSeen } from '../../src/domain/release/ordering.js';
-import type { Report } from '../../src/domain/report/report.js';
+import type { Report, Reporter } from '../../src/domain/report/report.js';
 import type { SpamVerdict } from '../../src/domain/report/spam.js';
 import type { Comment, ReporterComment, ReportStatusChange } from '../../src/domain/report/thread.js';
 import type { Clock } from '../../src/ports/clock.js';
@@ -81,6 +81,10 @@ export class FakeProjectClient implements ProjectClient {
 
   async reportsOn(projectId: ProjectId, issueId: IssueId): Promise<readonly Report[]> {
     return this.store(projectId).reportsOn(issueId);
+  }
+
+  async reportsBy(projectId: ProjectId, reporter: Reporter): Promise<readonly Report[]> {
+    return this.store(projectId).reportsBy(reporter);
   }
 
   async statusChangesOf(projectId: ProjectId, reportId: ReportId): Promise<readonly ReportStatusChange[]> {

@@ -17,7 +17,7 @@ import type { Assignment } from '../domain/issue/assignment.js';
 import type { IssueChange, IssueState, Member } from '../domain/issue/state.js';
 import type { Refusal } from '../domain/refusal.js';
 import type { Release, ReleaseFirstSeen } from '../domain/release/ordering.js';
-import type { Report } from '../domain/report/report.js';
+import type { Report, Reporter } from '../domain/report/report.js';
 import type { SpamVerdict } from '../domain/report/spam.js';
 import type { Comment, ReporterComment, ReportStatusChange } from '../domain/report/thread.js';
 
@@ -38,6 +38,7 @@ export interface ProjectClient {
 
   getReport(projectId: ProjectId, reportId: ReportId): Promise<Report | null>;
   reportsOn(projectId: ProjectId, issueId: IssueId): Promise<readonly Report[]>;
+  reportsBy(projectId: ProjectId, reporter: Reporter): Promise<readonly Report[]>;
   statusChangesOf(projectId: ProjectId, reportId: ReportId): Promise<readonly ReportStatusChange[]>;
   commentsOn(projectId: ProjectId, issueId: IssueId): Promise<readonly Comment[]>;
   getIssue(projectId: ProjectId, issueId: IssueId): Promise<IssueState | null>;
