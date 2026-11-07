@@ -126,4 +126,35 @@ describe('admitArrival', () => {
     expect(admission.outcomes).toEqual([outcome('invalid', 'malformed-envelope-header', 'default')]);
     expect(deps.stream.records).toHaveLength(0);
   });
+  it('A disabled key is refused: Given a disabled Client Key, When an SDK sends an error, Then Nightwatch refuses it and records an invalid Outcome', async () => {
+    const deps = makeDeps({ configs: { [PROJECT]: projectConfig({ clientKeys: [{ publicKey: 'k1', active: false }] }) } });
+    const admission = await admitArrival(arrival(), deps);
+
+    expect(admission).toMatchObject({ decision: 'refused', status: 401 });
+    expect(admission.outcomes).toEqual([outcome('invalid', 'disabled-key', 'default')]);
+    expect(deps.stream.records).toHaveLength(0);
+    expect(deps.metrics.recorded).toEqual(admission.outcomes);
+    expect(deps.archive.archived).toEqual(admission.outcomes);
+  });
+
+  it('A disabled key is refused: a key the Project does not hold, or an unknown Project, is refused the same way', async () => {
+    for (const deps of [
+      makeDeps({ configs: { [PROJECT]: projectConfig({ clientKeys: [{ publicKey: 'other', active: true }] }) } }),
+      makeDeps({ configs: {} }),
+    ]) {
+      const admission = await admitArrival(arrival(), deps);
+      expect(admission).toMatchObject({ decision: 'refused', status: 401 });
+      expect(admission.outcomes).toEqual([outcome('invalid', 'disabled-key', 'default')]);
+      expect(deps.stream.records).toHaveLength(0);
+    }
+  });
+
+  it('A disabled key is refused: an Arrival without credentials is refused as invalid', async () => {
+    const deps = makeDeps();
+    const admission = await admitArrival(arrival({ headers: {} }), deps);
+
+    expect(admission).toMatchObject({ decision: 'refused', status: 401 });
+    expect(admission.outcomes).toEqual([outcome('invalid', 'missing-credentials', 'default')]);
+    expect(deps.stream.records).toHaveLength(0);
+  });
 });
