@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import { artifactKey, artifactOf, parseArtifactUpload, type ArtifactUpload } from '../../../../src/domain/release/artifact-upload.js';
 import { isRefusal } from '../../../../src/domain/refusal.js';
+import { normalizedDebugId } from '../../../../src/domain/sourcemap/artifact.js';
 
 const bytes = new Uint8Array([123, 125]);
 
@@ -34,7 +35,7 @@ describe('parseArtifactUpload', () => {
         fc.string(),
         fc.uint8Array(),
         (release, debugId, fileName, content) => {
-          const placed = Boolean(release) || Boolean(debugId);
+          const placed = Boolean(release) || Boolean(debugId && normalizedDebugId(debugId));
           const ok = placed && fileName !== '' && content.length > 0;
           return isRefusal(parseArtifactUpload({ release, debugId, fileName, bytes: content })) === !ok;
         },

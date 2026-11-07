@@ -38,7 +38,8 @@ function isFileMatch(artifact: Artifact, fileName: string): boolean {
 
 // --- helpers ---
 
-function normalizedDebugId(id: string): string {
+/** A debug id compared without hyphens or case: the form the Artifact index keeps. */
+export function normalizedDebugId(id: string): string {
   return id.replaceAll('-', '').toLowerCase();
 }
 
