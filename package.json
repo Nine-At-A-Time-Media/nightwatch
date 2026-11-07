@@ -15,7 +15,7 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
-    "test:integration": "vitest run --project integration",
+    "test:integration": "vitest run --project 'integration*'",
     "mutate": "stryker run",
     "dev": "./scripts/dev.sh",
     "cf-types": "./scripts/wrangler.sh types -c src/workers/ingest/wrangler.jsonc --env-interface IngestEnv --strict-vars=false src/workers/ingest/worker-configuration.d.ts",
