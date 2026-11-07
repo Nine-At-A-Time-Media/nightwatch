@@ -40,6 +40,7 @@ const REFUSAL_STATUS = new Map<string, Exclude<AdmissionStatus, 200>>([
   ['multiple-credentials', 401],
   ['malformed-credentials', 401],
   ['disabled-key', 401],
+  ['origin-not-allowed', 403],
 ]);
 
 const HEX = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, '0'));
