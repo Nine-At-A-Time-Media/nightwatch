@@ -6,6 +6,7 @@
  * silently given a stand-in.
  */
 
+import { claimedProject } from '../../adapters/do-sqlite/project-identity.js';
 import { SqliteIssueStore } from '../../adapters/do-sqlite/sqlite-issue-store.js';
 import { R2BlobStore } from '../../adapters/r2/r2-blob-store.js';
 import { QueueEffectQueue } from '../../adapters/queues/queue-effect-queue.js';
@@ -73,7 +74,7 @@ export function projectRuntime({ storage, env }: { storage: DurableObjectStorage
   if (env.STAGE !== LOCAL_STAGE) throw new Error(`stage ${env.STAGE} has no ProjectDO adapters`);
   return {
     issues: new SqliteIssueStore({ storage, dedupWindow: positive({ name: 'DEDUP_WINDOW_MS', value: env.DEDUP_WINDOW_MS }) }),
-    effects: new QueueEffectQueue(env.EFFECTS),
+    effects: new QueueEffectQueue(env.EFFECTS, () => claimedProject(storage.sql)),
     blobs: new R2BlobStore(env.BLOBS),
     clock: new SystemClock(),
     ids: new RandomIds(),

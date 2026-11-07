@@ -1,0 +1,80 @@
+// The notifier Worker -- consumes the `effects` queue: for each Issue Change
+// it notifies Reporters and followers, evaluates issue alerts, pushes the
+// change to a linked tracker issue and suggests owners for a new Issue. It
+// hosts DigestDO, one per recipient and rule.
+// The top level is the local stage (architecture, Local development): it
+// declares no remote-only binding. Adopters add `nonprod` and `prod`
+// environment blocks and repeat every binding there; bindings do not inherit.
+// Secrets (`.dev.vars` locally, never vars): GITHUB_APP_PRIVATE_KEY (the App
+// key, PKCS#8 PEM) and REPLY_TOKEN_SECRET (shared with inbound-mail).
+{
+  "$schema": "../../../node_modules/wrangler/config-schema.json",
+  "name": "nightwatch-notifier",
+  "main": "index.ts",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": false,
+  "observability": { "enabled": true },
+  "durable_objects": {
+    "bindings": [
+      { "name": "DIGEST", "class_name": "DigestDO" },
+      // ProjectDO lives in the core Worker; `pnpm dev` runs both, so the
+      // binding resolves locally.
+      { "name": "PROJECT", "class_name": "ProjectDO", "script_name": "nightwatch-core" },
+    ],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["DigestDO"] }],
+  "d1_databases": [{ "binding": "CONTROL", "database_name": "nightwatch-control", "database_id": "nightwatch-control-local" }],
+  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "nightwatch-blobs" }],
+  "kv_namespaces": [{ "binding": "GITHUB_TOKENS", "id": "nightwatch-github-tokens-local" }],
+  // Locally each message is written as an .eml file instead of being sent.
+  "send_email": [{ "name": "EMAIL" }],
+  // The local fake GitHub (dev/fake-github); any other stage calls GitHub.
+  "services": [{ "binding": "GITHUB_API", "service": "nightwatch-fake-github" }],
+  "queues": {
+    // Step messages fanned out from one Issue Change go back on the queue.
+    "producers": [{ "binding": "EFFECTS", "queue": "nightwatch-effects" }],
+    "consumers": [
+      {
+        "queue": "nightwatch-effects",
+        // The batch timeout (seconds) is the share of the Alert Evaluation
+        // Delay spent waiting for a batch to fill.
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 5,
+        "dead_letter_queue": "nightwatch-effects-dlq",
+      },
+    ],
+  },
+  "vars": {
+    // Any other stage refuses every message until its adapters exist.
+    "STAGE": "local",
+    // Mail: the From address, the thread-key and reply domains, and the
+    // Reply-by-email address lifetime (ms).
+    "MAIL_FROM": "nightwatch@notify.localhost",
+    "MAIL_DOMAIN": "notify.localhost",
+    "REPLY_DOMAIN": "reply.localhost",
+    "REPLY_LIFETIME_MS": 2592000000,
+    // ReportSettings: where the Follow-up Page lives. The message length and
+    // spam threshold are the filing side's; notices read only the URL.
+    "FOLLOW_UP_BASE_URL": "http://localhost:3000",
+    "REPORT_MAX_MESSAGE_LENGTH": 10000,
+    "SPAM_THRESHOLD": 0.9,
+    // Alerts: attempts per delivery, and the DigestPolicy (ms). With DIGESTS
+    // "on", email actions are gathered into DigestDO instead of sent at once.
+    "DELIVERY_ATTEMPTS": 3,
+    "DIGESTS": "on",
+    "DIGEST_MINIMUM_DELAY_MS": 300000,
+    "DIGEST_INCREMENT_MS": 60000,
+    "DIGEST_MAXIMUM_DELAY_MS": 1800000,
+    "DIGEST_RETRY_MS": 60000,
+    // Owner suggestions: the Suspect Commit Window (ms).
+    "SUSPECT_COMMIT_WINDOW_MS": 2592000000,
+    // The GitHub App and the Tracker settings, the same as the github Worker's.
+    "GITHUB_APP_ID": "1",
+    "CONSOLE_BASE_URL": "http://localhost:3000",
+    "TRACKER_LABELS": "nightwatch",
+    "GITHUB_APP_ACTOR": "nightwatch-local[bot]",
+    "SHARE_MARKER": "/reporter",
+    "TRACKER_MAX_REFUSALS": 3,
+  },
+}

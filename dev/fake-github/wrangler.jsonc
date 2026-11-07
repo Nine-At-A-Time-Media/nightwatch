@@ -1,0 +1,19 @@
+// The local fake GitHub -- a development stand-in started by `pnpm dev`
+// (architecture, Local development). Local stage only; never deployed.
+// Secrets in .dev.vars beside this file (scripts/dev-vars.sh writes them):
+// GITHUB_APP_PRIVATE_KEY, the same App key the notifier holds, from which
+// the fake derives the public key it checks App JWTs with; and
+// GITHUB_WEBHOOK_SECRET, the same secret the github Worker verifies with.
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "nightwatch-fake-github",
+  "main": "index.ts",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": false,
+  // Webhooks go to the github Worker in the same dev session.
+  "services": [{ "binding": "NIGHTWATCH_GITHUB", "service": "nightwatch-github" }],
+  "vars": {
+    // The App id the notifier signs App JWTs as (its GITHUB_APP_ID).
+    "GITHUB_APP_ID": "1",
+  },
+}

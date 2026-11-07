@@ -4,6 +4,11 @@
  * Project's object is the one named by its Project id, so every call goes to
  * idFromName(projectId) and names the Project again, which the object checks
  * against the Project it holds.
+ *
+ * `lastProject` names the Project the most recent call went to. A request
+ * that reaches one Project (filing a Report, a reporter's reply) uses it to
+ * name that Project beside the Issue Changes the call returned, which do not
+ * carry it (QueueEffectQueue).
  */
 
 import type { SearchContext } from '../../domain/search/match.js';
@@ -43,7 +48,15 @@ export class DurableProjectClient implements ProjectClient {
     this.#namespace = namespace;
   }
 
+  #lastProject: ProjectId | null = null;
+
+  /** The Project the most recent call went to; null before any call. */
+  lastProject(): ProjectId | null {
+    return this.#lastProject;
+  }
+
   #project(projectId: ProjectId): ProjectClient {
+    this.#lastProject = projectId;
     return this.#namespace.get(this.#namespace.idFromName(projectId));
   }
 
