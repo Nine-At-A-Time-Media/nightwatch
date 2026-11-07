@@ -4,11 +4,14 @@
 // processor reaches ProjectDO.
 import { describe, expect, it } from 'vitest';
 import { processArrival, type ProcessArrivalDeps } from '../../../src/application/process-arrival.js';
+import { uploadArtifact } from '../../../src/application/releases/upload-artifact.js';
 import { eventBlobKey } from '../../../src/domain/event/event-summary.js';
 import { gv1 } from '../../../src/domain/grouping/grouping-version.js';
 import type { ArrivalRecord } from '../../../src/domain/ingest/arrival.js';
 import type { ProcessingConfig } from '../../../src/domain/processing/processing.js';
 import { serializeEnvelope } from '../../../src/domain/protocol/envelope.js';
+import { isRefusal } from '../../../src/domain/refusal.js';
+import { CI_TOKEN_SCOPES, tokenBytes } from '../../../src/domain/tenancy/access-token.js';
 import { FakeArchiveSink } from '../../_fakes/fake-archive-sink.js';
 import { ADA, ORG, PROJECT, T0, assertionOf, world as reportsWorld } from './reports/world.js';
 
@@ -165,7 +168,7 @@ describe('processArrival', () => {
 
   it('Source map applied: Given a matching Artifact was uploaded, When a minified browser error is processed, Then its frames show original file, line and function', async () => {
     const w = world();
-    w.control.addArtifact(PROJECT, artifact);
+    await w.control.putArtifact(ORG, artifact);
     await w.blobs.put('artifacts/map-1', enc(JSON.stringify(rawMap)));
     const result = await processArrival(record([browserError()]), w.deps);
 
@@ -181,9 +184,31 @@ describe('processArrival', () => {
     expect(grouped?.summary.culprit).toBe('src/cart.ts in checkout');
   });
 
+  it('Source map applied: an Artifact uploaded through uploadArtifact is the one processing finds for the Project', async () => {
+    const w = world();
+    const token = 'nw_ci_secret';
+    await w.control.putAccessToken(await w.ids.hashContent(tokenBytes(token)), {
+      organizationId: ORG,
+      scopes: CI_TOKEN_SCOPES,
+      expiresAt: null,
+      revoked: false,
+    });
+    const upload = { release: 'web@1.0.0', debugId: null, fileName: '~/static/app.min.js.map', bytes: enc(JSON.stringify(rawMap)) };
+    const uploaded = await uploadArtifact(upload, token, w);
+    if (isRefusal(uploaded)) throw new Error(uploaded.refusal);
+
+    await processArrival(record([browserError()]), w.deps);
+
+    const stored = await storedEvent(w);
+    expect(stored.event['errors']).toEqual([]);
+    expect(stored.event['exceptions']).toEqual([
+      expect.objectContaining({ frames: [expect.objectContaining({ filename: 'src/cart.ts', function: 'checkout' })] }),
+    ]);
+  });
+
   it('Missing source map: Given no matching Artifact, When a minified error is processed, Then frames stay minified and the event records why', async () => {
     const w = world();
-    w.control.addArtifact(PROJECT, { ...artifact, release: 'web@0.9.0' });
+    await w.control.putArtifact(ORG, { ...artifact, release: 'web@0.9.0' });
     await w.blobs.put('artifacts/map-1', enc(JSON.stringify(rawMap)));
     await processArrival(record([browserError()]), w.deps);
 
@@ -196,12 +221,12 @@ describe('processArrival', () => {
 
   it('Missing source map: an Artifact whose file is gone or is no source map counts as missing, and non-browser events record nothing', async () => {
     const w = world();
-    w.control.addArtifact(PROJECT, artifact);
+    await w.control.putArtifact(ORG, artifact);
     await processArrival(record([browserError()]), w.deps);
     expect((await storedEvent(w)).event['errors']).toEqual([{ path: 'exceptions.0.frames.0', reason: 'missing-artifact' }]);
 
     const v = world();
-    v.control.addArtifact(PROJECT, artifact);
+    await v.control.putArtifact(ORG, artifact);
     await v.blobs.put('artifacts/map-1', enc('not a source map'));
     await processArrival(record([browserError()]), v.deps);
     expect((await storedEvent(v)).event['errors']).toEqual([{ path: 'exceptions.0.frames.0', reason: 'missing-artifact' }]);

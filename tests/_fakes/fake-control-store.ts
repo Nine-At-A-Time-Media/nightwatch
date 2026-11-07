@@ -13,7 +13,6 @@ import type { Member } from '../../src/domain/issue/state.js';
 import type { ProcessingConfig } from '../../src/domain/processing/processing.js';
 import type { TrustedIssuer } from '../../src/domain/signin/sign-in.js';
 import type { AccessTokenRecord } from '../../src/domain/tenancy/access-token.js';
-import type { Release } from '../../src/domain/release/ordering.js';
 import { normalizedDebugId, type Artifact, type ArtifactQuery } from '../../src/domain/sourcemap/artifact.js';
 import type { ControlStore, Membership, ReferenceEntry, LinkEntry } from '../../src/ports/control-store.js';
 import type { Repository } from '../../src/domain/tracker/external-link.js';
@@ -139,22 +138,6 @@ export class FakeControlStore implements ControlStore {
     return { ok: true };
   }
 
-  async findArtifacts(lookup: {
-    organizationId: OrganizationId;
-    debugIds: readonly string[];
-    release: Release | null;
-  }): Promise<readonly Artifact[]> {
-    return this.artifacts
-      .filter(({ organizationId }) => organizationId === lookup.organizationId)
-      .map(({ artifact }) => artifact)
-      .filter(
-        (artifact) =>
-          (artifact.debugId !== null &&
-            lookup.debugIds.some((id) => normalizedDebugId(id) === normalizedDebugId(artifact.debugId ?? ''))) ||
-          (lookup.release !== null && artifact.release === lookup.release),
-      );
-  }
-
   // --- task-021: alert rules, recipients and notification settings ---
 
   addIssueAlertRule(projectId: ProjectId, rule: IssueAlertRule): void {
@@ -166,7 +149,10 @@ export class FakeControlStore implements ControlStore {
     this.#addresses.set(member.member, options.email);
     this.#members.set(projectId, [...(this.#members.get(projectId) ?? []), member.member]);
     if (options.owner) this.#owners.set(projectId, [...(this.#owners.get(projectId) ?? []), member.member]);
-    for (const team of options.teams ?? []) this.#teams.set(team, [...(this.#teams.get(team) ?? []), member.member]);
+    for (const team of options.teams ?? []) {
+      const key = this.#teamKey(projectId, team);
+      this.#teams.set(key, [...(this.#teams.get(key) ?? []), member.member]);
+    }
     this.addProjectMember(projectId, options.email);
   }
 
@@ -180,9 +166,17 @@ export class FakeControlStore implements ControlStore {
 
   async recipientsOf(recipient: { projectId: ProjectId; to: EmailRecipient }): Promise<readonly Member[]> {
     const { to } = recipient;
-    if (to.kind === 'member') return this.#addresses.has(to.member) ? [{ member: to.member }] : [];
-    const ids = to.kind === 'team' ? (this.#teams.get(to.team) ?? []) : (this.#owners.get(recipient.projectId) ?? []);
+    if (to.kind === 'member') return (this.#members.get(recipient.projectId) ?? []).includes(to.member) ? [{ member: to.member }] : [];
+    const ids =
+      to.kind === 'team'
+        ? (this.#teams.get(this.#teamKey(recipient.projectId, to.team)) ?? [])
+        : (this.#owners.get(recipient.projectId) ?? []);
     return ids.map((member) => ({ member }));
+  }
+
+  /** Teams belong to an Organization: the key of a team name within the Project's Organization. */
+  #teamKey(projectId: ProjectId, team: string): string {
+    return `${this.#projects.get(projectId) ?? ''}/${team}`;
   }
 
   async addressOf(member: Member): Promise<string | null> {
@@ -200,14 +194,9 @@ export class FakeControlStore implements ControlStore {
   // --- task-008: processing config and the Artifact index ---
 
   readonly #processing = new Map<ProjectId, ProcessingConfig>();
-  readonly #artifacts = new Map<ProjectId, Artifact[]>();
 
   setProcessingConfig(projectId: ProjectId, config: ProcessingConfig): void {
     this.#processing.set(projectId, config);
-  }
-
-  addArtifact(projectId: ProjectId, artifact: Artifact): void {
-    this.#artifacts.set(projectId, [...(this.#artifacts.get(projectId) ?? []), artifact]);
   }
 
   async processingConfig(projectId: ProjectId): Promise<ProcessingConfig | null> {
@@ -215,13 +204,16 @@ export class FakeControlStore implements ControlStore {
   }
 
   async artifactsFor(projectId: ProjectId, query: ArtifactQuery): Promise<readonly Artifact[]> {
-    const plain = (id: string) => id.replaceAll('-', '').toLowerCase();
-    const debugIds = new Set(query.debugIds.map(plain));
-    return (this.#artifacts.get(projectId) ?? []).filter(
-      (artifact) =>
-        (query.release !== null && artifact.release === query.release) ||
-        (artifact.debugId !== null && debugIds.has(plain(artifact.debugId))),
-    );
+    const organizationId = this.#projects.get(projectId);
+    const debugIds = new Set(query.debugIds.map(normalizedDebugId));
+    return this.artifacts
+      .filter((entry) => entry.organizationId === organizationId)
+      .map(({ artifact }) => artifact)
+      .filter(
+        (artifact) =>
+          (query.release !== null && artifact.release === query.release) ||
+          (artifact.debugId !== null && debugIds.has(normalizedDebugId(artifact.debugId))),
+      );
   }
 
   // --- task-011: Code and GitHub ---
