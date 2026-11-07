@@ -6,12 +6,17 @@
  * hands a test the store, to set a Given or inspect the result.
  */
 
+import { addComment } from '../../src/application/reports/add-comment.js';
 import { openReportIssue } from '../../src/application/reports/open-report-issue.js';
 import { eraseReports } from '../../src/application/reports/erase-reports.js';
 import { markSpam } from '../../src/application/reports/mark-spam.js';
 import { recordReply } from '../../src/application/reports/record-reply.js';
 import { assignEvent } from '../../src/application/issues/assign-event.js';
 import { recordReleaseSeen } from '../../src/application/issues/record-release-seen.js';
+import type { AlertFiring } from '../../src/domain/alerts/alert-firing.js';
+import type { Assignee } from '../../src/domain/alerts/issue-alert-rule.js';
+import type { MetricAggregate } from '../../src/domain/alerts/metric-incident.js';
+import type { Participation } from '../../src/domain/alerts/notification-settings.js';
 import type { EventSummary } from '../../src/domain/event/event-summary.js';
 import type { Fingerprint } from '../../src/domain/grouping/fingerprint.js';
 import type { IssueId, ProjectId, ReportId } from '../../src/domain/ids.js';
@@ -22,7 +27,7 @@ import type { Refusal } from '../../src/domain/refusal.js';
 import type { Release, ReleaseFirstSeen } from '../../src/domain/release/ordering.js';
 import type { Report, Reporter } from '../../src/domain/report/report.js';
 import type { SpamVerdict } from '../../src/domain/report/spam.js';
-import type { Comment, ReporterComment, ReportStatusChange } from '../../src/domain/report/thread.js';
+import type { Comment, MemberComment, ReporterComment, ReportStatusChange } from '../../src/domain/report/thread.js';
 import type { Clock } from '../../src/ports/clock.js';
 import type { EffectQueue } from '../../src/ports/effect-queue.js';
 import type { Ids } from '../../src/ports/ids.js';
@@ -131,5 +136,62 @@ export class FakeProjectClient implements ProjectClient {
 
   async resolveMonitorIssue(projectId: ProjectId, resolving: { issueId: IssueId; at: number }): Promise<IssueChange[]> {
     return resolveMonitorIssue(resolving, { issues: this.store(projectId), effects: this.#side.effects });
+  }
+
+  // --- task-021: alert evaluation, firings, follow participations and replies by email ---
+
+  async countEvents(projectId: ProjectId, range: { issueId: IssueId; since: number }): Promise<number> {
+    return this.store(projectId).countEvents(range);
+  }
+
+  async countUsers(projectId: ProjectId, range: { issueId: IssueId; since: number }): Promise<number> {
+    return this.store(projectId).countUsers(range);
+  }
+
+  async fingerprintsOf(projectId: ProjectId, issueId: IssueId): Promise<readonly Fingerprint[]> {
+    return this.store(projectId).fingerprintsOf(issueId);
+  }
+
+  async assigneeOf(projectId: ProjectId, issueId: IssueId): Promise<Assignee | null> {
+    return this.store(projectId).assigneeOf(issueId);
+  }
+
+  async lastFiring(projectId: ProjectId, key: { ruleId: string; issueId: IssueId }): Promise<AlertFiring | null> {
+    return this.store(projectId).lastFiring(key);
+  }
+
+  async recordFiring(projectId: ProjectId, firing: AlertFiring): Promise<void> {
+    const store = this.store(projectId);
+    await store.transact(() => store.recordFiring(firing));
+  }
+
+  async firingsOf(projectId: ProjectId, ruleId: string): Promise<readonly AlertFiring[]> {
+    return this.store(projectId).firingsOf(ruleId);
+  }
+
+  async participationsOf(projectId: ProjectId, issueId: IssueId): Promise<readonly Participation[]> {
+    return this.store(projectId).participationsOf(issueId);
+  }
+
+  async addComment(
+    projectId: ProjectId,
+    issueId: IssueId,
+    comment: Pick<MemberComment, 'text' | 'shared'>,
+    actor: Member,
+  ): Promise<IssueChange[]> {
+    const { clock, ids, effects } = this.#side;
+    return addComment(issueId, comment, actor, { issues: this.store(projectId), effects, clock, ids });
+  }
+
+  /** Event and user counts over every Issue's Events; a crash-free rate needs Sessions, which the store does not hold. */
+  async metricValue(projectId: ProjectId, query: { aggregate: MetricAggregate; since: number }): Promise<number | null> {
+    if (query.aggregate === 'crash_free_rate') return null;
+    const store = this.store(projectId);
+    const issues = await store.listIssues();
+    const events = (await Promise.all(issues.map((issue) => store.eventsOf(issue.issueId))))
+      .flat()
+      .filter((event) => event.summary.at >= query.since);
+    if (query.aggregate === 'event_count') return events.length;
+    return new Set(events.flatMap((event) => (event.summary.userKey === null ? [] : [event.summary.userKey]))).size;
   }
 }

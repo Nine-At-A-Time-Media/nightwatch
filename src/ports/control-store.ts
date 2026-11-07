@@ -10,6 +10,8 @@
  * Report may have several references; forgetting a Report revokes them all.
  */
 
+import type { EmailRecipient, IssueAlertRule } from '../domain/alerts/issue-alert-rule.js';
+import type { NotificationSettings } from '../domain/alerts/notification-settings.js';
 import type { Durability } from '../domain/ingest/arrival.js';
 import type { OrganizationId, ProjectId, ReportId } from '../domain/ids.js';
 import type { Member } from '../domain/issue/state.js';
@@ -79,4 +81,16 @@ export interface ControlStore {
     debugIds: readonly string[];
     release: Release | null;
   }): Promise<readonly Artifact[]>;
+  // --- task-021: alert rules, recipients and notification settings ---
+
+  /** The Project's Issue Alert Rules; empty when it has none. */
+  issueAlertRules(projectId: ProjectId): Promise<readonly IssueAlertRule[]>;
+  /** The Members an email action names in the Project: its owners, a Team's Members, or one Member. */
+  recipientsOf(recipient: { projectId: ProjectId; to: EmailRecipient }): Promise<readonly Member[]>;
+  /** The Member's address, or null for an unknown Member. */
+  addressOf(member: Member): Promise<string | null>;
+  /** Every Member with permission on the Project. */
+  projectMembers(projectId: ProjectId): Promise<readonly Member[]>;
+  /** The Member's notification settings; empty settings when they set none. */
+  notificationSettingsOf(member: Member): Promise<NotificationSettings>;
 }

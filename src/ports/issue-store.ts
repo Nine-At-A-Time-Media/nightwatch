@@ -12,6 +12,9 @@
  * milliseconds.
  */
 
+import type { AlertFiring } from '../domain/alerts/alert-firing.js';
+import type { Assignee } from '../domain/alerts/issue-alert-rule.js';
+import type { Participation } from '../domain/alerts/notification-settings.js';
 import type { Fingerprint } from '../domain/grouping/fingerprint.js';
 import type { EventId, IssueId, ReportId } from '../domain/ids.js';
 import type { AssignmentTarget, Tombstone } from '../domain/issue/assignment.js';
@@ -111,4 +114,17 @@ export interface IssueStore {
   sessionCounts(scope: { release: Release; environment: Environment }): Promise<SessionCounts>;
   /** Distinct users with a Session for the release and environment, and how many of them crashed. */
   sessionUsers(scope: { release: Release; environment: Environment }): Promise<UserCounts>;
+  // --- task-021: Assignee, Alert Firings (the quiet-period row) and follow participations ---
+
+  /** The Issue's Assignee, or null when it has none. */
+  assigneeOf(issueId: IssueId): Promise<Assignee | null>;
+  /** The latest firing of the rule for the Issue, or null when it never fired for it. */
+  lastFiring(key: { ruleId: string; issueId: IssueId }): Promise<AlertFiring | null>;
+  /** Saves the firing, replacing the one with the same rule, Issue and time. */
+  recordFiring(firing: AlertFiring): Promise<void>;
+  /** Every firing of the rule kept in this Project, oldest first. */
+  firingsOf(ruleId: string): Promise<readonly AlertFiring[]>;
+  /** Each reason a Member follows the Issue. */
+  participationsOf(issueId: IssueId): Promise<readonly Participation[]>;
+  addParticipation(issueId: IssueId, participation: Participation): Promise<void>;
 }

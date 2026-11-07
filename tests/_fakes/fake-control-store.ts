@@ -5,6 +5,8 @@
  * makes every write that reports Durability fail.
  */
 
+import type { EmailRecipient, IssueAlertRule } from '../../src/domain/alerts/issue-alert-rule.js';
+import type { NotificationSettings } from '../../src/domain/alerts/notification-settings.js';
 import type { Durability } from '../../src/domain/ingest/arrival.js';
 import type { OrganizationId, ProjectId, ReportId } from '../../src/domain/ids.js';
 import type { Member } from '../../src/domain/issue/state.js';
@@ -29,6 +31,13 @@ export class FakeControlStore implements ControlStore {
   readonly accessTokens = new Map<string, AccessTokenRecord>();
   // --- task-022: the Artifact index, exposed for assertions ---
   readonly artifacts: IndexedArtifact[] = [];
+  // --- task-021: alert rules, recipients and notification settings ---
+  readonly #rules = new Map<ProjectId, IssueAlertRule[]>();
+  readonly #addresses = new Map<string, string>();
+  readonly #teams = new Map<string, string[]>();
+  readonly #owners = new Map<ProjectId, string[]>();
+  readonly #members = new Map<ProjectId, string[]>();
+  readonly #settings = new Map<string, NotificationSettings>();
 
   /** Adds a Project to an Organization, creating the Organization if needed. */
   addProject(organizationId: OrganizationId, projectId: ProjectId): void {
@@ -138,5 +147,47 @@ export class FakeControlStore implements ControlStore {
             lookup.debugIds.some((id) => normalizedDebugId(id) === normalizedDebugId(artifact.debugId ?? ''))) ||
           (lookup.release !== null && artifact.release === lookup.release),
       );
+  }
+
+  // --- task-021: alert rules, recipients and notification settings ---
+
+  addIssueAlertRule(projectId: ProjectId, rule: IssueAlertRule): void {
+    this.#rules.set(projectId, [...(this.#rules.get(projectId) ?? []), rule]);
+  }
+
+  /** Makes the Member a member of the Project at an address; `owner` also makes them one of its owners. */
+  addMember(projectId: ProjectId, member: Member, options: { email: string; owner?: boolean; teams?: readonly string[] }): void {
+    this.#addresses.set(member.member, options.email);
+    this.#members.set(projectId, [...(this.#members.get(projectId) ?? []), member.member]);
+    if (options.owner) this.#owners.set(projectId, [...(this.#owners.get(projectId) ?? []), member.member]);
+    for (const team of options.teams ?? []) this.#teams.set(team, [...(this.#teams.get(team) ?? []), member.member]);
+    this.addProjectMember(projectId, options.email);
+  }
+
+  setNotificationSettings(member: Member, settings: NotificationSettings): void {
+    this.#settings.set(member.member, settings);
+  }
+
+  async issueAlertRules(projectId: ProjectId): Promise<readonly IssueAlertRule[]> {
+    return this.#rules.get(projectId) ?? [];
+  }
+
+  async recipientsOf(recipient: { projectId: ProjectId; to: EmailRecipient }): Promise<readonly Member[]> {
+    const { to } = recipient;
+    if (to.kind === 'member') return this.#addresses.has(to.member) ? [{ member: to.member }] : [];
+    const ids = to.kind === 'team' ? (this.#teams.get(to.team) ?? []) : (this.#owners.get(recipient.projectId) ?? []);
+    return ids.map((member) => ({ member }));
+  }
+
+  async addressOf(member: Member): Promise<string | null> {
+    return this.#addresses.get(member.member) ?? null;
+  }
+
+  async projectMembers(projectId: ProjectId): Promise<readonly Member[]> {
+    return (this.#members.get(projectId) ?? []).map((member) => ({ member }));
+  }
+
+  async notificationSettingsOf(member: Member): Promise<NotificationSettings> {
+    return this.#settings.get(member.member) ?? { organization: {}, projects: {} };
   }
 }
