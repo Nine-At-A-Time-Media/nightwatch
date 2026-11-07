@@ -1,8 +1,9 @@
 // The ingest Worker end to end in workerd: a real SDK request against SELF,
-// with the Project's config seeded in KV, ends as an Arrival Record in the
+// with the Project's config seeded in D1 (the local stage reads it there
+// directly), ends as an Arrival Record in the
 // LogDO arrival log, or as the refusal its Admission names.
-import { env, SELF } from 'cloudflare:test';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { applyD1Migrations, env, SELF } from 'cloudflare:test';
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { LogArrivalStream } from '../../../src/adapters/logdo/log-arrival-stream.js';
 import type { ArrivalRecord } from '../../../src/domain/ingest/arrival.js';
 import { serializeEnvelope } from '../../../src/domain/protocol/envelope.js';
@@ -31,7 +32,12 @@ async function seedProject(quotas?: object): Promise<void> {
     inboundFilters: { browserExtensions: false, localhost: false, webCrawlers: false, releases: [], messages: [], addresses: [] },
     ...(quotas ? { quotas } : {}),
   };
-  await env.PROJECT_CONFIG.put(project, JSON.stringify(config));
+  const organization = `org-${project}`;
+  await env.CONTROL.batch([
+    env.CONTROL.prepare('INSERT OR IGNORE INTO organizations (organization_id) VALUES (?)').bind(organization),
+    env.CONTROL.prepare('INSERT OR IGNORE INTO projects (project_id, organization_id) VALUES (?, ?)').bind(project, organization),
+    env.CONTROL.prepare('INSERT OR REPLACE INTO project_configs (project_id, config) VALUES (?, ?)').bind(project, JSON.stringify(config)),
+  ]);
 }
 
 function post(path: string, init: { body: BodyInit; headers?: Record<string, string> }): Promise<Response> {
@@ -50,6 +56,10 @@ async function gzip(bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuf
   const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
+
+beforeAll(async () => {
+  await applyD1Migrations(env.CONTROL, env.TEST_MIGRATIONS);
+});
 
 beforeEach(async () => {
   project = String(Math.floor(Math.random() * 1e9));
