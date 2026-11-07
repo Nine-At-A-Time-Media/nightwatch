@@ -66,10 +66,15 @@ describe('QueueEffectQueue', () => {
 describe('parseEffectMessage', () => {
   it('reads back every message the producer sends, with or without a step', () => {
     fc.assert(
-      fc.property(fc.string({ minLength: 1 }), change, fc.option(fc.string({ minLength: 1 }), { nil: undefined }), (projectId, sent, step) => {
-        const message: EffectMessage = step === undefined ? { projectId, change: sent } : { projectId, change: sent, step };
-        expect(parseEffectMessage(JSON.parse(JSON.stringify(message)))).toEqual(message);
-      }),
+      fc.property(
+        fc.string({ minLength: 1 }),
+        change,
+        fc.option(fc.string({ minLength: 1 }), { nil: undefined }),
+        (projectId, sent, step) => {
+          const message: EffectMessage = step === undefined ? { projectId, change: sent } : { projectId, change: sent, step };
+          expect(parseEffectMessage(JSON.parse(JSON.stringify(message)))).toEqual(message);
+        },
+      ),
     );
   });
 
