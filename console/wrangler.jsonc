@@ -1,0 +1,60 @@
+// The console Worker -- the Nuxt console built with the Nitro
+// `cloudflare-module` preset: the triage pages, the Follow-up Page, and the
+// API the widget and the pages call. Build it first
+// (`pnpm --filter @nightwatch/console build`); `main` and `assets` are the
+// build output.
+// The top level is the local stage (architecture, Local development): it
+// declares no remote-only binding. Adopters add `nonprod` and `prod`
+// environment blocks and repeat every binding there; bindings do not inherit.
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "nightwatch-console",
+  "main": ".output/server/index.mjs",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "observability": { "enabled": true },
+  "assets": { "directory": ".output/public", "binding": "ASSETS" },
+  // A Project's state lives in the core Worker's ProjectDO; Report Quotas in
+  // the ingest Worker's QuotaDO. Run those Workers in the same dev session.
+  "durable_objects": {
+    "bindings": [
+      { "name": "PROJECT", "class_name": "ProjectDO", "script_name": "nightwatch-core" },
+      { "name": "QUOTA", "class_name": "QuotaDO", "script_name": "nightwatch-ingest" },
+    ],
+  },
+  "d1_databases": [
+    {
+      "binding": "CONTROL",
+      "database_name": "nightwatch-control",
+      "database_id": "nightwatch-control-local",
+      "migrations_dir": "../migrations",
+    },
+  ],
+  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "nightwatch-blobs" }],
+  "kv_namespaces": [{ "binding": "PROJECT_CONFIG", "id": "nightwatch-project-config-local" }],
+  "queues": { "producers": [{ "binding": "EFFECTS", "queue": "nightwatch-effects" }] },
+  "send_email": [{ "name": "MAIL" }],
+  // The local stage trusts only the development issuer (dev/local-issuer),
+  // reached over this service binding. A deployed stage must not declare it.
+  "services": [{ "binding": "LOCAL_ISSUER", "service": "nightwatch-local-issuer" }],
+  "vars": {
+    // `local` reads the issuer keys over LOCAL_ISSUER and accepts the
+    // CF_Authorization cookie; any other stage refuses to build its deps
+    // while LOCAL_ISSUER is bound.
+    "STAGE": "local",
+    // ReportSettings.
+    "FOLLOW_UP_BASE_URL": "http://localhost:8787",
+    "MAX_MESSAGE_LENGTH": 4000,
+    "SPAM_THRESHOLD": 0.9,
+    "MAIL_FROM": "nightwatch@localhost",
+    // TrackerSettings; GITHUB_APP_ID and the GITHUB_APP_PRIVATE_KEY secret
+    // (in .dev.vars) turn on opening GitHub issues.
+    "CONSOLE_BASE_URL": "http://localhost:8787",
+    "TRACKER_LABELS": "nightwatch",
+    "GITHUB_APP_ACTOR": "nightwatch[bot]",
+    "SHARE_MARKER": "/reporter",
+    "MAX_REFUSALS": 3,
+    "GITHUB_APP_ID": "",
+  },
+}
