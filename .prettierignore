@@ -7,3 +7,6 @@ docs
 tasks
 *.md
 .designomatic.yml
+.claude
+.agents
+.codex
