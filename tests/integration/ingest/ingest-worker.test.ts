@@ -84,9 +84,20 @@ describe('ingest Worker', () => {
     expect(response.status).toBe(200);
   });
 
-  it('a cron check-in with its key in the path is acknowledged', async () => {
+  it('a cron check-in with its key in the path is acknowledged and forwarded to the monitors Worker', async () => {
     const response = await post(`/api/${project}/cron/nightly/k-live/`, { body: JSON.stringify({ status: 'ok' }) });
     expect(response.status).toBe(200);
+    expect(JSON.parse((await env.PROJECT_CONFIG.get(`forwarded-check-in:${project}`)) ?? 'null')).toEqual({
+      projectId: project,
+      monitorId: 'nightly',
+      status: 'ok',
+    });
+  });
+
+  it('a refused check-in is not forwarded', async () => {
+    const response = await post(`/api/${project}/cron/nightly/k-off/`, { body: JSON.stringify({ status: 'ok' }) });
+    expect(response.status).toBe(401);
+    expect(await env.PROJECT_CONFIG.get(`forwarded-check-in:${project}`)).toBeNull();
   });
 
   it('a disabled key is refused 401 and nothing is acknowledged', async () => {

@@ -2,7 +2,8 @@
 // `integration` runs Workers code inside workerd through the Cloudflare plugin,
 // against the ingest Worker's local-stage config (no remote bindings), plus
 // a local D1 `CONTROL` database and the control-plane migrations as
-// `TEST_MIGRATIONS`, which suites apply with applyD1Migrations;
+// `TEST_MIGRATIONS`, which suites apply with applyD1Migrations, and a
+// `MONITORS` stand-in that records each forwarded check-in in KV;
 // `integration-core` does the same against the core Worker's (ProjectDO);
 // `integration-monitors` and `integration-scheduler` run their Worker's
 // config with a test entry that also hosts ProjectDO (built from the core
@@ -16,6 +17,17 @@ import { unstable_readConfig } from 'wrangler';
 
 /** ProjectDO's settings, read from the core Worker's config so a test entry hosting it matches. */
 const CORE_VARS = unstable_readConfig({ config: './src/workers/core/wrangler.jsonc' }).vars;
+
+/** The KV access a service binding function gets from Miniflare, as far as recordCheckIn uses it. */
+type KvHost = { getKVNamespace(name: string): Promise<{ put(key: string, value: string): Promise<unknown> }> };
+
+/** The ingest project's monitors Worker: keeps each forwarded check-in in KV under its Project, for the test to read. */
+async function recordCheckIn(request: { json(): Promise<unknown> }, mf: KvHost) {
+  const checkIn = (await request.json()) as { projectId: string };
+  const kv = await mf.getKVNamespace('PROJECT_CONFIG');
+  await kv.put(`forwarded-check-in:${checkIn.projectId}`, JSON.stringify(checkIn));
+  return new Response(JSON.stringify({ change: null }));
+}
 
 /** What a hosted ProjectDO needs beside its vars, and the fake outbound network. */
 const HOSTED_PROJECT_DO = {
@@ -49,6 +61,7 @@ export default defineConfig({
             miniflare: {
               d1Databases: ['CONTROL'],
               bindings: { TEST_MIGRATIONS: await readD1Migrations('./migrations') },
+              serviceBindings: { MONITORS: recordCheckIn },
             },
           })),
         ],

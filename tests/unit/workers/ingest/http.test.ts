@@ -3,7 +3,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import type { Admission } from '../../../../src/domain/ingest/admission.js';
-import { admissionResponse, arrivalOf, preflightResponse, routeOf } from '../../../../src/workers/ingest/http.js';
+import { admissionResponse, arrivalOf, checkInOf, preflightResponse, routeOf } from '../../../../src/workers/ingest/http.js';
 
 const segment = fc.stringMatching(/^[A-Za-z0-9_-]{1,16}$/);
 
@@ -112,5 +112,25 @@ describe('preflightResponse', () => {
     expect(response.headers.get('access-control-allow-origin')).toBe('https://app.example.com');
     expect(response.headers.get('access-control-allow-methods')).toBe('POST, OPTIONS');
     expect(response.headers.get('access-control-allow-headers')).toContain('x-sentry-auth');
+  });
+});
+
+describe('checkInOf', () => {
+  const enc = (text: string) => new TextEncoder().encode(text);
+  const url = (path: string) => new URL(`https://ingest.example${path}`);
+
+  it('names the monitor in the route and takes the status from the query, else the JSON body, else ok', () => {
+    expect(checkInOf({ url: url('/api/42/cron/nightly/k1/?status=in_progress'), body: enc('') })).toEqual({
+      projectId: '42',
+      monitorId: 'nightly',
+      status: 'in_progress',
+    });
+    expect(checkInOf({ url: url('/api/42/cron/nightly/'), body: enc('{"status":"error"}') })).toMatchObject({ status: 'error' });
+    expect(checkInOf({ url: url('/api/42/cron/nightly/'), body: enc('not json') })).toMatchObject({ status: 'ok' });
+  });
+
+  it('is null for an unknown status or a route that is not a check-in', () => {
+    expect(checkInOf({ url: url('/api/42/cron/nightly/?status=late'), body: enc('') })).toBeNull();
+    expect(checkInOf({ url: url('/api/42/envelope/'), body: enc('') })).toBeNull();
   });
 });
