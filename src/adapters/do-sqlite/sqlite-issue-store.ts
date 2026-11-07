@@ -37,6 +37,7 @@ import {
   type UserCounts,
 } from '../../domain/release/health.js';
 import type { Release, ReleaseFirstSeen } from '../../domain/release/ordering.js';
+import type { RecordedFiling } from '../../domain/report/filing.js';
 import type { Report, Reporter } from '../../domain/report/report.js';
 import type { Comment, ReportStatusChange } from '../../domain/report/thread.js';
 import type { ExternalLink } from '../../domain/tracker/external-link.js';
@@ -495,6 +496,20 @@ export class SqliteIssueStore implements IssueStore {
   async issueOfShortId(shortId: number): Promise<IssueId | null> {
     const rows = this.#rows('SELECT issue_id FROM short_ids WHERE short_id = ?', shortId);
     return rows[0] === undefined ? null : text(rows[0], 'issue_id');
+  }
+
+  // --- task-025: filings recorded under a filing key ---
+
+  async recallFiling(filingKey: string): Promise<RecordedFiling | null> {
+    return firstParsed<RecordedFiling>(this.#rows('SELECT filing FROM filings WHERE filing_key = ?', filingKey), 'filing');
+  }
+
+  async recordFiling(filingKey: string, filing: RecordedFiling): Promise<void> {
+    this.#sql.exec(
+      'INSERT INTO filings (filing_key, filing) VALUES (?1, ?2) ON CONFLICT (filing_key) DO UPDATE SET filing = excluded.filing',
+      filingKey,
+      JSON.stringify(filing),
+    );
   }
 
   // --- queries ---

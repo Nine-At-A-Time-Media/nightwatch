@@ -50,8 +50,11 @@ const V1 = [
   `CREATE TABLE external_links (issue_id TEXT PRIMARY KEY, link TEXT NOT NULL)`,
 ];
 
+/** task-025: filings recorded under a filing key. */
+const V2 = [`CREATE TABLE filings (filing_key TEXT PRIMARY KEY, filing TEXT NOT NULL)`];
+
 /** Migration N (1-based) is entry N - 1. */
-export const ISSUE_STORE_MIGRATIONS: readonly (readonly string[])[] = [V1];
+export const ISSUE_STORE_MIGRATIONS: readonly (readonly string[])[] = [V1, V2];
 
 const VERSION_TABLE = `CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)`;
 const CURRENT_VERSION = `SELECT COALESCE(MAX(version), 0) AS version FROM schema_version`;
