@@ -147,7 +147,7 @@ describe('MetricRuleDO', () => {
       ['fp-1'],
     );
     const stub = env.METRIC_RULE.get(env.METRIC_RULE.idFromName(`${projectId}/${rule.ruleId}`));
-    expect(await stub.configure({ rule, target: { projectId, actions: [] }, resolution: MINUTE })).toBeUndefined();
+    expect(await stub.configure({ rule, target: { projectId, actions: [] }, resolution: MINUTE })).toBeNull();
 
     expect(await runDurableObjectAlarm(stub)).toBe(true);
 
