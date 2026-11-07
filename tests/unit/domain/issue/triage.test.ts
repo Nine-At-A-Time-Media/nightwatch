@@ -57,8 +57,14 @@ describe('triage', () => {
     expect(triage(issueIn(ongoing), { kind: 'mark_reviewed' }, member, AT)).toEqual(markReviewed(issueIn(ongoing), member, AT));
   });
 
-  it('refuses a transition the State Machine does not allow', () => {
+  it('refuses a transition the State Machine does not allow, and a condition that names nothing', () => {
     expect(triage(issueIn(resolved), { kind: 'unarchive' }, member, AT)).toEqual({ refusal: 'transition_not_allowed' });
+    const nothing = { untilDate: null, count: null, window: null, userCount: null, userWindow: null };
+    expect(
+      triage(issueIn(ongoing), { kind: 'archive', archive: { substatus: 'until_condition', condition: nothing } }, member, AT),
+    ).toEqual({
+      refusal: 'condition_required',
+    });
   });
 
   it('property: every action either refuses or leaves the Issue out of For Review', () => {
@@ -76,18 +82,12 @@ describe('parseTriageAction', () => {
     for (const action of ACTIONS) expect(parseTriageAction(JSON.parse(JSON.stringify(action)))).toEqual(action);
   });
 
-  it('refuses an unknown kind, a missing release, an unknown Priority and a condition that names nothing', () => {
+  it('refuses an unknown kind, a missing release, an unknown Priority and a body that is not an object', () => {
     const invalid = { refusal: 'invalid_triage_action' };
     expect(parseTriageAction({ kind: 'delete' })).toEqual(invalid);
     expect(parseTriageAction({ kind: 'resolve', resolution: { kind: 'in_release' } })).toEqual(invalid);
     expect(parseTriageAction({ kind: 'set_priority', level: 'urgent' })).toEqual(invalid);
     expect(parseTriageAction(null)).toEqual(invalid);
-    expect(
-      parseTriageAction({
-        kind: 'archive',
-        archive: { substatus: 'until_condition', condition: { untilDate: null, count: null, window: null, userCount: null, userWindow: null } },
-      }),
-    ).toEqual({ refusal: 'condition_required' });
   });
 
   it('property: arbitrary input never throws; it parses or refuses', () => {
