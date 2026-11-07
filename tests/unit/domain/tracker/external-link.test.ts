@@ -6,6 +6,7 @@ import {
   link,
   markBroken,
   observe,
+  commentPosted,
   pushRefused,
   pushSucceeded,
   relink,
@@ -118,5 +119,19 @@ describe('External Link', () => {
         expect(current.state === 'broken').toBe(times >= maxRefusals);
       }),
     );
+  });
+});
+
+describe('commentPosted', () => {
+  it('starts the refusal count again and leaves the pending expectation and last known state alone', () => {
+    const refused = pushRefused(expectPushed(linked(), COMPLETED), { maxRefusals: 3 });
+    const posted = commentPosted(refused);
+
+    expect(posted).toEqual({ ...refused, refusals: 0 });
+  });
+
+  it('leaves a Broken link Broken', () => {
+    const broken = markBroken(linked());
+    expect(commentPosted(broken)).toEqual(broken);
   });
 });

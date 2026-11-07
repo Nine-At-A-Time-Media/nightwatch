@@ -4,7 +4,8 @@
 // D1 `CONTROL` database included), plus the control-plane migrations as
 // `TEST_MIGRATIONS`, which suites apply with applyD1Migrations;
 // `integration-core` does the same against the core Worker's (ProjectDO);
-// `widget` is the report widget package's own project (widget/vitest.config.ts).
+// `widget` is the report widget package's own project (widget/vitest.config.ts);
+// `console-server` and `console-components` are the console's (console/vitest.*.config.ts).
 import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-plugin';
 import { defineConfig } from 'vitest/config';
 
@@ -46,6 +47,8 @@ export default defineConfig({
         },
       },
       'widget/vitest.config.ts',
+      'console/vitest.server.config.ts',
+      'console/vitest.components.config.ts',
     ],
   },
 });

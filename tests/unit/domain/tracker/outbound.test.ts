@@ -6,6 +6,7 @@ import {
   expectedStateAfter,
   outboundChangeFor,
   outboundIssueBody,
+  outboundReplyBody,
   type OutboundIssueFacts,
 } from '../../../../src/domain/tracker/outbound.js';
 
@@ -139,6 +140,32 @@ describe('Outbound issue body', () => {
           for (const key of attachments) expect(body).not.toContain(key);
         },
       ),
+    );
+  });
+});
+
+describe('Outbound reply body', () => {
+  it("quotes the reporter's reply under a heading, line by line", () => {
+    expect(outboundReplyBody({ text: 'it also happens\non mobile', reporterAddress: 'ada@example.com' })).toBe(
+      '**Reporter reply**\n\n> it also happens\n> on mobile\n',
+    );
+  });
+
+  it("removes the reporter's own address in any case, and mentions no one", () => {
+    const body = outboundReplyBody({ text: 'mail ADA@Example.com or ping @mia-gh <b>now</b>', reporterAddress: 'ada@example.com' });
+
+    expect(body.toLowerCase()).not.toContain('ada@example.com');
+    expect(body).not.toMatch(/@[A-Za-z0-9]/);
+    expect(body).not.toContain('<b>');
+    expect(body).toContain('[address removed]');
+  });
+
+  it("never carries the reporter's address, whatever the reply says", () => {
+    fc.assert(
+      fc.property(fc.emailAddress(), fc.string(), fc.string(), (email, before, after) => {
+        const body = outboundReplyBody({ text: `${before}${email.toUpperCase()}${after}${email}`, reporterAddress: email });
+        expect(body.toLowerCase()).not.toContain(email.toLowerCase());
+      }),
     );
   });
 });

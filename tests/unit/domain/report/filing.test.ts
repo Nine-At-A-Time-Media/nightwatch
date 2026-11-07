@@ -65,8 +65,13 @@ describe('Thread facts', () => {
   const reply: Comment = { id: 'c3', author: { report: 'report-1' }, shared: true, text: 'thanks', at: T0 + 3 };
 
   it('a shared Member Comment triages the Issue; a private one or a reporter reply does not', () => {
-    expect(triageOf([shared])).toEqual({ assigned: false, commentedByMember: true });
-    expect(triageOf([privateNote, reply])).toEqual({ assigned: false, commentedByMember: false });
+    expect(triageOf([shared], null)).toEqual({ assigned: false, commentedByMember: true });
+    expect(triageOf([privateNote, reply], null)).toEqual({ assigned: false, commentedByMember: false });
+  });
+
+  it('an Assignee, Member or Team, triages the Issue', () => {
+    expect(triageOf([], { member: 'm1' })).toEqual({ assigned: true, commentedByMember: false });
+    expect(triageOf([privateNote], { team: 'web' })).toEqual({ assigned: true, commentedByMember: false });
   });
 
   it('the last shown Report Status is the latest change, Received before any', () => {

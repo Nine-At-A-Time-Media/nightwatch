@@ -47,6 +47,11 @@ export function isNotified(setting: NotificationSetting, following: boolean): bo
   return setting === 'always' || (setting === 'followed_only' && following);
 }
 
+/** Whether the participation is already recorded, so recording it again would add nothing. */
+export function isParticipating(participations: readonly Participation[], participation: Participation): boolean {
+  return participations.some((held) => held.member === participation.member && held.reason === participation.reason);
+}
+
 // --- exports ---
 
 /** The setting in force for one kind in one Project: Project, then Organization, then the default. */

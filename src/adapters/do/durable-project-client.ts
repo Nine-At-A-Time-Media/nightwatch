@@ -207,4 +207,19 @@ export class DurableProjectClient implements ProjectClient {
   searchPage(projectId: ProjectId, plan: SearchPlan, context: SearchContext): Promise<IssuePage> {
     return this.#project(projectId).searchPage(projectId, plan, context);
   }
+
+  // --- task-027: assignment and Report moves ---
+
+  assignIssue(
+    projectId: ProjectId,
+    issueId: IssueId,
+    assignee: Assignee | null,
+    actor: Member | 'system',
+  ): Promise<IssueChange[] | Refusal> {
+    return this.#project(projectId).assignIssue(projectId, issueId, assignee, actor);
+  }
+
+  moveReport(projectId: ProjectId, move: { reportId: ReportId; to: IssueId; actor: Member }): Promise<Report | Refusal> {
+    return this.#project(projectId).moveReport(projectId, move);
+  }
 }

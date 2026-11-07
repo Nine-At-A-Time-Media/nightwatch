@@ -12,3 +12,6 @@ tasks
 .codex
 **/worker-configuration.d.ts
 widget/dist
+console/.nuxt
+console/.output
+console/.data

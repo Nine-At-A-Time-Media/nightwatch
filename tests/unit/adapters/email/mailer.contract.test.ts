@@ -3,7 +3,7 @@
 // reports a failed send as retryable. The adapter also hands the binding the
 // message whole, from its configured sender, in each field's own slot.
 import { describe, expect, it } from 'vitest';
-import { SendEmailMailer, type SendEmailBinding, type SentEmail } from '../../../../src/adapters/email/send-email-mailer.js';
+import { SendEmailMailer, type MailBinding } from '../../../../src/adapters/email/send-email-mailer.js';
 import type { Mailer, MailMessage } from '../../../../src/ports/mailer.js';
 import { FakeMailer } from '../../../_fakes/fake-mailer.js';
 
@@ -16,7 +16,9 @@ const MESSAGE: MailMessage = {
 };
 
 /** A `send_email` binding that keeps what it was handed, or throws when told to. */
-class FakeSendEmailBinding implements SendEmailBinding {
+type SentEmail = Parameters<MailBinding['send']>[0];
+
+class FakeSendEmailBinding implements MailBinding {
   readonly sent: SentEmail[] = [];
   failing = false;
 

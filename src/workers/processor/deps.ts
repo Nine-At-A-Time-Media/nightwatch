@@ -3,19 +3,18 @@
  * adapter behind each port processArrival and pumpArrivals take, and reads
  * the processor settings from the Worker's vars. The local stage runs on the
  * stand-ins (LogDO for K2, R2 NDJSON for Basin, the rules SpamJudge for
- * Workers AI, an in-process local issuer for Access); no other stage has its
- * adapters yet, so any other stage is refused rather than given a stand-in.
+ * Workers AI, the dev/local-issuer Worker for Access); no other stage has
+ * its adapters yet, so any other stage is refused rather than given a
+ * stand-in.
  *
- * Sign-in: the local stage trusts only the local issuer named by
- * LOCAL_ISSUER, whose key pair is generated in process; a deployed stage
- * reads each trusted issuer's published keys and refuses to start with
- * LOCAL_ISSUER set (architecture, Sign-in).
+ * Sign-in: the local stage reads issuer keys only through the LOCAL_ISSUER
+ * service binding to the local issuer Worker, as the console does; a
+ * deployed stage reads each trusted issuer's published keys and refuses to
+ * start with LOCAL_ISSUER bound (architecture, Sign-in).
  */
 
-import type { CompactVerifyGetKey } from 'jose';
-import { LocalIssuer } from '../../../dev/local-issuer/local-issuer.js';
 import { AccessSignInVerifier } from '../../adapters/access/access-sign-in-verifier.js';
-import { localKeySource, remoteKeySource, type KeySource } from '../../adapters/access/key-source.js';
+import { remoteKeySource } from '../../adapters/access/key-source.js';
 import { D1ControlStore } from '../../adapters/d1/d1-control-store.js';
 import { D1ProjectConfigSource } from '../../adapters/d1/d1-project-config-source.js';
 import { DurableProjectClient } from '../../adapters/do/durable-project-client.js';
@@ -106,22 +105,22 @@ export function reportSettings(env: ProcessorEnv): ReportSettings {
 
 // --- sign-in ---
 
-/** The local issuer's keys, from a key pair generated in this isolate on first use. */
-function inProcessKeySource(issuerUrl: string): KeySource {
-  const keys = LocalIssuer.create(issuerUrl).then((issuer) => localKeySource({ [issuer.issuer]: issuer.jwks }));
-  return {
-    keysFor: (issuer) => {
-      const select: CompactVerifyGetKey = async (header, token) => (await keys).keysFor(issuer)(header, token);
-      return select;
-    },
-  };
+/** The local issuer Worker, reached over its service binding; bound on the local stage only. */
+type IssuerBinding = { fetch(input: string | URL, init?: RequestInit): Promise<Response> };
+
+function localIssuerOf(env: ProcessorEnv): IssuerBinding | undefined {
+  return (env as unknown as { LOCAL_ISSUER?: IssuerBinding }).LOCAL_ISSUER;
 }
 
 export function signInVerifier(env: ProcessorEnv): SignInVerifier {
   const clock = { now: () => new Date() };
-  if (env.STAGE === LOCAL_STAGE) return new AccessSignInVerifier({ keys: inProcessKeySource(env.LOCAL_ISSUER), clock });
-  if (env.LOCAL_ISSUER) throw new Error(`stage ${env.STAGE} must not configure the local issuer`);
-  return new AccessSignInVerifier({ keys: remoteKeySource(), clock });
+  const issuer = localIssuerOf(env);
+  if (env.STAGE !== LOCAL_STAGE) {
+    if (issuer) throw new Error(`stage ${env.STAGE} must not bind LOCAL_ISSUER`);
+    return new AccessSignInVerifier({ keys: remoteKeySource(), clock });
+  }
+  if (!issuer) throw new Error('the local stage needs the LOCAL_ISSUER service binding');
+  return new AccessSignInVerifier({ keys: remoteKeySource({ fetch: (url, options) => issuer.fetch(url, options) }), clock });
 }
 
 // --- wiring ---

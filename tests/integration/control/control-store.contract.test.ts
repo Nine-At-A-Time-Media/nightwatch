@@ -12,6 +12,7 @@ import type { IssueAlertRule } from '../../../src/domain/alerts/issue-alert-rule
 import type { NotificationSettings } from '../../../src/domain/alerts/notification-settings.js';
 import { gv1 } from '../../../src/domain/grouping/grouping-version.js';
 import type { Member } from '../../../src/domain/issue/state.js';
+import { NO_OWNERSHIP_CONFIG, type OwnershipConfig } from '../../../src/domain/ownership/config.js';
 import type { ProcessingConfig } from '../../../src/domain/processing/processing.js';
 import type { TrustedIssuer } from '../../../src/domain/signin/sign-in.js';
 import type { ControlStore, Membership } from '../../../src/ports/control-store.js';
@@ -33,6 +34,8 @@ type Seed = {
   repository(organizationId: string, repository: string): Promise<void>;
   trackerAccount(organizationId: string, login: string, member: Member): Promise<void>;
   slug(projectId: string, slug: string): Promise<void>;
+  ownershipConfig(projectId: string, config: OwnershipConfig): Promise<void>;
+  trackerTeam(organizationId: string, slug: string, team: string): Promise<void>;
 };
 
 type Subject = { readonly store: ControlStore; readonly seed: Seed };
@@ -52,6 +55,8 @@ function fakeSubject(): Subject {
       repository: async (organizationId, repository) => store.connectRepository(organizationId, repository),
       trackerAccount: async (organizationId, login, member) => store.mapTrackerAccount(organizationId, login, member),
       slug: async (projectId, slug) => store.addProjectSlug(projectId, slug),
+      ownershipConfig: async (projectId, config) => store.setOwnershipConfig(projectId, config),
+      trackerTeam: async (organizationId, slug, team) => store.mapTrackerTeam(organizationId, slug, team),
     },
   };
 }
@@ -125,6 +130,18 @@ const d1Seed: Seed = {
   },
   slug: async (projectId, slug) => {
     await run('UPDATE projects SET slug = ? WHERE project_id = ?', slug, projectId);
+  },
+  ownershipConfig: async (projectId, config) => {
+    await run('INSERT OR REPLACE INTO ownership_configs (project_id, config) VALUES (?, ?)', projectId, JSON.stringify(config));
+  },
+  trackerTeam: async (organizationId, slug, team) => {
+    await addOrganization(organizationId);
+    await run(
+      'INSERT OR REPLACE INTO tracker_teams (organization_id, slug, team) VALUES (?, ?, ?)',
+      organizationId,
+      slug.toLowerCase(),
+      team,
+    );
   },
 };
 
@@ -462,6 +479,45 @@ describe.each<{ name: string; make: () => Subject }>([
       expect(await store.memberOfTrackerAccount({ organizationId: a.organizationId, login: 'miacodes' })).toEqual(mia);
       expect(await store.memberOfTrackerAccount({ organizationId: b.organizationId, login: 'MiaCodes' })).toBeNull();
       expect(await store.memberOfTrackerAccount({ organizationId: a.organizationId, login: 'someone' })).toBeNull();
+    });
+  });
+
+  describe('owner suggestions', () => {
+    it("a Project's ownership config reads back whole, and a Project that set none reads as none", async () => {
+      const { store, seed } = make();
+      const { a, b } = await twoOrganizations(seed);
+      const config: OwnershipConfig = {
+        ownershipRules: 'path:src/** #web',
+        codeMappings: [{ repository: 'acme/web', stackRoot: 'app:///', sourceRoot: 'web/', ref: 'main' }],
+        autoAssign: true,
+      };
+      await seed.ownershipConfig(a.projectId, config);
+
+      expect(await store.ownershipConfig(a.projectId)).toEqual(config);
+      expect(await store.ownershipConfig(b.projectId)).toEqual(NO_OWNERSHIP_CONFIG);
+    });
+
+    it("an address finds its Member in the Member's Organization only, matched without case", async () => {
+      const { store, seed } = make();
+      const { a, b } = await twoOrganizations(seed);
+      const ada = { member: uid('ada') };
+      const email = `${uid('ada')}@acme.example`;
+      await seed.member(a.projectId, ada, { email });
+      await seed.membership(ada, { organizationId: a.organizationId, role: 'member' });
+
+      expect(await store.memberOfAddress({ organizationId: a.organizationId, email: email.toUpperCase() })).toEqual(ada);
+      expect(await store.memberOfAddress({ organizationId: b.organizationId, email })).toBeNull();
+      expect(await store.memberOfAddress({ organizationId: a.organizationId, email: 'nobody@acme.example' })).toBeNull();
+    });
+
+    it('a tracker team maps to its Team in its Organization only, matched without case', async () => {
+      const { store, seed } = make();
+      const { a, b } = await twoOrganizations(seed);
+      await seed.trackerTeam(a.organizationId, 'Acme/Web-Team', 'web');
+
+      expect(await store.teamOfTrackerTeam({ organizationId: a.organizationId, slug: 'acme/web-team' })).toBe('web');
+      expect(await store.teamOfTrackerTeam({ organizationId: b.organizationId, slug: 'acme/web-team' })).toBeNull();
+      expect(await store.teamOfTrackerTeam({ organizationId: a.organizationId, slug: 'acme/other' })).toBeNull();
     });
   });
 });

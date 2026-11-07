@@ -10,8 +10,10 @@ import { addComment } from '../../src/application/reports/add-comment.js';
 import { openReportIssue } from '../../src/application/reports/open-report-issue.js';
 import { eraseReports } from '../../src/application/reports/erase-reports.js';
 import { markSpam } from '../../src/application/reports/mark-spam.js';
+import { moveReport } from '../../src/application/reports/move-report.js';
 import { recordReply } from '../../src/application/reports/record-reply.js';
 import { assignEvent } from '../../src/application/issues/assign-event.js';
+import { assignIssue } from '../../src/application/issues/assign-issue.js';
 import { recordReleaseSeen } from '../../src/application/issues/record-release-seen.js';
 import type { AlertFiring } from '../../src/domain/alerts/alert-firing.js';
 import type { Assignee } from '../../src/domain/alerts/issue-alert-rule.js';
@@ -275,5 +277,21 @@ export class FakeProjectClient implements ProjectClient {
       { plan, context },
       { issues: this.store(projectId), memberEmails: this.#side.memberEmails ?? new Map() },
     );
+  }
+
+  // --- task-027: assignment and Report moves ---
+
+  async assignIssue(
+    projectId: ProjectId,
+    issueId: IssueId,
+    assignee: Assignee | null,
+    actor: Member | 'system',
+  ): Promise<IssueChange[] | Refusal> {
+    const { clock, effects } = this.#side;
+    return assignIssue(issueId, assignee, actor, { issues: this.store(projectId), effects, clock });
+  }
+
+  async moveReport(projectId: ProjectId, move: { reportId: ReportId; to: IssueId; actor: Member }): Promise<Report | Refusal> {
+    return moveReport(move.reportId, move.to, move.actor, { issues: this.store(projectId) });
   }
 }

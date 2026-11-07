@@ -18,7 +18,7 @@ const vars = {
   MAX_MESSAGE_LENGTH: 10000,
   SPAM_THRESHOLD: 0.9,
   MAIL_FROM: 'nightwatch@localhost',
-  LOCAL_ISSUER: 'http://localhost:8788',
+  LOCAL_ISSUER: { fetch: async () => new Response('{"keys":[]}') },
 } as unknown as ProcessorEnv;
 
 describe('processor settings', () => {
@@ -45,12 +45,18 @@ describe('pumpNames', () => {
 });
 
 describe('signInVerifier', () => {
-  it('a deployed stage configured with the local issuer refuses to start', () => {
-    expect(() => signInVerifier({ ...vars, STAGE: 'prod' })).toThrow('local issuer');
+  const unbound = { ...vars, LOCAL_ISSUER: undefined } as unknown as ProcessorEnv;
+
+  it('a deployed stage with the local issuer bound refuses to start', () => {
+    expect(() => signInVerifier({ ...vars, STAGE: 'prod' })).toThrow('LOCAL_ISSUER');
   });
 
-  it('the local stage and a deployed stage without the local issuer each get a verifier', () => {
+  it('the local stage without the local issuer bound refuses to start', () => {
+    expect(() => signInVerifier(unbound)).toThrow('LOCAL_ISSUER');
+  });
+
+  it('the local stage with the local issuer, and a deployed stage without it, each get a verifier', () => {
     expect(signInVerifier(vars)).toBeDefined();
-    expect(signInVerifier({ ...vars, STAGE: 'prod', LOCAL_ISSUER: '' })).toBeDefined();
+    expect(signInVerifier({ ...unbound, STAGE: 'prod' })).toBeDefined();
   });
 });

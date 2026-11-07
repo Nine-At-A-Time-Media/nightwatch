@@ -10,6 +10,7 @@ import type { NotificationSettings } from '../../src/domain/alerts/notification-
 import type { Durability } from '../../src/domain/ingest/arrival.js';
 import type { OrganizationId, ProjectId, ReportId } from '../../src/domain/ids.js';
 import type { Member } from '../../src/domain/issue/state.js';
+import { NO_OWNERSHIP_CONFIG, type OwnershipConfig } from '../../src/domain/ownership/config.js';
 import type { ProcessingConfig } from '../../src/domain/processing/processing.js';
 import type { TrustedIssuer } from '../../src/domain/signin/sign-in.js';
 import type { AccessTokenRecord } from '../../src/domain/tenancy/access-token.js';
@@ -43,6 +44,9 @@ export class FakeControlStore implements ControlStore {
   readonly #linkEntries = new Map<string, LinkEntry>();
   readonly #trackerAccounts = new Map<string, Member>();
   readonly #slugs = new Map<string, ProjectId>();
+  // --- task-030: owner suggestions ---
+  readonly #ownershipConfigs = new Map<ProjectId, OwnershipConfig>();
+  readonly #trackerTeams = new Map<string, string>();
 
   /** Adds a Project to an Organization, creating the Organization if needed. */
   addProject(organizationId: OrganizationId, projectId: ProjectId): void {
@@ -264,5 +268,32 @@ export class FakeControlStore implements ControlStore {
 
   async projectOfSlug(slug: { organizationId: OrganizationId; slug: string }): Promise<ProjectId | null> {
     return this.#slugs.get(`${slug.organizationId}/${slug.slug.toUpperCase()}`) ?? null;
+  }
+
+  // --- task-030: owner suggestions ---
+
+  setOwnershipConfig(projectId: ProjectId, config: OwnershipConfig): void {
+    this.#ownershipConfigs.set(projectId, config);
+  }
+
+  /** Maps a tracker team (`org/team`) to a Team of the Organization. */
+  mapTrackerTeam(organizationId: OrganizationId, slug: string, team: string): void {
+    this.#trackerTeams.set(`${organizationId}/${slug.toLowerCase()}`, team);
+  }
+
+  async ownershipConfig(projectId: ProjectId): Promise<OwnershipConfig> {
+    return this.#ownershipConfigs.get(projectId) ?? NO_OWNERSHIP_CONFIG;
+  }
+
+  async memberOfAddress(account: { organizationId: OrganizationId; email: string }): Promise<Member | null> {
+    const email = account.email.toLowerCase();
+    const found = [...this.#addresses].find(
+      ([member, address]) => address.toLowerCase() === email && this.#memberships.get(member)?.organizationId === account.organizationId,
+    );
+    return found ? { member: found[0] } : null;
+  }
+
+  async teamOfTrackerTeam(account: { organizationId: OrganizationId; slug: string }): Promise<string | null> {
+    return this.#trackerTeams.get(`${account.organizationId}/${account.slug.toLowerCase()}`) ?? null;
   }
 }

@@ -5,8 +5,8 @@
 # Usage: pnpm dev [extra wrangler dev arguments...]
 #
 # Always `wrangler dev --local`; no Cloudflare account is read. The first
-# config (ingest) serves HTTP; core and processor run beside it. D1
-# migrations are applied first. Local state (Durable Objects, D1, R2, KV)
+# config (ingest) serves HTTP; core, processor and the local issuer run
+# beside it. D1 migrations are applied first. Local state (Durable Objects, D1, R2, KV)
 # persists under .wrangler/state at the repository root; wrangler's own
 # config and logs live under .state/ (see scripts/wrangler.sh). Each Worker's
 # config is passed with its own -c, so bindings between them resolve locally.
@@ -19,6 +19,7 @@ readonly WORKER_CONFIGS=(
   "src/workers/ingest/wrangler.jsonc"
   "src/workers/core/wrangler.jsonc"
   "src/workers/processor/wrangler.jsonc"
+  "dev/local-issuer/wrangler.jsonc"
 )
 
 # Every Worker's local state in one place, so D1, R2 and Durable Objects are

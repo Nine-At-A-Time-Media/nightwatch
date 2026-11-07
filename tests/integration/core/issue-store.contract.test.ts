@@ -574,3 +574,30 @@ describe.each<Subject>([fake, sqlite])('IssueStore retention contract -- $name',
       expect(await store.recallFiling('key-new')).toEqual({ reportId: 'report-new', noticeSent: true });
     }));
 });
+
+describe.each<Subject>([fake, sqlite])('IssueStore assignment and Report move contract -- $name', ({ run }) => {
+  it('a set Assignee reads back, a later one replaces it, and null clears it', () =>
+    run(async ({ store }) => {
+      await store.setAssignee('issue-1', { member: 'member-1' });
+      await store.setAssignee('issue-1', { team: 'web' });
+      await store.setAssignee('issue-2', { member: 'member-2' });
+      expect(await store.assigneeOf('issue-1')).toEqual({ team: 'web' });
+      await store.setAssignee('issue-1', null);
+      expect(await store.assigneeOf('issue-1')).toBeNull();
+      expect(await store.assigneeOf('issue-2')).toEqual({ member: 'member-2' });
+    }));
+
+  it('moving a Report attaches it to the Issue with its replies, and leaves other Comments where they are', () =>
+    run(async ({ store }) => {
+      await store.putReport(report('report-1', 'issue-1', 'ada@example.test'));
+      await store.putReport(report('report-2', 'issue-1', 'bob@example.test'));
+      await store.appendComment('issue-1', reporterComment('reply-1', 'report-1', T0));
+      await store.appendComment('issue-1', reporterComment('reply-2', 'report-2', T0 + 1));
+      await store.appendComment('issue-1', memberComment('comment-1', T0 + 2));
+      await store.moveReport({ reportId: 'report-1', to: 'issue-2' });
+      expect((await store.getReport('report-1'))?.issueId).toBe('issue-2');
+      expect((await store.reportsOn('issue-2')).map((held) => held.id)).toEqual(['report-1']);
+      expect((await store.commentsOn('issue-2')).map((comment) => comment.id)).toEqual(['reply-1']);
+      expect((await store.commentsOn('issue-1')).map((comment) => comment.id)).toEqual(['reply-2', 'comment-1']);
+    }));
+});

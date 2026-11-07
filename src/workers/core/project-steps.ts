@@ -13,6 +13,7 @@ import type { SearchContext } from '../../domain/search/match.js';
 import type { IssuePage, SearchPlan } from '../../domain/search/page.js';
 import { claimedProject, claimProject, scheduleSweep } from '../../adapters/do-sqlite/project-identity.js';
 import { assignEvent } from '../../application/issues/assign-event.js';
+import { assignIssue } from '../../application/issues/assign-issue.js';
 import { recordReleaseSeen } from '../../application/issues/record-release-seen.js';
 import { sweepIssues } from '../../application/issues/sweep-issues.js';
 import { openMonitorIssue } from '../../application/monitors/open-monitor-issue.js';
@@ -21,6 +22,7 @@ import { recordSession } from '../../application/releases/record-session.js';
 import { addComment, type CommentDraft } from '../../application/reports/add-comment.js';
 import { eraseReports } from '../../application/reports/erase-reports.js';
 import { markSpam } from '../../application/reports/mark-spam.js';
+import { moveReport } from '../../application/reports/move-report.js';
 import { openReportIssue } from '../../application/reports/open-report-issue.js';
 import { recordReply } from '../../application/reports/record-reply.js';
 import { addTrackerComment } from '../../application/tracker/add-tracker-comment.js';
@@ -346,4 +348,24 @@ export async function searchPageStep(
 ): Promise<IssuePage> {
   await claim(r, projectId);
   return searchProjectPage(projectId, search, { issues: r.issues, memberEmails: new Map() });
+}
+
+// --- task-027: assignment and Report moves ---
+
+export async function assignIssueStep(
+  r: ProjectRuntime,
+  projectId: ProjectId,
+  assigning: { issueId: IssueId; assignee: Assignee | null; actor: Member | 'system' },
+): Promise<IssueChange[] | Refusal> {
+  await claim(r, projectId);
+  return assignIssue(assigning.issueId, assigning.assignee, assigning.actor, { issues: r.issues, effects: r.effects, clock: r.clock });
+}
+
+export async function moveReportStep(
+  r: ProjectRuntime,
+  projectId: ProjectId,
+  move: { reportId: ReportId; to: IssueId; actor: Member },
+): Promise<Report | Refusal> {
+  await claim(r, projectId);
+  return moveReport(move.reportId, move.to, move.actor, { issues: r.issues });
 }

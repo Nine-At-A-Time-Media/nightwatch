@@ -133,6 +133,18 @@ describe('notifyReporters', () => {
     expect(await shownStatuses(w, receipt.reportId)).toEqual(['received', 'acknowledged']);
   });
 
+  it('reads the Assignee: a new Issue assigned to a Member shows its Report as Acknowledged', async () => {
+    const w = world();
+    const receipt = await filed(w, ADA);
+    const issueId = await issueOf(w, receipt.reportId);
+    const changes = await w.projects.assignIssue(PROJECT, issueId, { member: 'member-mia' }, member);
+    if (isRefusal(changes)) throw new Error(changes.refusal);
+    w.mailer.sent.length = 0;
+
+    expect(await notifyAll(w, changes)).toEqual([{ reportId: receipt.reportId, to: ADA, about: { status: 'acknowledged' } }]);
+    expect(await shownStatuses(w, receipt.reportId)).toEqual(['received', 'acknowledged']);
+  });
+
   it('sends nothing for a change on an Issue the Project no longer holds', async () => {
     const w = world();
     const change: IssueChange = { issueId: 'issue-404', kind: 'status', from: null, to: 'resolved', actor: member, origin: 'nightwatch', at: T0 };

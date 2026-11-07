@@ -1,0 +1,27 @@
+{
+  "name": "@nightwatch/console",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The Nuxt console: triage pages, the Follow-up Page, and the API the widget and pages call, served as a Cloudflare Worker.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "build": "NITRO_PRESET=${NITRO_PRESET:-cloudflare-module} nuxt build",
+    "dev": "pnpm build && ../scripts/wrangler.sh dev --local -c console/wrangler.jsonc -c src/workers/core/wrangler.jsonc -c src/workers/ingest/wrangler.jsonc -c dev/local-issuer/wrangler.jsonc",
+    "typecheck": "nuxt prepare && vue-tsc -b --noEmit",
+    "test": "vitest run",
+    "cf-types": "../scripts/wrangler.sh types -c console/wrangler.jsonc --env-interface ConsoleEnv --strict-vars=false console/worker-configuration.d.ts"
+  },
+  "dependencies": {
+    "nuxt": "^4.6.4",
+    "vue": "^3.5.45"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.10",
+    "@vue/test-utils": "^2.5.1",
+    "happy-dom": "^21.0.4",
+    "typescript": "^5.9.3",
+    "vitest": "^5.1.0",
+    "vue-tsc": "^3.3.14"
+  }
+}

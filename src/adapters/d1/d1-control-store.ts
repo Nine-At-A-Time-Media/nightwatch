@@ -18,6 +18,7 @@ import type { NotificationSettings } from '../../domain/alerts/notification-sett
 import type { Durability } from '../../domain/ingest/arrival.js';
 import type { OrganizationId, ProjectId, ReportId } from '../../domain/ids.js';
 import type { Member } from '../../domain/issue/state.js';
+import { NO_OWNERSHIP_CONFIG, type OwnershipConfig } from '../../domain/ownership/config.js';
 import type { ProcessingConfig } from '../../domain/processing/processing.js';
 import type { TrustedIssuer } from '../../domain/signin/sign-in.js';
 import { normalizedDebugId, type Artifact, type ArtifactQuery } from '../../domain/sourcemap/artifact.js';
@@ -26,6 +27,11 @@ import type { Repository } from '../../domain/tracker/external-link.js';
 import type { ControlStore, LinkEntry, Membership, ReferenceEntry } from '../../ports/control-store.js';
 
 const Audiences = z.array(z.string());
+const OwnershipConfigShape = z.object({
+  ownershipRules: z.string(),
+  codeMappings: z.array(z.object({ repository: z.string(), stackRoot: z.string(), sourceRoot: z.string(), ref: z.string() })),
+  autoAssign: z.boolean(),
+});
 const Scopes = z.array(z.enum(SCOPES));
 const NO_SETTINGS: NotificationSettings = { organization: {}, projects: {} };
 
@@ -333,6 +339,31 @@ export class D1ControlStore implements ControlStore {
       'SELECT project_id AS value FROM projects WHERE organization_id = ? AND upper(slug) = upper(?)',
       slug.organizationId,
       slug.slug,
+    );
+  }
+
+  // --- owner suggestions ---
+
+  async ownershipConfig(projectId: ProjectId): Promise<OwnershipConfig> {
+    const text = await this.#value<string>('SELECT config AS value FROM ownership_configs WHERE project_id = ?', projectId);
+    return text === null ? NO_OWNERSHIP_CONFIG : parsed(OwnershipConfigShape, { text, what: `ownership config of ${projectId}` });
+  }
+
+  async memberOfAddress(account: { organizationId: OrganizationId; email: string }): Promise<Member | null> {
+    const row = await this.#first<MemberRow>(
+      `SELECT m.member_id FROM members m JOIN memberships s ON s.member_id = m.member_id
+       WHERE s.organization_id = ? AND lower(m.email) = lower(?) ORDER BY m.rowid`,
+      account.organizationId,
+      account.email,
+    );
+    return row === null ? null : memberOf(row);
+  }
+
+  async teamOfTrackerTeam(account: { organizationId: OrganizationId; slug: string }): Promise<string | null> {
+    return this.#value<string>(
+      'SELECT team AS value FROM tracker_teams WHERE organization_id = ? AND slug = lower(?)',
+      account.organizationId,
+      account.slug,
     );
   }
 

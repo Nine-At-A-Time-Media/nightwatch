@@ -21,7 +21,7 @@
     "dev:tick": "curl -sf -X POST \"http://localhost:${PORT:-8787}/cdn-cgi/local/explorer/api/local/scheduled?worker=nightwatch-processor\" -H 'content-type: application/json' -d '{\"cron\":\"* * * * *\"}'",
     "test:e2e": "./scripts/e2e-local.sh",
     "cf-types": "./scripts/wrangler.sh types -c src/workers/ingest/wrangler.jsonc --env-interface IngestEnv --strict-vars=false src/workers/ingest/worker-configuration.d.ts",
-    "check": "pnpm typecheck && pnpm --filter @nightwatch/widget typecheck && pnpm lint && pnpm test"
+    "check": "pnpm typecheck && pnpm --filter @nightwatch/widget typecheck && pnpm --filter @nightwatch/console typecheck && pnpm lint && pnpm test"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.6.0",
