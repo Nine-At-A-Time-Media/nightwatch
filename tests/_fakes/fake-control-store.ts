@@ -9,7 +9,8 @@ import type { Durability } from '../../src/domain/ingest/arrival.js';
 import type { OrganizationId, ProjectId, ReportId } from '../../src/domain/ids.js';
 import type { Member } from '../../src/domain/issue/state.js';
 import type { TrustedIssuer } from '../../src/domain/signin/sign-in.js';
-import type { ControlStore, Membership, ReferenceEntry } from '../../src/ports/control-store.js';
+import type { Repository } from '../../src/domain/tracker/external-link.js';
+import type { ControlStore, LinkEntry, Membership, ReferenceEntry } from '../../src/ports/control-store.js';
 
 export class FakeControlStore implements ControlStore {
   readonly references = new Map<string, ReferenceEntry>();
@@ -19,6 +20,10 @@ export class FakeControlStore implements ControlStore {
   readonly #issuers = new Map<OrganizationId, TrustedIssuer[]>();
   readonly #projectMembers = new Map<ProjectId, Set<string>>();
   readonly #memberships = new Map<string, Membership>();
+  readonly #repositories = new Map<Repository, OrganizationId>();
+  readonly #linkEntries = new Map<string, LinkEntry>();
+  readonly #trackerAccounts = new Map<string, Member>();
+  readonly #slugs = new Map<string, ProjectId>();
 
   /** Adds a Project to an Organization, creating the Organization if needed. */
   addProject(organizationId: OrganizationId, projectId: ProjectId): void {
@@ -86,5 +91,55 @@ export class FakeControlStore implements ControlStore {
     [...this.references].filter(([, entry]) => entry.reportId === reportId).forEach(([hash]) => this.references.delete(hash));
     this.unsubscribed.delete(reportId);
     return { ok: true };
+  }
+
+  // --- task-011: Code and GitHub ---
+
+  /** Connects the Repository to the Organization through its installed app. */
+  connectRepository(organizationId: OrganizationId, repository: Repository): void {
+    this.#repositories.set(repository, organizationId);
+  }
+
+  /** Maps a tracker account to a Member of the Organization. */
+  mapTrackerAccount(organizationId: OrganizationId, login: string, member: Member): void {
+    this.#trackerAccounts.set(`${organizationId}/${login.toLowerCase()}`, member);
+  }
+
+  /** Gives the Project the slug its Short Ids carry. */
+  addProjectSlug(projectId: ProjectId, slug: string): void {
+    const organizationId = this.#projects.get(projectId);
+    if (organizationId !== undefined) this.#slugs.set(`${organizationId}/${slug.toUpperCase()}`, projectId);
+  }
+
+  async isRepositoryConnected(connection: { organizationId: OrganizationId; repository: Repository }): Promise<boolean> {
+    return this.#repositories.get(connection.repository) === connection.organizationId;
+  }
+
+  async organizationOfRepository(repository: Repository): Promise<OrganizationId | null> {
+    return this.#repositories.get(repository) ?? null;
+  }
+
+  async disconnectRepositories(repositories: readonly Repository[]): Promise<void> {
+    repositories.forEach((repository) => this.#repositories.delete(repository));
+  }
+
+  async putLinkEntry(entry: LinkEntry): Promise<void> {
+    this.#linkEntries.set(`${entry.repository}#${entry.number}`, entry);
+  }
+
+  async findLinkEntry(issue: { repository: Repository; number: number }): Promise<LinkEntry | null> {
+    return this.#linkEntries.get(`${issue.repository}#${issue.number}`) ?? null;
+  }
+
+  async linkEntriesIn(repositories: readonly Repository[]): Promise<readonly LinkEntry[]> {
+    return [...this.#linkEntries.values()].filter((entry) => repositories.includes(entry.repository));
+  }
+
+  async memberOfTrackerAccount(account: { organizationId: OrganizationId; login: string }): Promise<Member | null> {
+    return this.#trackerAccounts.get(`${account.organizationId}/${account.login.toLowerCase()}`) ?? null;
+  }
+
+  async projectOfSlug(slug: { organizationId: OrganizationId; slug: string }): Promise<ProjectId | null> {
+    return this.#slugs.get(`${slug.organizationId}/${slug.slug.toUpperCase()}`) ?? null;
   }
 }

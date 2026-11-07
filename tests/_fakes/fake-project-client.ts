@@ -23,6 +23,7 @@ import type { Release, ReleaseFirstSeen } from '../../src/domain/release/orderin
 import type { Report, Reporter } from '../../src/domain/report/report.js';
 import type { SpamVerdict } from '../../src/domain/report/spam.js';
 import type { Comment, ReporterComment, ReportStatusChange } from '../../src/domain/report/thread.js';
+import type { ExternalLink } from '../../src/domain/tracker/external-link.js';
 import type { Clock } from '../../src/ports/clock.js';
 import type { EffectQueue } from '../../src/ports/effect-queue.js';
 import type { Ids } from '../../src/ports/ids.js';
@@ -106,5 +107,23 @@ export class FakeProjectClient implements ProjectClient {
 
   async releasesSeen(projectId: ProjectId): Promise<ReleaseFirstSeen> {
     return this.store(projectId).releaseFirstSeen();
+  }
+
+  // --- task-011: Code and GitHub ---
+
+  async externalLinkOf(projectId: ProjectId, issueId: IssueId): Promise<ExternalLink | null> {
+    return this.store(projectId).externalLinkOf(issueId);
+  }
+
+  async recordExternalLink(projectId: ProjectId, externalLink: ExternalLink): Promise<void> {
+    const store = this.store(projectId);
+    await store.transact(() => store.putExternalLink(externalLink));
+  }
+
+  async latestEventOf(projectId: ProjectId, issueId: IssueId): Promise<EventSummary | null> {
+    const events = await this.store(projectId).eventsOf(issueId);
+    return events
+      .map((event) => event.summary)
+      .reduce<EventSummary | null>((latest, event) => (latest && latest.at > event.at ? latest : event), null);
   }
 }

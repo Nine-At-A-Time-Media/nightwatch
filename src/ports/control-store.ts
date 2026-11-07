@@ -10,9 +10,10 @@
  */
 
 import type { Durability } from '../domain/ingest/arrival.js';
-import type { OrganizationId, ProjectId, ReportId } from '../domain/ids.js';
+import type { IssueId, OrganizationId, ProjectId, ReportId } from '../domain/ids.js';
 import type { Member } from '../domain/issue/state.js';
 import type { TrustedIssuer } from '../domain/signin/sign-in.js';
+import type { Repository } from '../domain/tracker/external-link.js';
 
 /** What a Report Reference's hash names. */
 export type ReferenceEntry = {
@@ -53,4 +54,31 @@ export interface ControlStore {
 
   /** Revokes every Report Reference of the Report and drops its subscription record. */
   forgetReport(reportId: ReportId): Promise<Durability>;
+
+  // --- task-011: Code and GitHub ---
+
+  /** Whether the Organization's installed app may use the Repository. */
+  isRepositoryConnected(connection: { organizationId: OrganizationId; repository: Repository }): Promise<boolean>;
+  /** The Organization the Repository is connected to, or null when none is. */
+  organizationOfRepository(repository: Repository): Promise<OrganizationId | null>;
+  /** Records that the Repositories are no longer connected: the installation or the Repository was removed. */
+  disconnectRepositories(repositories: readonly Repository[]): Promise<void>;
+  /** Indexes an External Link by its tracker issue, so a Tracker Event finds the Issue it is about. */
+  putLinkEntry(entry: LinkEntry): Promise<void>;
+  /** What a tracker issue is linked to, or null. */
+  findLinkEntry(issue: { repository: Repository; number: number }): Promise<LinkEntry | null>;
+  /** Every External Link indexed in any of the Repositories. */
+  linkEntriesIn(repositories: readonly Repository[]): Promise<readonly LinkEntry[]>;
+  /** The Member a tracker account maps to in the Organization, or null when it maps to none. */
+  memberOfTrackerAccount(account: { organizationId: OrganizationId; login: string }): Promise<Member | null>;
+  /** The Project of the Organization whose Short Ids carry the slug (any case), or null. */
+  projectOfSlug(slug: { organizationId: OrganizationId; slug: string }): Promise<ProjectId | null>;
 }
+
+/** Where an External Link's tracker issue points in Nightwatch. */
+export type LinkEntry = {
+  readonly repository: Repository;
+  readonly number: number;
+  readonly projectId: ProjectId;
+  readonly issueId: IssueId;
+};

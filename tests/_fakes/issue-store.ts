@@ -14,6 +14,7 @@ import { isHeldBy, type GroupedEvent } from '../../src/domain/issue/tally.js';
 import type { Release, ReleaseFirstSeen } from '../../src/domain/release/ordering.js';
 import type { Report, Reporter } from '../../src/domain/report/report.js';
 import type { Comment, ReportStatusChange } from '../../src/domain/report/thread.js';
+import type { ExternalLink } from '../../src/domain/tracker/external-link.js';
 import type { IssueStore, StoredForecast } from '../../src/ports/issue-store.js';
 
 const HOUR = 3_600_000;
@@ -37,6 +38,7 @@ export class FakeIssueStore implements IssueStore {
   readonly #reports = new Map<ReportId, Report>();
   readonly #comments: { issueId: IssueId; comment: Comment }[] = [];
   readonly #statusChanges = new Map<ReportId, ReportStatusChange[]>();
+  readonly #externalLinks = new Map<IssueId, ExternalLink>();
 
   constructor(options: { dedupWindow: number; projectNormalRate?: number }) {
     this.#dedupWindow = options.dedupWindow;
@@ -223,6 +225,20 @@ export class FakeIssueStore implements IssueStore {
 
   async statusChangesOf(reportId: ReportId): Promise<readonly ReportStatusChange[]> {
     return this.#statusChanges.get(reportId) ?? [];
+  }
+
+  // --- task-011: External Links and Short Id lookup ---
+
+  async putExternalLink(externalLink: ExternalLink): Promise<void> {
+    this.#externalLinks.set(externalLink.issueId, externalLink);
+  }
+
+  async externalLinkOf(issueId: IssueId): Promise<ExternalLink | null> {
+    return this.#externalLinks.get(issueId) ?? null;
+  }
+
+  async issueOfShortId(shortId: number): Promise<IssueId | null> {
+    return [...this.#shortIds].find(([, counter]) => counter === shortId)?.[0] ?? null;
   }
 
   #removeComments(matches: (held: { issueId: IssueId; comment: Comment }) => boolean): void {

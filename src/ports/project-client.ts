@@ -20,6 +20,7 @@ import type { Release, ReleaseFirstSeen } from '../domain/release/ordering.js';
 import type { Report, Reporter } from '../domain/report/report.js';
 import type { SpamVerdict } from '../domain/report/spam.js';
 import type { Comment, ReporterComment, ReportStatusChange } from '../domain/report/thread.js';
+import type { ExternalLink } from '../domain/tracker/external-link.js';
 
 export interface ProjectClient {
   // --- ProjectDO use cases and steps ---
@@ -45,4 +46,13 @@ export interface ProjectClient {
   commentsOn(projectId: ProjectId, issueId: IssueId): Promise<readonly Comment[]>;
   getIssue(projectId: ProjectId, issueId: IssueId): Promise<IssueState | null>;
   releasesSeen(projectId: ProjectId): Promise<ReleaseFirstSeen>;
+
+  // --- task-011: Code and GitHub ---
+
+  /** The Issue's External Link, Linked or Broken; null when it has none. */
+  externalLinkOf(projectId: ProjectId, issueId: IssueId): Promise<ExternalLink | null>;
+  /** Saves an External Link as the github runtime left it. */
+  recordExternalLink(projectId: ProjectId, externalLink: ExternalLink): Promise<void>;
+  /** The Issue's most recent Event Summary, or null when it holds none. */
+  latestEventOf(projectId: ProjectId, issueId: IssueId): Promise<EventSummary | null>;
 }
