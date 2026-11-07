@@ -6,7 +6,7 @@
  * routes each item by kind.
  *
  * An event item is normalized, scrubbed with the Project's Scrubbing Rules,
- * mapped through its Artifacts when it is a browser Event, stored scrubbed with its Removals at `events/`, summarized, given its
+ * mapped through its Artifacts when it is a browser Event, stored scrubbed with its Removals under `events/<project id>/`, summarized, given its
  * Fingerprints, and assigned through ProjectClient after its Release is
  * recorded as seen. The Issue Changes go to the EffectQueue and the Event
  * Summary to the archive. Processing is idempotent: Event ids key every
@@ -122,8 +122,9 @@ async function applySourceMaps(scrubbed: ScrubbedEvent, processing: Processing, 
 
 // --- flow: storing and assigning ---
 
-async function storeEvent(scrubbed: ScrubbedEvent, blobs: BlobStore): Promise<void> {
-  const stored = await blobs.put(eventBlobKey(scrubbed.event.eventId), encodeScrubbedEvent(scrubbed));
+async function storeEvent(scrubbed: ScrubbedEvent, processing: Processing, blobs: BlobStore): Promise<void> {
+  const key = eventBlobKey({ projectId: processing.record.projectId, eventId: scrubbed.event.eventId });
+  const stored = await blobs.put(key, encodeScrubbedEvent(scrubbed));
   if (!stored.ok) throw new Error(`event ${scrubbed.event.eventId} could not be stored (retryable: ${stored.retryable})`);
 }
 
@@ -149,7 +150,7 @@ async function settle(
 ): Promise<ProcessingResult> {
   const { assignment, summary, item } = placed;
   if ('tombstone' in assignment) {
-    await deps.blobs.delete(eventBlobKey(summary.eventId));
+    await deps.blobs.delete(eventBlobKey({ projectId: processing.record.projectId, eventId: summary.eventId }));
     const outcome = processingOutcome({ record: processing.record, type: item.header.type, kind: 'discarded', reason: 'tombstone' });
     return processingResult({ assignments: [assignment], outcomes: [outcome] });
   }
@@ -169,7 +170,7 @@ async function processEvent(item: EnvelopeItem, processing: Processing, deps: Pr
   }
   const { scrubbed, userKey } = await scrub(normalized, processing, deps.ids);
   const mapped = await applySourceMaps(scrubbed, processing, deps);
-  await storeEvent(mapped, deps.blobs);
+  await storeEvent(mapped, processing, deps.blobs);
 
   // Milestone: the Event is stored scrubbed; only now is it counted.
   const summary = toEventSummary(mapped.event, userKey);

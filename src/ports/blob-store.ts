@@ -1,7 +1,7 @@
 /**
  * BlobStore -- the seam for payload and file storage (architecture Seams:
  * Payload and file storage). R2 in production, an in-memory fake in tests.
- * Keys are paths such as `events/<event id>`. A put that reports ok is
+ * Keys are paths such as `events/<project id>/<event id>`. A put that reports ok is
  * durable; get answers null for a missing key.
  */
 

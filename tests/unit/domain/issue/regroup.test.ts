@@ -168,7 +168,7 @@ describe('assignment', () => {
     expect(duplicateOf({ issueId: 'i' })).toEqual({ issueId: 'i', changes: [], duplicate: true });
   });
 
-  it('a stored Event is keyed by its id under events/', () => {
-    expect(eventBlobKey('abc')).toBe('events/abc');
+  it('a stored Event is keyed by its Project and its id under events/', () => {
+    expect(eventBlobKey({ projectId: 'p-1', eventId: 'abc' })).toBe('events/p-1/abc');
   });
 });

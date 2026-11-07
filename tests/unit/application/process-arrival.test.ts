@@ -113,7 +113,7 @@ async function storedEvent(
   w: ReturnType<typeof world>,
   eventId = EVENT_ID,
 ): Promise<{ event: Record<string, unknown>; removals: unknown[] }> {
-  const bytes = await w.blobs.get(eventBlobKey(eventId));
+  const bytes = await w.blobs.get(eventBlobKey({ projectId: PROJECT, eventId }));
   if (bytes === null) throw new Error(`no stored event ${eventId}`);
   return JSON.parse(dec(bytes)) as { event: Record<string, unknown>; removals: unknown[] };
 }
@@ -319,7 +319,7 @@ describe('processArrival', () => {
 
     expect(dropped.assignments).toEqual([{ tombstone: issueId, changes: [], duplicate: false }]);
     expect(dropped.outcomes).toEqual([expect.objectContaining({ kind: 'discarded', reason: 'tombstone', category: 'error' })]);
-    expect(await w.blobs.get(eventBlobKey('b'.repeat(32)))).toBeNull();
+    expect(await w.blobs.get(eventBlobKey({ projectId: PROJECT, eventId: 'b'.repeat(32) }))).toBeNull();
   });
 
   it('reads a body kept in the BlobStore, and refuses a record whose body is gone or whose Project is unknown', async () => {

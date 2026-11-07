@@ -5,13 +5,14 @@ import { eventBlobKey } from '../../../../src/domain/event/event-summary.js';
 import { HOUR, T0, issueIdOf, summary, world } from './world.js';
 
 const member = { member: 'member-1' };
+const PROJECT = 'project-1';
 
 function assignDeps(w: ReturnType<typeof world>) {
   return { issues: w.issues, clock: w.clock, ids: w.ids, policies: w.policies };
 }
 
 function discardDeps(w: ReturnType<typeof world>) {
-  return { issues: w.issues, blobs: w.blobs, clock: w.clock };
+  return { projectId: PROJECT, issues: w.issues, blobs: w.blobs, clock: w.clock };
 }
 
 describe('discardIssue', () => {
@@ -22,9 +23,9 @@ describe('discardIssue', () => {
     const id = issueIdOf(await assignEvent(first, ['fp-a', 'fp-b'], assignDeps(w)));
     await assignEvent(second, ['fp-a'], assignDeps(w));
     const other = issueIdOf(await assignEvent(summary(T0), ['fp-c'], assignDeps(w)));
-    await w.blobs.put(eventBlobKey(first.eventId), new TextEncoder().encode('{}'));
-    await w.blobs.put(eventBlobKey(second.eventId), new TextEncoder().encode('{}'));
-    await w.blobs.put('events/unrelated', new TextEncoder().encode('{}'));
+    await w.blobs.put(eventBlobKey({ projectId: PROJECT, eventId: first.eventId }), new TextEncoder().encode('{}'));
+    await w.blobs.put(eventBlobKey({ projectId: PROJECT, eventId: second.eventId }), new TextEncoder().encode('{}'));
+    await w.blobs.put(eventBlobKey({ projectId: 'project-2', eventId: first.eventId }), new TextEncoder().encode('{}'));
     w.clock.set(T0 + HOUR);
     const changes = await discardIssue(id, member, discardDeps(w));
     expect(changes).toEqual([
@@ -32,7 +33,7 @@ describe('discardIssue', () => {
     ]);
     expect(await w.issues.getIssue(id)).toBeNull();
     expect(await w.issues.eventsOf(id)).toEqual([]);
-    expect([...w.blobs.blobs.keys()]).toEqual(['events/unrelated']);
+    expect([...w.blobs.blobs.keys()]).toEqual([eventBlobKey({ projectId: 'project-2', eventId: first.eventId })]);
     expect(w.issues.history.at(-1)).toEqual({
       issueId: id,
       kind: 'status',
