@@ -65,6 +65,30 @@ function errorEvent(fields: Record<string, unknown> = {}): Item {
   };
 }
 
+const BUNDLE = 'https://cdn.example/static/app.min.js';
+
+/** Minified line 1: column 9 maps to src/cart.ts 5:2, in `checkout`. */
+const rawMap = {
+  version: 3,
+  file: 'app.min.js',
+  sources: ['src/cart.ts'],
+  sourcesContent: ['export function boot() {}\n\nexport function checkout() {\n  const total = sum();\n  pay(total);\n}\n'],
+  names: ['boot', 'checkout'],
+  mappings: 'AAAAA,SAIEC',
+};
+
+const artifact = { id: 'map-1', debugId: null, release: 'web@1.0.0', fileName: '~/static/app.min.js.map' };
+
+/** A minified browser error of release web@1.0.0, thrown at app.min.js 1:10. */
+function browserError(): Item {
+  const frame = { abs_path: BUNDLE, filename: 'app.min.js', function: 'b', lineno: 1, colno: 10, in_app: true };
+  return errorEvent({
+    platform: 'javascript',
+    release: 'web@1.0.0',
+    exception: { values: [{ type: 'TypeError', value: 'n is not a function', stacktrace: { frames: [frame] } }] },
+  });
+}
+
 let recordCounter = 0;
 
 function record(items: readonly Item[], overrides: Partial<ArrivalRecord> = {}): ArrivalRecord {
@@ -137,5 +161,53 @@ describe('processArrival', () => {
     expect(w.archive.archivedEvents).toEqual([{ projectId: PROJECT, summary: grouped?.summary }]);
     expect(w.effects.enqueued).toEqual(result.assignments[0]?.changes);
     expect(await everyStoreButRaw(w)).not.toContain('ada@example.com');
+  });
+
+  it('Source map applied: Given a matching Artifact was uploaded, When a minified browser error is processed, Then its frames show original file, line and function', async () => {
+    const w = world();
+    w.control.addArtifact(PROJECT, artifact);
+    await w.blobs.put('artifacts/map-1', enc(JSON.stringify(rawMap)));
+    const result = await processArrival(record([browserError()]), w.deps);
+
+    const stored = await storedEvent(w);
+    expect(stored.event['exceptions']).toEqual([
+      expect.objectContaining({
+        frames: [expect.objectContaining({ filename: 'src/cart.ts', lineno: 5, colno: 3, function: 'checkout' })],
+      }),
+    ]);
+    expect(stored.event['errors']).toEqual([]);
+    const issueId = result.assignments[0] && 'issueId' in result.assignments[0] ? result.assignments[0].issueId : '';
+    const [grouped] = await w.projects.store(PROJECT).eventsOf(issueId);
+    expect(grouped?.summary.culprit).toBe('src/cart.ts in checkout');
+  });
+
+  it('Missing source map: Given no matching Artifact, When a minified error is processed, Then frames stay minified and the event records why', async () => {
+    const w = world();
+    w.control.addArtifact(PROJECT, { ...artifact, release: 'web@0.9.0' });
+    await w.blobs.put('artifacts/map-1', enc(JSON.stringify(rawMap)));
+    await processArrival(record([browserError()]), w.deps);
+
+    const stored = await storedEvent(w);
+    expect(stored.event['exceptions']).toEqual([
+      expect.objectContaining({ frames: [expect.objectContaining({ filename: 'app.min.js', lineno: 1, colno: 10, function: 'b' })] }),
+    ]);
+    expect(stored.event['errors']).toEqual([{ path: 'exceptions.0.frames.0', reason: 'missing-artifact' }]);
+  });
+
+  it('Missing source map: an Artifact whose file is gone or is no source map counts as missing, and non-browser events record nothing', async () => {
+    const w = world();
+    w.control.addArtifact(PROJECT, artifact);
+    await processArrival(record([browserError()]), w.deps);
+    expect((await storedEvent(w)).event['errors']).toEqual([{ path: 'exceptions.0.frames.0', reason: 'missing-artifact' }]);
+
+    const v = world();
+    v.control.addArtifact(PROJECT, artifact);
+    await v.blobs.put('artifacts/map-1', enc('not a source map'));
+    await processArrival(record([browserError()]), v.deps);
+    expect((await storedEvent(v)).event['errors']).toEqual([{ path: 'exceptions.0.frames.0', reason: 'missing-artifact' }]);
+
+    const p = world();
+    await processArrival(record([errorEvent()]), p.deps);
+    expect((await storedEvent(p)).event['errors']).toEqual([]);
   });
 });
