@@ -58,12 +58,16 @@ export type IssueStateBase = {
 export type IssueState = IssueStateBase & Status;
 
 /** Who or what made a change: a Member, or the named part of Nightwatch. */
-export type Actor = { readonly member: string } | 'system' | 'tracker' | 'commit' | 'sweep';
+export type Actor = Member | 'system' | 'tracker' | 'commit' | 'sweep';
 
 /** Where a change came from, so it is never echoed back there. */
 export type Origin = 'nightwatch' | 'tracker';
 
-export type IssueChangeKind = 'status' | 'priority' | 'resolution' | 'for_review';
+/** A Member, as an Actor. */
+export type Member = { readonly member: string };
+
+/** `merge` and `split` changes name the Issue the Events came from and the one they went to. */
+export type IssueChangeKind = 'status' | 'priority' | 'resolution' | 'for_review' | 'merge' | 'split';
 
 /** One entry of an Issue's History. */
 export type IssueChange = {
