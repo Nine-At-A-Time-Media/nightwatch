@@ -53,7 +53,7 @@ function world() {
       [gus.member, GUS],
     ]),
   });
-  return { clock, control, projects, deps: { control, projects } };
+  return { clock, control, projects, deps: { control, projects, clock } };
 }
 
 let eventCounter = 0;
@@ -96,7 +96,7 @@ function ids(page: IssuePage | { refusal: string }): readonly string[] {
 }
 
 describe('searchIssues', () => {
-  it('Search: Given issues in several states, When a member searches `is:unresolved assigned:me release:latest`, Then only matching issues in that member\'s Organization are returned', async () => {
+  it("Search: Given issues in several states, When a member searches `is:unresolved assigned:me release:latest`, Then only matching issues in that member's Organization are returned", async () => {
     const w = world();
     const match = await issueIn(w, { project: WEB, fingerprint: 'match', release: 'web@2.0.0' });
     const otherProject = await issueIn(w, { project: API, fingerprint: 'api-match', release: 'web@2.0.0', at: T0 + HOUR });
