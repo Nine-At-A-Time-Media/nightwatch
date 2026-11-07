@@ -43,6 +43,9 @@
     // CF_Authorization cookie; any other stage refuses to build its deps
     // while LOCAL_ISSUER is bound.
     "STAGE": "local",
+    // The audience the dev sign-in asks the local issuer for; the local
+    // Organization's trusted issuer row must name it.
+    "LOCAL_AUDIENCE": "nightwatch-console-local",
     // ReportSettings.
     "FOLLOW_UP_BASE_URL": "http://localhost:8787",
     "MAX_MESSAGE_LENGTH": 4000,
