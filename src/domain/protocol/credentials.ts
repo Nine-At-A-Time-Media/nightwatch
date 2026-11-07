@@ -64,7 +64,6 @@ export function locateCredentials(parts: RequestParts): Credentials | Refusal {
   const found = [fromAuthHeader(parts), fromAuthorization(parts), fromQuery(parts), fromPath(parts)].filter(
     (f): f is Credentials | Refusal => f !== null,
   );
-  if (found.length === 0) return refusal('missing-credentials');
   if (found.length > 1) return refusal('multiple-credentials');
-  return found[0]!;
+  return found[0] ?? refusal('missing-credentials');
 }

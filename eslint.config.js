@@ -6,6 +6,7 @@ export default tseslint.config(
   { ignores: ['node_modules/**', '.wrangler/**', '.state/**', 'reports/**', '**/*.d.ts'] },
   js.configs.recommended,
   ...tseslint.configs.strict,
+  { files: ['tests/**/*.ts'], rules: { '@typescript-eslint/no-non-null-assertion': 'off' } },
   {
     rules: {
       'no-restricted-imports': ['error', { patterns: ['*/adapters/*', '*/workers/*'] }],

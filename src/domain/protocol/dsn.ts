@@ -16,10 +16,9 @@ export type Dsn = {
 const DSN_PATTERN = /^(https?):\/\/([^:@/]+)(?::[^@/]*)?@([^/]+)((?:\/[^/]+)*)\/(\d+)\/?$/;
 
 export function parseDsn(text: string): Dsn | Refusal {
-  const match = DSN_PATTERN.exec(text.trim());
-  if (!match) return refusal('malformed-dsn');
-  const [, scheme, publicKey, host, path, projectId] = match;
-  return { scheme: scheme!, publicKey: publicKey!, host: host!, path: path ?? '', projectId: projectId! };
+  const [, scheme, publicKey, host, path, projectId] = DSN_PATTERN.exec(text.trim()) ?? [];
+  if (!scheme || !publicKey || !host || !projectId) return refusal('malformed-dsn');
+  return { scheme, publicKey, host, path: path ?? '', projectId };
 }
 
 export function formatDsn(dsn: Dsn): string {
