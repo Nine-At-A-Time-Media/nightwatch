@@ -11,10 +11,12 @@ import { FakeClock } from '../../_fakes/fake-clock.js';
 const ORIGIN = 'https://app.example.com';
 const enc = (text: string) => new TextEncoder().encode(text);
 
-const eventEnvelope = serializeEnvelope({
-  header: { event_id: '9ec79c33ec9942ab8353589fcb2e04dc' },
-  items: [{ header: { type: 'event' }, payload: enc(JSON.stringify({ exception: { values: [{ type: 'Error', value: 'boom' }] } })) }],
-});
+const eventEnvelope = new Uint8Array(
+  serializeEnvelope({
+    header: { event_id: '9ec79c33ec9942ab8353589fcb2e04dc' },
+    items: [{ header: { type: 'event' }, payload: enc(JSON.stringify({ exception: { values: [{ type: 'Error', value: 'boom' }] } })) }],
+  }),
+);
 
 let project: string;
 
@@ -44,7 +46,7 @@ async function retainedRecord(id: string): Promise<ArrivalRecord | undefined> {
   return leased.map((l) => l.record).find((record) => record.id === id);
 }
 
-async function gzip(bytes: Uint8Array): Promise<Uint8Array> {
+async function gzip(bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
   const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
