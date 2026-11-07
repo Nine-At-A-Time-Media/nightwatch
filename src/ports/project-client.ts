@@ -17,7 +17,7 @@ import type { Assignment } from '../domain/issue/assignment.js';
 import type { IssueChange } from '../domain/issue/state.js';
 import type { Release } from '../domain/release/ordering.js';
 import type { Report } from '../domain/report/report.js';
-import type { ReportStatusChange } from '../domain/report/thread.js';
+import type { Comment, ReportStatusChange } from '../domain/report/thread.js';
 
 export interface ProjectClient {
   // --- ProjectDO use cases and steps ---
@@ -32,4 +32,5 @@ export interface ProjectClient {
   getReport(projectId: ProjectId, reportId: ReportId): Promise<Report | null>;
   reportsOn(projectId: ProjectId, issueId: IssueId): Promise<readonly Report[]>;
   statusChangesOf(projectId: ProjectId, reportId: ReportId): Promise<readonly ReportStatusChange[]>;
+  commentsOn(projectId: ProjectId, issueId: IssueId): Promise<readonly Comment[]>;
 }

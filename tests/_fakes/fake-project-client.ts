@@ -17,7 +17,7 @@ import type { IssuePolicies } from '../../src/domain/issue/policies.js';
 import type { IssueChange } from '../../src/domain/issue/state.js';
 import type { Release } from '../../src/domain/release/ordering.js';
 import type { Report } from '../../src/domain/report/report.js';
-import type { ReportStatusChange } from '../../src/domain/report/thread.js';
+import type { Comment, ReportStatusChange } from '../../src/domain/report/thread.js';
 import type { Clock } from '../../src/ports/clock.js';
 import type { EffectQueue } from '../../src/ports/effect-queue.js';
 import type { Ids } from '../../src/ports/ids.js';
@@ -68,5 +68,9 @@ export class FakeProjectClient implements ProjectClient {
 
   async statusChangesOf(projectId: ProjectId, reportId: ReportId): Promise<readonly ReportStatusChange[]> {
     return this.store(projectId).statusChangesOf(reportId);
+  }
+
+  async commentsOn(projectId: ProjectId, issueId: IssueId): Promise<readonly Comment[]> {
+    return this.store(projectId).commentsOn(issueId);
   }
 }
