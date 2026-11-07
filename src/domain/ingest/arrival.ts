@@ -6,6 +6,7 @@
 
 import type { RequestParts } from '../protocol/credentials.js';
 import type { DataCategory, RetryAdviceEntry } from '../protocol/retry-advice.js';
+import type { Assertion } from '../signin/sign-in.js';
 import type { InboundFilterConfig } from './inbound-filters.js';
 
 export type EndpointKind = 'envelope' | 'store' | 'security' | 'attachment' | 'checkin';
@@ -43,12 +44,18 @@ export type IngestSettings = {
   readonly unavailableRetrySeconds: number;
 };
 
-/** An admitted Arrival as retained, unprocessed: its body inline, or the BlobStore key holding it. */
+/**
+ * An admitted Arrival as retained, unprocessed: its body inline, or the
+ * BlobStore key holding it. `assertion` is the sign-in Assertion the tunnel
+ * route forwarded, kept only when a kept item is feedback, for the Report it
+ * files; null otherwise.
+ */
 export type ArrivalRecord = {
   readonly id: string;
   readonly projectId: string;
   readonly receivedAt: number;
   readonly endpoint: EndpointKind;
+  readonly assertion: Assertion | null;
 } & ({ readonly body: Uint8Array; readonly blobKey: null } | { readonly body: null; readonly blobKey: string });
 
 /** Whether a write is durable; a failed write says whether retrying may succeed. */

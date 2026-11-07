@@ -4,6 +4,8 @@
  * Organization a Project belongs to, the issuers each Organization trusts,
  * Membership, the Report Reference index, reporter subscriptions, and
  * Access Tokens (by hash), and the Artifact index.
+ * Membership, the Report Reference index and reporter subscriptions, each
+ * Project's processing config and its Artifact index.
  *
  * The Report Reference index keeps only the hash of each reference, with the
  * Organization, Project and Report it names, and no reporter address. A
@@ -15,10 +17,11 @@ import type { NotificationSettings } from '../domain/alerts/notification-setting
 import type { Durability } from '../domain/ingest/arrival.js';
 import type { OrganizationId, ProjectId, ReportId } from '../domain/ids.js';
 import type { Member } from '../domain/issue/state.js';
+import type { ProcessingConfig } from '../domain/processing/processing.js';
 import type { TrustedIssuer } from '../domain/signin/sign-in.js';
 import type { AccessTokenRecord } from '../domain/tenancy/access-token.js';
 import type { Release } from '../domain/release/ordering.js';
-import type { Artifact } from '../domain/sourcemap/artifact.js';
+import type { Artifact, ArtifactQuery } from '../domain/sourcemap/artifact.js';
 
 /** What a Report Reference's hash names. */
 export type ReferenceEntry = {
@@ -93,4 +96,10 @@ export interface ControlStore {
   projectMembers(projectId: ProjectId): Promise<readonly Member[]>;
   /** The Member's notification settings; empty settings when they set none. */
   notificationSettingsOf(member: Member): Promise<NotificationSettings>;
+  // --- task-008: processing config and the Artifact index ---
+
+  /** What processing reads about a Project (Scrubbing, Fingerprint and Stack Trace Rules, Grouping Version, Event Retention); null for an unknown Project. */
+  processingConfig(projectId: ProjectId): Promise<ProcessingConfig | null>;
+  /** The Project's Artifact index entries of the query's release, or carrying one of its debug ids (compared without case or dashes). */
+  artifactsFor(projectId: ProjectId, query: ArtifactQuery): Promise<readonly Artifact[]>;
 }

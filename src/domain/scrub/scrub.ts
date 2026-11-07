@@ -199,3 +199,23 @@ export function scrubEvent(event: NormalizedEvent, rules: ScrubbingRules, hash: 
   const walked = walkedChildren(event, { segments: [], inObject: false }, (child, at) => walk(child, at, { rules, hash }));
   return { event: walked.value as NormalizedEvent, removals: walked.removals };
 }
+
+/** The Hash that answers from hashes computed ahead; a text without one is filtered rather than kept. */
+export function hashedFrom(table: ReadonlyMap<string, string>): Hash {
+  return (text) => table.get(text) ?? FILTERED;
+}
+
+/**
+ * Every text the `hash` method would hash in this Event, once each, so a
+ * caller whose hash is asynchronous can hash them ahead and scrub with a
+ * lookup of the results. Scrubbing is deterministic, so the lookup is asked
+ * for exactly these texts.
+ */
+export function textsToHash(event: NormalizedEvent, rules: ScrubbingRules): readonly string[] {
+  const texts = new Set<string>();
+  scrubEvent(event, rules, (text) => {
+    texts.add(text);
+    return text;
+  });
+  return [...texts];
+}

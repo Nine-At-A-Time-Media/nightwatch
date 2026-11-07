@@ -1,7 +1,7 @@
 /**
  * FakeIds -- seeded Ids: `<prefix>-1`, `<prefix>-2`, ... in order. Random
  * bytes are a counter spread over the asked length, so each draw differs;
- * a Report Reference hashes to `hash:` and its characters reversed, which is
+ * a Report Reference, or any text, hashes to `hash:` and its characters reversed, which is
  * stable, distinct per reference, and does not contain the reference.
  */
 
@@ -34,5 +34,11 @@ export class FakeIds implements Ids {
   /** The length and then the bytes themselves, in hex: stable, never empty, and distinct for distinct content. */
   async hashContent(bytes: Uint8Array): Promise<string> {
     return [bytes.length.toString(16).padStart(8, '0'), ...[...bytes].map((byte) => byte.toString(16).padStart(2, '0'))].join('');
+  }
+
+  // --- task-008: hashing scrubbed values and user keys ---
+
+  async hash(text: string): Promise<string> {
+    return `hash:${[...text].reverse().join('')}`;
   }
 }

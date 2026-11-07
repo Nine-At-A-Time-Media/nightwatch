@@ -92,8 +92,8 @@ export function classifyItem(type: string): ItemClass {
   return { scope: 'unknown' };
 }
 
-/** The Arrival as an envelope; an endpoint other than envelope carries one item of its own kind. */
-export function arrivalEnvelope(arrival: Arrival): Envelope | Refusal {
+/** The Arrival (or its retained body) as an envelope; an endpoint other than envelope carries one item of its own kind. */
+export function arrivalEnvelope(arrival: Pick<Arrival, 'endpoint' | 'body'>): Envelope | Refusal {
   if (arrival.endpoint === 'envelope') return parseEnvelope(arrival.body);
   return { header: {}, items: [{ header: { type: ENDPOINT_ITEM[arrival.endpoint] }, payload: arrival.body }] };
 }

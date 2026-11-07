@@ -3,6 +3,7 @@
  * Seams: Randomness and reference hashing; Mechanism, Reports). Web Crypto in
  * production, a seeded fake in tests. A Report Reference is minted from
  * `randomBytes` by the report domain and kept at rest only as its hash.
+ * Processing hashes the values a Scrubbing Rule hashes, and user keys.
  */
 
 import type { ReportReference } from '../domain/report/reference.js';
@@ -19,4 +20,8 @@ export interface Ids {
 
   /** A hash of the bytes in lowercase hex; equal bytes always hash the same, different bytes apart. */
   hashContent(bytes: Uint8Array): Promise<string>;
+  // --- task-008: hashing scrubbed values and user keys ---
+
+  /** The hash a Scrubbing Rule's `hash` method, and an Event's user key, keep in place of a text; the same text always hashes the same. */
+  hash(text: string): Promise<string>;
 }

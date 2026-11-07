@@ -1,33 +1,20 @@
 /**
- * Event Summary draft -- the facts about one Event that grouping, counting
- * and alerting need (design Values the behaviors exchange, Event Summary).
- * Built from the scrubbed Event, so it holds no value a Scrubbing Rule
- * removed. Named a draft until it is reconciled with the Event Summary the
- * issue use cases own.
+ * Event Summary projection -- the Event Summary (src/domain/event) of a
+ * Normalized Event: the facts grouping, counting and alerting need. Built
+ * from the scrubbed and source-mapped Event, so it holds no value a
+ * Scrubbing Rule removed and its culprit names original source.
  */
 
-import type { Level } from '../issue/priority.js';
-import type { Exception, NormalizedEvent } from './normalized-event.js';
-
-export type EventSummaryDraft = {
-  readonly eventId: string;
-  readonly projectId: string;
-  /** Event time, epoch milliseconds, after clock-drift correction. */
-  readonly at: number;
-  readonly level: Level;
-  readonly platform: string;
-  readonly release: string | null;
-  readonly environment: string | null;
-  /** A stable key for the Event's user, chosen by the caller; null when the Event names no user. */
-  readonly userKey: string | null;
-  /** The one-line label of the Event: its main exception, else its message. */
-  readonly title: string;
-  readonly transaction: string | null;
-  readonly logger: string | null;
-  readonly tags: Readonly<Record<string, string>>;
-};
+import type { EventSummary } from '../event/event-summary.js';
+import type { Exception, Frame, NormalizedEvent } from './normalized-event.js';
 
 const UNLABELED = '<unlabeled event>';
+
+// --- predicates ---
+
+function isInApp(frame: Frame): boolean {
+  return frame.inApp === true;
+}
 
 // --- helpers ---
 
@@ -42,21 +29,31 @@ function title(event: NormalizedEvent): string {
   return (main && exceptionTitle(main)) ?? event.message?.formatted ?? event.message?.template ?? UNLABELED;
 }
 
+function frameCulprit(frame: Frame): string | null {
+  const location = frame.module ?? frame.filename ?? frame.absPath;
+  if (location === undefined) return frame.function ?? null;
+  return frame.function === undefined ? location : `${location} in ${frame.function}`;
+}
+
+/** Frames run oldest call first, so the innermost in-app frame (else the innermost frame) is where it broke. */
+function culprit(event: NormalizedEvent): string | null {
+  if (event.transaction !== null) return event.transaction;
+  const frames = event.exceptions.at(-1)?.frames ?? event.stacktrace ?? [];
+  const frame = frames.findLast(isInApp) ?? frames.at(-1);
+  return frame === undefined ? null : frameCulprit(frame);
+}
+
 // --- exports ---
 
-export function toEventSummary(event: NormalizedEvent, userKey: string | null): EventSummaryDraft {
+export function toEventSummary(event: NormalizedEvent, userKey: string | null): EventSummary {
   return {
     eventId: event.eventId,
-    projectId: event.projectId,
     at: event.timestamp,
-    level: event.level,
-    platform: event.platform,
     release: event.release,
     environment: event.environment,
+    level: event.level,
     userKey,
     title: title(event),
-    transaction: event.transaction,
-    logger: event.logger,
-    tags: event.tags,
+    culprit: culprit(event),
   };
 }

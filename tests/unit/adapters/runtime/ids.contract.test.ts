@@ -40,9 +40,21 @@ describe.each<{ name: string; make: () => Ids }>([
     expect(await ids.hashContent(new Uint8Array([3, 2, 1]))).not.toBe(hash);
     expect(await ids.hashContent(new Uint8Array([1, 2, 3, 0]))).not.toBe(hash);
   });
+
+  it('hashes any text stably, apart from other texts, and without the text in it', async () => {
+    const ids = make();
+    const hash = await ids.hash('ada@example.com');
+    expect(await ids.hash('ada@example.com')).toBe(hash);
+    expect(await ids.hash('bob@example.com')).not.toBe(hash);
+    expect(hash).not.toContain('ada@example.com');
+  });
 });
 
 describe('RandomIds', () => {
+  it('hashes text with SHA-256, written in hex', async () => {
+    expect(await new RandomIds().hash('abc')).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  });
+
   it('hashes with SHA-256, written in hex', async () => {
     expect(await new RandomIds().hashReference('abc')).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
   });

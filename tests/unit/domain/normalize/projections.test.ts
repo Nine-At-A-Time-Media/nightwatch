@@ -3,6 +3,7 @@ import fc from 'fast-check';
 import { normalizeEvent, type NormalizedEvent } from '../../../../src/domain/normalize/normalize.js';
 import { toGroupingInput } from '../../../../src/domain/normalize/grouping-input.js';
 import { toEventSummary } from '../../../../src/domain/normalize/event-summary.js';
+import type { EventSummary } from '../../../../src/domain/event/event-summary.js';
 import { isRefusal } from '../../../../src/domain/refusal.js';
 import type { GroupingInput } from '../../../../src/domain/grouping/grouping-input.js';
 
@@ -84,20 +85,17 @@ describe('toGroupingInput', () => {
 
 describe('toEventSummary', () => {
   it('summarizes the facts grouping, counting and alerting need, titled by the last exception of the chain', () => {
-    expect(toEventSummary(chained, 'user-key-1')).toEqual({
+    const expected: EventSummary = {
       eventId: 'f'.repeat(32),
-      projectId: 'p1',
       at: RECEIVED.getTime(),
-      level: 'warning',
-      platform: 'python',
       release: 'api@2.0.0',
       environment: 'staging',
+      level: 'warning',
       userKey: 'user-key-1',
       title: 'PaymentError: declined',
-      transaction: 'POST /charge',
-      logger: 'billing',
-      tags: { region: 'eu' },
-    });
+      culprit: 'POST /charge',
+    };
+    expect(toEventSummary(chained, 'user-key-1')).toEqual(expected);
   });
 
   it('titles an event without an exception by its message, and one with neither as unlabeled', () => {
@@ -105,5 +103,17 @@ describe('toEventSummary', () => {
     expect(toEventSummary(normalized({ exception: [{ value: 'only a value' }] }), null).title).toBe('only a value');
     expect(toEventSummary(normalized({ exception: [{ type: 'OnlyType' }] }), null).title).toBe('OnlyType');
     expect(toEventSummary(normalized({}), null).title).toBe('<unlabeled event>');
+  });
+
+  it('names the culprit by its transaction, else the innermost in-app frame of the main exception, else none', () => {
+    const frames = [
+      { module: 'app.cart', function: 'total', in_app: true },
+      { filename: 'lib/http.py', function: 'send', in_app: false },
+    ];
+    expect(toEventSummary(normalized({ exception: [{ type: 'E', stacktrace: { frames } }] }), null).culprit).toBe('app.cart in total');
+    expect(toEventSummary(normalized({ stacktrace: { frames: [{ filename: 'lib/http.py', function: 'send' }] } }), null).culprit).toBe(
+      'lib/http.py in send',
+    );
+    expect(toEventSummary(normalized({ message: 'disk full' }), null).culprit).toBeNull();
   });
 });

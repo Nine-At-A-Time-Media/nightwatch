@@ -3,7 +3,16 @@ import fc from 'fast-check';
 import { normalizeEvent, type NormalizedEvent } from '../../../../src/domain/normalize/normalize.js';
 import type { Frame } from '../../../../src/domain/normalize/normalized-event.js';
 import { isRefusal } from '../../../../src/domain/refusal.js';
-import { matchArtifact, normalizedFileName, type Artifact } from '../../../../src/domain/sourcemap/artifact.js';
+import {
+  artifactBlobKey,
+  artifactQuery,
+  isSourceMapped,
+  matchArtifact,
+  matchedArtifacts,
+  normalizedFileName,
+  sourceMapLookup,
+  type Artifact,
+} from '../../../../src/domain/sourcemap/artifact.js';
 import { applySourceMap, parseSourceMap, type SourceMap } from '../../../../src/domain/sourcemap/source-map.js';
 import { mapEventFrames, mapFrames } from '../../../../src/domain/sourcemap/map-frames.js';
 
@@ -182,5 +191,35 @@ describe('matchArtifact', () => {
         expect(matchArtifact(frame, { debugImages: images, release: 'web@1.0.0' }, artifacts)).toBe(byDebugId);
       }),
     );
+  });
+});
+
+// --- choosing and loading Artifacts for an Event ---
+
+describe('Artifacts for an Event', () => {
+  it('maps only browser events', () => {
+    expect(isSourceMapped(minifiedError())).toBe(true);
+    expect(isSourceMapped({ ...minifiedError(), platform: 'python' })).toBe(false);
+  });
+
+  it("asks the Artifact index by the Event's release and its source map debug ids", () => {
+    expect(artifactQuery(minifiedError())).toEqual({ release: 'web@1.0.0', debugIds: [DEBUG_ID] });
+  });
+
+  it('keeps the Artifacts that match some frame, once each, and keys each by its id in the BlobStore', () => {
+    const event = minifiedError();
+    expect(matchedArtifacts(event, [otherRelease, byRelease, byDebugId])).toEqual([byDebugId]);
+    expect(matchedArtifacts({ ...event, debugImages: [] }, [otherRelease, byRelease])).toEqual([byRelease]);
+    expect(matchedArtifacts({ ...event, debugImages: [], release: null }, [byRelease])).toEqual([]);
+    expect(artifactBlobKey(byRelease)).toBe('artifacts/by-release');
+  });
+
+  it('looks a frame up through the parsed map of its matching Artifact, or finds none', () => {
+    const event = minifiedError();
+    const frame = event.exceptions[0]?.frames[0] ?? {};
+    const map = sourceMap();
+    expect(sourceMapLookup({ event, artifacts: [byDebugId], maps: new Map([['by-debug-id', map]]) })(frame)).toBe(map);
+    expect(sourceMapLookup({ event, artifacts: [byDebugId], maps: new Map() })(frame)).toBeNull();
+    expect(sourceMapLookup({ event, artifacts: [], maps: new Map([['by-debug-id', map]]) })(frame)).toBeNull();
   });
 });

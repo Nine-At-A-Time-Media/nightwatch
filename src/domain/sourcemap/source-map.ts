@@ -14,6 +14,7 @@ import type { Frame } from '../normalize/normalized-event.js';
 export type SourceMap = { readonly kind: 'source-map'; readonly trace: TraceMap };
 
 const SOURCE_MAP_VERSION = 3;
+const utf8 = new TextDecoder();
 const MAPPINGS_ALPHABET = /^[A-Za-z0-9+/,;]*$/;
 
 const sourceMapSchema = z.object({
@@ -42,9 +43,14 @@ function contextLine(map: SourceMap, source: string, line: number): string | und
 
 // --- exports ---
 
-/** Parses a source map from its JSON text or its parsed JSON. */
+function jsonOf(raw: unknown): unknown {
+  if (typeof raw === 'string') return decode(raw);
+  return raw instanceof Uint8Array ? decode(utf8.decode(raw)) : raw;
+}
+
+/** Parses a source map from its JSON bytes or text, or its parsed JSON. */
 export function parseSourceMap(raw: unknown): SourceMap | Refusal {
-  const parsed = sourceMapSchema.safeParse(typeof raw === 'string' ? decode(raw) : raw);
+  const parsed = sourceMapSchema.safeParse(jsonOf(raw));
   if (!parsed.success) return refusal('invalid-source-map');
   const { file, sourceRoot, sourcesContent, ...rest } = parsed.data;
   const encoded: EncodedSourceMap = {

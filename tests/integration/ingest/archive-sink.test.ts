@@ -4,6 +4,7 @@
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { R2NdjsonArchiveSink } from '../../../src/adapters/r2-ndjson/r2-ndjson-archive-sink.js';
+import type { EventSummary } from '../../../src/domain/event/event-summary.js';
 import type { Outcome } from '../../../src/domain/outcome/outcome.js';
 import { FakeIds } from '../../_fakes/fake-ids.js';
 
@@ -38,5 +39,22 @@ describe('R2NdjsonArchiveSink', () => {
     await new R2NdjsonArchiveSink({ bucket: env.BLOBS, ids: new FakeIds(prefix) }).outcomes([]);
     const listed = await env.BLOBS.list({ prefix: 'archive/outcomes/' });
     expect(listed.objects.filter((o) => o.key.includes(prefix))).toEqual([]);
+  });
+
+  it('writes each UTC day of Event Summaries to its own dt= partition under events, each line naming its Project', async () => {
+    const prefix = crypto.randomUUID();
+    const sink = new R2NdjsonArchiveSink({ bucket: env.BLOBS, ids: new FakeIds(prefix) });
+    const summary: EventSummary = {
+      eventId: 'a'.repeat(32),
+      at: DAY_TWO,
+      release: 'web@1.0.0',
+      environment: 'production',
+      level: 'error',
+      userKey: null,
+      title: 'TypeError: x',
+      culprit: null,
+    };
+    await sink.events('42', [summary]);
+    expect(await readNdjson(`archive/events/dt=2023-11-15/${prefix}-1.ndjson`)).toEqual([{ projectId: '42', ...summary }]);
   });
 });
