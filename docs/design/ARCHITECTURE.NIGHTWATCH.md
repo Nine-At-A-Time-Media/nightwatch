@@ -356,7 +356,7 @@ therefore bounded by K2 stream retention.
   actor is the App, is ignored.
 - Shared GitHub comments: a comment by a repository collaborator that
   starts with the share marker enters the Thread. The marker spelling is
-  an as-built value; who may use it is design Open Question 5.
+  an as-built value; who may use it is design Open Question 4.
 - Outbound bodies are built from a template that has no field for
   contact details or attachments. Evidence links point to the api
   Worker, behind Access.
@@ -426,6 +426,7 @@ therefore bounded by K2 stream retention.
 | Reply-by-email address lifetime | notifier settings (token expiry) |
 | Config propagation lag (introduced here: KV is eventually consistent) | KV cache TTL in ingest settings |
 | Dedup window | `ProjectDO` settings |
+| Platform Soft Limits | scheduler Worker settings, one value per product; usage read from the Cloudflare account analytics API and compared daily, with an operator alert through `Channel` on crossing |
 
 ---
 
@@ -488,21 +489,20 @@ therefore bounded by K2 stream retention.
 | Consumption | `StreamPumpDO` pulling K2 | K2 has no Worker consumer binding; a DO alarm loop is a durable driver. | Drafting |
 | Reporter identity for misvtt | Access JWT | misvtt players are already behind Access. | Drafting, from misvtt context |
 | Language | TypeScript on Workers | Every runtime here is a Worker. | Drafting |
+| K2 beta storage cap | Accepted as the hard ceiling on Raw Retention volume | Owner accepts account limits; free or beta allocations are soft limits (design G20). | Owner, 2026-11-07 |
 
 ---
 
 ## Open Questions
 
-1. **K2 beta limits.** Storage per account is capped in the beta. Is that
-   cap enough at our volume, and when do raised limits arrive?
-2. **Basin SQL latency.** It has no Worker binding and no published
+1. **Basin SQL latency.** It has no Worker binding and no published
    timeout. If Outcome totals are too slow for the UI, a daily roll-up
    into D1 is the fallback.
-3. **`ProjectDO` size.** One object holds a Project's event index. If a
+2. **`ProjectDO` size.** One object holds a Project's event index. If a
    Project outgrows the per-object storage limit, the index shards by
    month into child objects.
-4. **Cloudflare Issues.** If the design accepts importing it (design Open
-   Question 7), it needs an `ExternalSource` port; it has no public API
+3. **Cloudflare Issues.** If the design accepts importing it (design Open
+   Question 6), it needs an `ExternalSource` port; it has no public API
    today.
 
 ---

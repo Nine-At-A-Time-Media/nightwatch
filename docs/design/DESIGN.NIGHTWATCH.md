@@ -84,6 +84,7 @@ provide, on Cloudflare, plus a reporter loop none of them has.
 | G17 | Every arrival ends in exactly one recorded Outcome (accepted, filtered, rate limited, invalid, or discarded), and an operator can see the totals. |
 | G18 | All stored data expires at the end of its retention window, per kind of data. |
 | G19 | Nightwatch runs entirely on Cloudflare. |
+| G20 | Nightwatch runs within the Platform Soft Limits. Crossing one alerts the operator; it does not by itself refuse data. |
 
 ---
 
@@ -579,6 +580,7 @@ the reporter unsubscribed or the Report is spam.
 | Cron check-in margin, maximum runtime | Per monitor. |
 | Uptime interval, Uptime Failure Count, recovery count | Per monitor. |
 | Monitor failure and recovery thresholds | Per monitor; at least one. |
+| Platform Soft Limits | One per Cloudflare product used. Each equals that product's free-plan allocation, or its beta allocation where the product has no free plan. |
 | Reply-by-email address lifetime | Bounded. |
 
 ---
@@ -623,28 +625,25 @@ Follow-up Page.
 | Report Status is derived | From the attached Issue and External Link | Team members triage once; reporters follow without extra work. | Drafting |
 | GitHub sync | Two-way for state and shared comments | Closing on GitHub must reach the reporter. | Owner, 2026-11-07 ("cuts an issue, gives the user something to follow up on") |
 | Grouping parity | Own versioned grouping, honoring SDK fingerprints | Parity would copy expression; SDK fingerprints keep user intent. | Drafting |
-| Deferred products | Tracing, replay, profiling, native symbolication | The core loop ships first; each is large. | Drafting; confirm in Open Question 1 |
+| Deferred products | Tracing, replay, profiling, native symbolication | The core loop ships first; each is large. | Owner, 2026-11-07 ("deferred list sounds good") |
+| Platform limits | Free-plan allocations are soft limits; beta account caps are accepted | Keeps cost near zero; an overrun is a signal to review, not an outage. | Owner, 2026-11-07 |
 
 ---
 
 ## Open Questions
 
-1. **Is the deferral list right?** The owner asked for the feature set
-   soup to nuts. This record defers tracing, replay, profiling and native
-   symbolication to later records. If any must ship in the first release,
-   this record must grant it.
-2. **Who are the reporters?** misvtt's reporters are already signed in
+1. **Who are the reporters?** misvtt's reporters are already signed in
    behind Cloudflare Access. If every product is like that, Reports can
    require product identity and anonymous Reports are not needed.
-3. **Is Nightwatch for our products only?** If outside teams use it,
+2. **Is Nightwatch for our products only?** If outside teams use it,
    tenancy, quotas and support become product features, not safeguards.
-4. **Should a reporter be able to reopen a Report?** Today a reporter can
+3. **Should a reporter be able to reopen a Report?** Today a reporter can
    reply, and a member decides.
-5. **Who may mark a GitHub comment for the reporter?** Any commenter with
+4. **Who may mark a GitHub comment for the reporter?** Any commenter with
    write access to the repository, or only Members?
-6. **What does a reporter see when two Reports are merged and one
+5. **What does a reporter see when two Reports are merged and one
    reporter's words are private?** Today each Thread stays separate.
-7. **Should Cloudflare Issues feed Nightwatch?** It already groups our
+6. **Should Cloudflare Issues feed Nightwatch?** It already groups our
    own Workers' errors; importing its occurrences would avoid
    double-instrumenting Workers.
 
