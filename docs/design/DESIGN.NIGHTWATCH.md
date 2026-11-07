@@ -542,7 +542,8 @@ the reporter unsubscribed or the Report is spam.
 | History | The append-only record of an Issue's changes. | Never edited. |
 | Report | A bug report a person filed. | Attached to exactly one Issue. |
 | Reporter | The person who filed a Report. | Always identified by the email address a trusted sign-in asserts. |
-| Sign-in | A verified assertion of a person's email address by an issuer the Organization trusts. | Without one, a request identifies nobody. |
+| Assertion | A claim of a person's identity, presented with a request and not yet verified. | Identifies nobody until verified. |
+| Sign-in | A verified Assertion of a person's email address by an issuer the Organization trusts. | Without one, a request identifies nobody. |
 | Report Reference | The handle a Reporter uses to follow a Report. | Cannot be guessed; revocable; grants nothing without a sign-in. |
 | Report Status | Received, Acknowledged, Fixed, Released, or Closed. | Derived from the attached Issue; never set directly. |
 | Follow-up Page | The Reporter's view of one Report. | Shows Report Status, shared Thread and dates only. |

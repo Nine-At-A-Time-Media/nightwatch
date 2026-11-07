@@ -212,14 +212,14 @@ value from the design, or a `Refusal`.
 | Design behavior | Use case (signature) | Ports |
 |---|---|---|
 | Report filed in Nightwatch's form; Report filed through an SDK widget; Unsigned report refused; Empty message refused; Report quota | `fileReport(submission: ReportSubmission, signIn: SignIn \| null, deps: {verifier: SignInVerifier, quota: QuotaGate, projects: ProjectClient, control: ControlStore, blobs: BlobStore, spam: SpamJudge, effects: EffectQueue, ids: Ids, clock: Clock}): Promise<FilingReceipt \| Refusal>` | SignInVerifier, QuotaGate, ProjectClient, ControlStore, BlobStore, SpamJudge, EffectQueue, Ids, Clock |
-| Reporter not asked who they are | `openReportForm(signIn: SignIn, deps: {verifier: SignInVerifier}): Promise<ReportForm \| Refusal>` | SignInVerifier |
+| Reporter not asked who they are | `openReportForm(assertion: Assertion, deps: {verifier: SignInVerifier}): Promise<ReportForm \| Refusal>` | SignInVerifier |
 | Failed send is visible | (the widget's own behavior; kept as a component test that drives the widget against a `fileReport` endpoint that fails) | none |
-| Follow-up Page shows status; Follow-up Page refuses others; Unknown reference | `viewFollowUp(reference: ReportReference, signIn: SignIn, deps: {verifier: SignInVerifier, control: ControlStore, projects: ProjectClient}): Promise<FollowUpView \| Refusal>` | SignInVerifier, ControlStore, ProjectClient |
+| Follow-up Page shows status; Follow-up Page refuses others; Unknown reference | `viewFollowUp(reference: ReportReference, assertion: Assertion, deps: {verifier: SignInVerifier, control: ControlStore, projects: ProjectClient}): Promise<FollowUpView \| Refusal>` | SignInVerifier, ControlStore, ProjectClient |
 | Status change notifies; Fix ships; Duplicate reports share outcome; Unsubscribe | `notifyReporters(change: IssueChange, deps: {projects: ProjectClient, control: ControlStore, mailer: Mailer, clock: Clock}): Promise<ReporterNotification[]>` | ProjectClient, ControlStore, Mailer, Clock |
 | Shared reply reaches reporter; Private comment stays private | `addComment(issue: IssueId, comment: Comment, actor: Member, deps: {issues: IssueStore, effects: EffectQueue, clock: Clock}): Promise<IssueChange[]>` | IssueStore, EffectQueue, Clock |
-| Reporter reply reaches team | `replyAsReporter(reference: ReportReference, comment: Comment, signIn: SignIn, deps: {verifier: SignInVerifier, control: ControlStore, projects: ProjectClient, effects: EffectQueue, clock: Clock}): Promise<IssueChange[] \| Refusal>` | SignInVerifier, ControlStore, ProjectClient, EffectQueue, Clock |
+| Reporter reply reaches team | `replyAsReporter(reference: ReportReference, comment: Comment, assertion: Assertion, deps: {verifier: SignInVerifier, control: ControlStore, projects: ProjectClient, effects: EffectQueue, clock: Clock}): Promise<IssueChange[] \| Refusal>` | SignInVerifier, ControlStore, ProjectClient, EffectQueue, Clock |
 | Spam is silent | `markSpam(report: ReportId, actor: Member \| SpamJudge, deps: {issues: IssueStore, clock: Clock}): Promise<IssueChange[]>` | IssueStore, Clock |
-| My reports | `listMyReports(signIn: SignIn, deps: {verifier: SignInVerifier, control: ControlStore, projects: ProjectClient}): Promise<ReportList \| Refusal>` | SignInVerifier, ControlStore, ProjectClient |
+| My reports | `listMyReports(assertion: Assertion, deps: {verifier: SignInVerifier, control: ControlStore, projects: ProjectClient}): Promise<ReportList \| Refusal>` | SignInVerifier, ControlStore, ProjectClient |
 
 ### Alerts and notifications
 
@@ -630,6 +630,7 @@ and name the fleet as their source.
 | A12 | One root package for the core | Core and Workers in the root package; console and widget as packages | One `adherence.toml` reads the root records; per-package declarations cannot reach them. | Drafting, from the adherence skill |
 | A13 | Console | Nuxt on Workers, merging the API, triage UI and Follow-up Page | Fleet Adopt row; one Access application. | Drafting |
 | A14 | Local stand-ins | `LogDO` for K2, R2 NDJSON for Basin Pipelines, D1 roll-up for Basin SQL, own JWT check for Access | Those products have no working local emulation (spike, 2026-11-07); design G21 requires every behavior to run locally. | Drafting, from the spike |
+| A15 | Who verifies an Assertion | The use case, through `SignInVerifier`; entry points pass the raw Assertion | Keeps the trust decision in one tested place; entry points stay thin. | Drafting, from task-010 |
 
 ---
 
