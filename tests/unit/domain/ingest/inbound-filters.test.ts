@@ -48,7 +48,7 @@ describe('globMatches', () => {
 
   it('replacing any characters of a text with ? still matches it', () => {
     fc.assert(
-      fc.property(fc.array(fc.tuple(fc.char(), fc.boolean())), (chars) => {
+      fc.property(fc.array(fc.tuple(fc.string({ minLength: 1, maxLength: 1 }), fc.boolean())), (chars) => {
         const text = chars.map(([c]) => c).join('');
         const pattern = chars.map(([c, hide]) => (hide || c === '*' || c === '?' ? '?' : c)).join('');
         expect(globMatches({ pattern, text })).toBe(true);
@@ -107,13 +107,15 @@ describe('matchingInboundFilter', () => {
   it('messages: a message or exception matches a listed glob, ignoring case', () => {
     const config = { ...off, messages: ['*resizeobserver loop*'] };
     expect(matchingInboundFilter({ event: { message: 'ResizeObserver loop limit exceeded' }, config, userAgent: null })).toBe('messages');
-    expect(matchingInboundFilter({ event: { logentry: { formatted: 'ResizeObserver loop x' } }, config, userAgent: null })).toBe('messages');
+    expect(matchingInboundFilter({ event: { logentry: { formatted: 'ResizeObserver loop x' } }, config, userAgent: null })).toBe(
+      'messages',
+    );
     const exception = { exception: { values: [{ type: 'Error', value: 'ResizeObserver loop completed' }] } };
     expect(matchingInboundFilter({ event: exception, config, userAgent: null })).toBe('messages');
     const typed = { ...off, messages: ['TypeError: *'] };
-    expect(matchingInboundFilter({ event: { exception: [{ type: 'TypeError', value: 'x is undefined' }] }, config: typed, userAgent: null })).toBe(
-      'messages',
-    );
+    expect(
+      matchingInboundFilter({ event: { exception: [{ type: 'TypeError', value: 'x is undefined' }] }, config: typed, userAgent: null }),
+    ).toBe('messages');
     expect(matchingInboundFilter({ event: { message: 'disk full' }, config, userAgent: null })).toBeNull();
   });
 
