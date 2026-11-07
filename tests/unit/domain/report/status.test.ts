@@ -4,12 +4,14 @@ import type { Status } from '../../../../src/domain/issue/state.js';
 import {
   REPORT_STATUSES,
   reportStatusOf,
-  type ExternalLink,
   type IssueTriage,
   type ReportStatus,
   type ReportStatusFacts,
 } from '../../../../src/domain/report/status.js';
+import type { ExternalLink } from '../../../../src/domain/tracker/external-link.js';
 import { issueIn } from '../issue/fixtures.js';
+
+type LinkStanding = Pick<ExternalLink, 'state'>;
 
 const UNTRIAGED: IssueTriage = { assigned: false, commentedByMember: false };
 const NONE_SEEN = new Map<string, number>();
@@ -20,7 +22,7 @@ function facts(overrides: Partial<ReportStatusFacts> = {}): ReportStatusFacts {
   return { triage: UNTRIAGED, releasesSeen: NONE_SEEN, lastShown: 'received', ...overrides };
 }
 
-function statusFor(status: Status, link: ExternalLink | null = null, overrides: Partial<ReportStatusFacts> = {}): ReportStatus {
+function statusFor(status: Status, link: LinkStanding | null = null, overrides: Partial<ReportStatusFacts> = {}): ReportStatus {
   return reportStatusOf(issueIn(status), link, facts(overrides));
 }
 
@@ -43,7 +45,7 @@ const anyStatus: fc.Arbitrary<Status> = fc.oneof(
   ),
 );
 const anyTriage = fc.record({ assigned: fc.boolean(), commentedByMember: fc.boolean() });
-const anyLink = fc.constantFrom<ExternalLink | null>(null, { state: 'linked' }, { state: 'broken' });
+const anyLink = fc.constantFrom<LinkStanding | null>(null, { state: 'linked' }, { state: 'broken' });
 
 describe('Report Status', () => {
   it('Received: the attached issue is Unresolved/New and no member has triaged it', () => {
