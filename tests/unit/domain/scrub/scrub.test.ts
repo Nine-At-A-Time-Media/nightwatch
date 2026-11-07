@@ -3,7 +3,7 @@ import fc from 'fast-check';
 import { normalizeEvent, type NormalizedEvent } from '../../../../src/domain/normalize/normalize.js';
 import { isRefusal } from '../../../../src/domain/refusal.js';
 import { parseScrubbingRules, scrubbingRules, type ProjectScrubbingRule } from '../../../../src/domain/scrub/rules.js';
-import { scrubEvent } from '../../../../src/domain/scrub/scrub.js';
+import { scrubEvent, textsToHash } from '../../../../src/domain/scrub/scrub.js';
 
 // --- builders ---
 
@@ -192,6 +192,37 @@ describe('scrubEvent property', () => {
         },
       ),
       { numRuns: 200 },
+    );
+  });
+});
+
+// --- hashing ahead ---
+
+describe('textsToHash', () => {
+  it('lists each text the hash method would hash, once, and nothing else', () => {
+    const rules = scrubbingRules({
+      ipAddresses: false,
+      project: projectRules([{ name: 'emails', selector: 'user.email', method: 'hash' }]),
+    });
+    const event = normalized({
+      user: { email: 'ada@example.com', id: '7' },
+      tags: { a: 'ada@example.com' },
+      extra: { password: 'hunter22' },
+    });
+    expect(textsToHash(event, rules)).toEqual(['ada@example.com']);
+    expect(textsToHash(event, defaults)).toEqual([]);
+  });
+
+  it('scrubbing with hashes looked up from textsToHash equals scrubbing with the hash itself', () => {
+    fc.assert(
+      fc.property(fc.array(fc.string({ maxLength: 12 }), { maxLength: 5 }), (values) => {
+        const tags = Object.fromEntries(values.map((value, index) => [`t${index}`, value]));
+        const rules = scrubbingRules({ ipAddresses: false, project: projectRules([{ name: 'tags', selector: 'tags.*', method: 'hash' }]) });
+        const event = normalized({ tags });
+        const table = new Map(textsToHash(event, rules).map((text) => [text, hash(text)]));
+        expect(scrubEvent(event, rules, (text) => table.get(text) ?? 'missing')).toEqual(scrubEvent(event, rules, hash));
+      }),
+      { numRuns: 100 },
     );
   });
 });
