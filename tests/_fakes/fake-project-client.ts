@@ -12,6 +12,8 @@ import { markSpam } from '../../src/application/reports/mark-spam.js';
 import { recordReply } from '../../src/application/reports/record-reply.js';
 import { assignEvent } from '../../src/application/issues/assign-event.js';
 import { recordReleaseSeen } from '../../src/application/issues/record-release-seen.js';
+import { addTrackerComment } from '../../src/application/tracker/add-tracker-comment.js';
+import { recordTrackerEvent } from '../../src/application/tracker/record-tracker-event.js';
 import type { EventSummary } from '../../src/domain/event/event-summary.js';
 import type { Fingerprint } from '../../src/domain/grouping/fingerprint.js';
 import type { IssueId, ProjectId, ReportId } from '../../src/domain/ids.js';
@@ -24,6 +26,7 @@ import type { Report, Reporter } from '../../src/domain/report/report.js';
 import type { SpamVerdict } from '../../src/domain/report/spam.js';
 import type { Comment, ReporterComment, ReportStatusChange } from '../../src/domain/report/thread.js';
 import type { ExternalLink } from '../../src/domain/tracker/external-link.js';
+import type { TrackerEvent } from '../../src/domain/tracker/tracker-event.js';
 import type { Clock } from '../../src/ports/clock.js';
 import type { EffectQueue } from '../../src/ports/effect-queue.js';
 import type { Ids } from '../../src/ports/ids.js';
@@ -125,5 +128,21 @@ export class FakeProjectClient implements ProjectClient {
     return events
       .map((event) => event.summary)
       .reduce<EventSummary | null>((latest, event) => (latest && latest.at > event.at ? latest : event), null);
+  }
+
+  async recordTrackerEvent(
+    projectId: ProjectId,
+    tracked: { issueId: IssueId; event: TrackerEvent; appActor: string; at: number },
+  ): Promise<IssueChange[] | Refusal> {
+    const { issueId, ...rest } = tracked;
+    return recordTrackerEvent(issueId, rest, { issues: this.store(projectId), effects: this.#side.effects });
+  }
+
+  async addTrackerComment(
+    projectId: ProjectId,
+    comment: { issueId: IssueId; author: Member; text: string; at: number },
+  ): Promise<IssueChange[] | Refusal> {
+    const { issueId, ...rest } = comment;
+    return addTrackerComment(issueId, rest, { issues: this.store(projectId), effects: this.#side.effects, ids: this.#side.ids });
   }
 }

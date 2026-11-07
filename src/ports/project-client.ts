@@ -21,6 +21,7 @@ import type { Report, Reporter } from '../domain/report/report.js';
 import type { SpamVerdict } from '../domain/report/spam.js';
 import type { Comment, ReporterComment, ReportStatusChange } from '../domain/report/thread.js';
 import type { ExternalLink } from '../domain/tracker/external-link.js';
+import type { TrackerEvent } from '../domain/tracker/tracker-event.js';
 
 export interface ProjectClient {
   // --- ProjectDO use cases and steps ---
@@ -55,4 +56,14 @@ export interface ProjectClient {
   recordExternalLink(projectId: ProjectId, externalLink: ExternalLink): Promise<void>;
   /** The Issue's most recent Event Summary, or null when it holds none. */
   latestEventOf(projectId: ProjectId, issueId: IssueId): Promise<EventSummary | null>;
+  /** Applies a Tracker Event to the Issue and its External Link; `appActor` is the App's own login, for no echo. */
+  recordTrackerEvent(
+    projectId: ProjectId,
+    tracked: { issueId: IssueId; event: TrackerEvent; appActor: string; at: number },
+  ): Promise<IssueChange[] | Refusal>;
+  /** Saves a tracker comment marked for the reporter as a shared Comment by the Member its author maps to. */
+  addTrackerComment(
+    projectId: ProjectId,
+    comment: { issueId: IssueId; author: Member; text: string; at: number },
+  ): Promise<IssueChange[] | Refusal>;
 }

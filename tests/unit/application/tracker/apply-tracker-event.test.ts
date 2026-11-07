@@ -166,7 +166,7 @@ describe('applyTrackerEvent', () => {
     w.effects.enqueued.length = 0;
 
     const changes = await apply(w, commented(1, '/reporter\nA fix is on its way.'));
-    await notifyAll(w, changes);
+    const sent = await notifyAll(w, changes);
 
     expect(changes).toEqual([expect.objectContaining({ kind: 'comment', actor: 'tracker', origin: 'tracker' })]);
     const comments = await w.projects.commentsOn(PROJECT, adaReport.issueId);
@@ -175,8 +175,8 @@ describe('applyTrackerEvent', () => {
       if (!stored) throw new Error('no report');
       expect(threadOf(stored, comments)).toEqual([expect.objectContaining({ author: member, shared: true, text: 'A fix is on its way.' })]);
     }
-    expect(w.mailer.sentTo(ADA)).toHaveLength(1);
-    expect(w.mailer.sentTo(BOB)).toHaveLength(1);
+    const commentNotices = sent.filter((notification) => 'comment' in notification.about).map((notification) => notification.to);
+    expect(commentNotices.sort()).toEqual([ADA, BOB].sort());
   });
 
   it('honours the share marker only from an author who maps to a Member, and ignores unmarked comments', async () => {
