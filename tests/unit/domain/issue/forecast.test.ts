@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
-import { computeForecast, exceedsForecast } from '../../../../src/domain/issue/forecast.js';
+import { computeForecast, exceedsForecast, forecastHours, isForecastDue } from '../../../../src/domain/issue/forecast.js';
 
 const HOUR = 3_600_000;
 const policy = { window: 4 * HOUR, spreadMultiple: 2, floor: 5, refreshInterval: HOUR };
@@ -35,5 +35,23 @@ describe('exceedsForecast', () => {
   it('holds only for an hourly count above the ceiling', () => {
     expect(exceedsForecast({ ceiling: 10 }, 11)).toBe(true);
     expect(exceedsForecast({ ceiling: 10 }, 10)).toBe(false);
+  });
+});
+
+describe('Forecast refresh', () => {
+  it('is due when never computed or at least the refresh interval old', () => {
+    expect(isForecastDue(null, 0, policy)).toBe(true);
+    expect(isForecastDue(0, HOUR - 1, policy)).toBe(false);
+    expect(isForecastDue(0, HOUR, policy)).toBe(true);
+  });
+
+  it('reads the window of whole hours ending at the start of the current hour', () => {
+    expect(forecastHours(10 * HOUR + 59_000, policy)).toEqual({ since: 6 * HOUR, until: 10 * HOUR });
+    fc.assert(
+      fc.property(fc.integer({ min: 0, max: 2 ** 45 }), (now) => {
+        const { since, until } = forecastHours(now, policy);
+        return until <= now && now - until < HOUR && until - since === policy.window;
+      }),
+    );
   });
 });

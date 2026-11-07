@@ -15,4 +15,8 @@ export class FakeBlobStore implements BlobStore {
   async get(key: string): Promise<Uint8Array | null> {
     return this.blobs.get(key) ?? null;
   }
+
+  async delete(key: string): Promise<void> {
+    this.blobs.delete(key);
+  }
 }
