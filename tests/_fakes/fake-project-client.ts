@@ -7,6 +7,7 @@
  */
 
 import { openReportIssue } from '../../src/application/reports/open-report-issue.js';
+import { recordReply } from '../../src/application/reports/record-reply.js';
 import { assignEvent } from '../../src/application/issues/assign-event.js';
 import { recordReleaseSeen } from '../../src/application/issues/record-release-seen.js';
 import type { EventSummary } from '../../src/domain/event/event-summary.js';
@@ -15,9 +16,10 @@ import type { IssueId, ProjectId, ReportId } from '../../src/domain/ids.js';
 import type { Assignment } from '../../src/domain/issue/assignment.js';
 import type { IssuePolicies } from '../../src/domain/issue/policies.js';
 import type { IssueChange, IssueState } from '../../src/domain/issue/state.js';
+import type { Refusal } from '../../src/domain/refusal.js';
 import type { Release, ReleaseFirstSeen } from '../../src/domain/release/ordering.js';
 import type { Report } from '../../src/domain/report/report.js';
-import type { Comment, ReportStatusChange } from '../../src/domain/report/thread.js';
+import type { Comment, ReporterComment, ReportStatusChange } from '../../src/domain/report/thread.js';
 import type { Clock } from '../../src/ports/clock.js';
 import type { EffectQueue } from '../../src/ports/effect-queue.js';
 import type { Ids } from '../../src/ports/ids.js';
@@ -56,6 +58,10 @@ export class FakeProjectClient implements ProjectClient {
 
   async openReportIssue(projectId: ProjectId, report: Report): Promise<IssueChange[]> {
     return openReportIssue(report, { issues: this.store(projectId) });
+  }
+
+  async recordReply(projectId: ProjectId, comment: ReporterComment): Promise<IssueChange[] | Refusal> {
+    return recordReply(comment, { issues: this.store(projectId) });
   }
 
   async recordShownStatus(projectId: ProjectId, reportId: ReportId, change: ReportStatusChange): Promise<void> {
