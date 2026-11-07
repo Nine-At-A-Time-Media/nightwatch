@@ -12,6 +12,12 @@
  * GitHub through it; the template reads only the fields it names, so extra
  * fields on the value passed in are ignored. Event text is set in code spans
  * on one line, so it can neither add Markdown nor mention anyone.
+ *
+ * A reporter's reply is posted as a quote of what they wrote (design Code and
+ * GitHub, Comments). The template takes the Reporter's address only to remove
+ * it: wherever the reply repeats it, in any case, it is replaced. Every `@` is
+ * written as an entity, so the reply mentions no one, and `<` likewise, so it
+ * carries no HTML.
  */
 
 import type { IssueChange } from '../issue/state.js';
@@ -38,6 +44,9 @@ const UNRESOLVED_PREFIX = 'unresolved/';
 const BACKTICK_RUN = /`+/g;
 const LINE_BREAK = /\r\n|\r|\n/g;
 const URL_MARKUP = /[<>\s]/g;
+const REPLY_HEADING = '**Reporter reply**';
+const ADDRESS_REMOVED = '[address removed]';
+const REGEX_SPECIAL = /[.*+?^${}()|[\]\\]/g;
 
 // --- sub-component: outbound change ---
 
@@ -108,4 +117,21 @@ export function outboundIssueBody(facts: OutboundIssueFacts): string {
     `[Evidence in Nightwatch](<${linkTarget(facts.evidenceUrl)}>)`,
     '',
   ].join('\n');
+}
+
+// --- sub-component: outbound reply body ---
+
+function withoutAddress(text: string, address: string): string {
+  if (address === '') return text;
+  return text.replace(new RegExp(address.replace(REGEX_SPECIAL, '\\$&'), 'gi'), ADDRESS_REMOVED);
+}
+
+function inert(line: string): string {
+  return line.replaceAll('&', '&amp;').replaceAll('@', '&#64;').replaceAll('<', '&lt;');
+}
+
+/** The body of a reporter's reply as posted to the linked tracker issue: a quote, with no address and no mention. */
+export function outboundReplyBody(reply: { readonly text: string; readonly reporterAddress: string }): string {
+  const lines = withoutAddress(reply.text, reply.reporterAddress).split(LINE_BREAK).map(inert);
+  return [REPLY_HEADING, '', ...lines.map((line) => `> ${line}`), ''].join('\n');
 }

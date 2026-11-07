@@ -72,6 +72,11 @@ export function pushSucceeded(externalLink: ExternalLink): ExternalLink {
   return { ...externalLink, lastKnown: externalLink.expected ?? externalLink.lastKnown, refusals: 0 };
 }
 
+/** Linked to Linked: GitHub accepted a comment; the refusal count starts again and the GitHub state is untouched. */
+export function commentPosted(externalLink: ExternalLink): ExternalLink {
+  return isBroken(externalLink) ? externalLink : { ...externalLink, refusals: 0 };
+}
+
 /** Linked to Linked, or to Broken once refusals reach `maxRefusals` (at least one). */
 export function pushRefused(externalLink: ExternalLink, bound: { readonly maxRefusals: number }): ExternalLink {
   if (isBroken(externalLink)) return externalLink;
