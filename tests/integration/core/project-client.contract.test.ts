@@ -175,6 +175,69 @@ describe.each<{ name: string; make: () => ProjectClient }>([
     expect(moved).toMatchObject({ id: 'report-1', issueId: crash });
     expect((await client.reportsOn(projectId, crash)).map((held) => held.id)).toEqual(['report-1']);
   });
+
+  // --- task-038: triage, merge, split, discard ---
+
+  it('triages an Issue: resolving it records the change, and an illegal transition is refused', async () => {
+    const client = make();
+    const projectId = project();
+    const member = { member: 'member-1' };
+    const crash = issueIdOf(await client.assignEvent(projectId, summary('event-1'), ['fp-1']));
+    const changes = await client.triageIssue(projectId, crash, { kind: 'resolve', resolution: { kind: 'plain' } }, member);
+    expect(Array.isArray(changes) && changes.map((change) => change.kind)).toEqual(['status', 'resolution', 'for_review']);
+    expect(await client.getIssue(projectId, crash)).toMatchObject({ status: 'resolved', resolution: { kind: 'plain' } });
+    expect(await client.triageIssue(projectId, crash, { kind: 'unarchive' }, member)).toEqual({ refusal: 'transition_not_allowed' });
+    expect(await client.triageIssue(projectId, 'issue-404', { kind: 'mark_reviewed' }, member)).toEqual({ refusal: 'issue_not_found' });
+  });
+
+  it('Merge -- Given two issues, When a member merges them, Then one issue holds all Fingerprints and events', async () => {
+    const client = make();
+    const projectId = project();
+    const member = { member: 'member-1' };
+    const target = issueIdOf(await client.assignEvent(projectId, summary('event-1'), ['fp-1']));
+    const source = issueIdOf(await client.assignEvent(projectId, summary('event-2'), ['fp-2']));
+    const changes = await client.mergeIssues(projectId, { target, sources: [source], actor: member });
+    expect(Array.isArray(changes)).toBe(true);
+    expect(await client.getIssue(projectId, source)).toBeNull();
+    expect((await client.getIssue(projectId, target))?.count).toBe(2);
+    expect([...(await client.fingerprintsOf(projectId, target))].sort()).toEqual(['fp-1', 'fp-2']);
+    expect(await client.mergeIssues(projectId, { target, sources: ['issue-404'], actor: member })).toEqual({ refusal: 'issue_not_found' });
+  });
+
+  it('Split -- Given an issue with two Fingerprints, When a member splits one off, Then a new issue holds its events', async () => {
+    const client = make();
+    const projectId = project();
+    const member = { member: 'member-1' };
+    const issue = issueIdOf(await client.assignEvent(projectId, summary('event-1'), ['fp-1', 'fp-2']));
+    await client.assignEvent(projectId, summary('event-2'), ['fp-2']);
+    const changes = await client.splitIssue(projectId, { issueId: issue, fingerprints: ['fp-2'], actor: member });
+    expect(Array.isArray(changes)).toBe(true);
+    expect(await client.fingerprintsOf(projectId, issue)).toEqual(['fp-1']);
+    const next = issueIdOf(await client.assignEvent(projectId, summary('event-3'), ['fp-2']));
+    expect(next).not.toBe(issue);
+    expect(await client.fingerprintsOf(projectId, next)).toEqual(['fp-2']);
+    expect(await client.shortIdOf(projectId, next)).not.toBe(await client.shortIdOf(projectId, issue));
+  });
+
+  it('Discard -- Given an issue, When a member discards it, Then it is gone and later events with its Fingerprints are dropped', async () => {
+    const client = make();
+    const projectId = project();
+    const member = { member: 'member-1' };
+    const issue = issueIdOf(await client.assignEvent(projectId, summary('event-1'), ['fp-1']));
+    const changes = await client.discardIssue(projectId, issue, member);
+    expect(Array.isArray(changes) && changes.map((change) => change.to)).toEqual(['deleting']);
+    expect(await client.getIssue(projectId, issue)).toBeNull();
+    expect(await client.assignEvent(projectId, summary('event-2'), ['fp-1'])).toEqual({ tombstone: issue, changes: [], duplicate: false });
+    expect(await client.discardIssue(projectId, issue, member)).toEqual({ refusal: 'issue_not_found' });
+  });
+
+  it("an Issue's Short Id counter is kept; none for an Issue the Project does not hold", async () => {
+    const client = make();
+    const projectId = project();
+    const first = issueIdOf(await client.assignEvent(projectId, summary('event-1'), ['fp-1']));
+    expect(typeof (await client.shortIdOf(projectId, first))).toBe('number');
+    expect(await client.shortIdOf(projectId, 'issue-404')).toBeNull();
+  });
 });
 
 describe('ProjectDO', () => {
