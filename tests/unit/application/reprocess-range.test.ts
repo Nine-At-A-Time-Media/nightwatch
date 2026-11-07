@@ -15,6 +15,7 @@ import type { RetentionPolicy } from '../../../src/domain/retention/retention.js
 import type { TimeRange } from '../../../src/domain/time-range.js';
 import type { BlobStore } from '../../../src/ports/blob-store.js';
 import { FakeArchiveSink } from '../../_fakes/fake-archive-sink.js';
+import { FakeMonitorClient } from '../../_fakes/fake-monitor-client.js';
 import { FakeArrivalStream } from '../../_fakes/fake-arrival-stream.js';
 import { ADA, DAY, HOUR, ORG, PROJECT, T0, assertionOf, world as reportsWorld } from './reports/world.js';
 
@@ -71,6 +72,7 @@ function world() {
   const processing: ProcessArrivalDeps = {
     ...w,
     archive,
+    monitors: new FakeMonitorClient(),
     settings: { clampFutureMs: 60_000, maxTagValueLength: 200 },
     reportSettings: w.settings,
   };

@@ -4,6 +4,7 @@
 // processor reaches ProjectDO.
 import { describe, expect, it } from 'vitest';
 import { processArrival, type ProcessArrivalDeps } from '../../../src/application/process-arrival.js';
+import { releaseHealth } from '../../../src/application/releases/release-health.js';
 import { uploadArtifact } from '../../../src/application/releases/upload-artifact.js';
 import { eventBlobKey } from '../../../src/domain/event/event-summary.js';
 import { gv1 } from '../../../src/domain/grouping/grouping-version.js';
@@ -13,6 +14,7 @@ import { serializeEnvelope } from '../../../src/domain/protocol/envelope.js';
 import { isRefusal } from '../../../src/domain/refusal.js';
 import { CI_TOKEN_SCOPES, tokenBytes } from '../../../src/domain/tenancy/access-token.js';
 import { FakeArchiveSink } from '../../_fakes/fake-archive-sink.js';
+import { FakeMonitorClient } from '../../_fakes/fake-monitor-client.js';
 import { ADA, ORG, PROJECT, T0, assertionOf, world as reportsWorld } from './reports/world.js';
 
 // --- builders ---
@@ -36,10 +38,11 @@ function world(processing: ProcessingConfig = config()) {
   const deps: ProcessArrivalDeps = {
     ...w,
     archive: new FakeArchiveSink(),
+    monitors: new FakeMonitorClient(),
     settings: { clampFutureMs: 60_000, maxTagValueLength: 200 },
     reportSettings: w.settings,
   };
-  return { ...w, deps, archive: deps.archive as FakeArchiveSink };
+  return { ...w, deps, archive: deps.archive as FakeArchiveSink, monitors: deps.monitors as FakeMonitorClient };
 }
 
 type Item = { readonly type: string; readonly payload: unknown };
@@ -327,10 +330,13 @@ describe('processArrival', () => {
   it('refuses feedback without a sign-in, with the filing Outcome archived', async () => {
     const w = world();
     const report = { type: 'user_report', payload: { event_id: EVENT_ID, comments: 'it crashed' } };
-    const result = await processArrival(record([report]), w.deps);
+    const arrival = record([report]);
+    const result = await processArrival(arrival, w.deps);
 
     expect(result.filingReceipts).toEqual([]);
-    expect(result.outcomes).toEqual([expect.objectContaining({ kind: 'invalid', reason: 'unsigned', category: 'feedback' })]);
+    expect(result.outcomes).toEqual([
+      expect.objectContaining({ kind: 'invalid', reason: 'unsigned', category: 'feedback', item: { recordId: arrival.id, index: 0 } }),
+    ]);
     expect(w.archive.archived).toEqual(result.outcomes);
   });
 
@@ -341,19 +347,110 @@ describe('processArrival', () => {
     await expect(processArrival(record([feedback], { assertion: assertionOf(ADA) }), w.deps)).rejects.toThrow(/unavailable/);
   });
 
-  it('leaves check-ins, sessions and other kinds to their own use cases, each with a deferred Outcome', async () => {
+  it('leaves security reports, attachments no Report takes, and other kinds to their own use cases, each with a deferred Outcome', async () => {
     const w = world();
-    const result = await processArrival(
-      record([errorEvent(), { type: 'check_in', payload: {} }, { type: 'session', payload: {} }]),
-      w.deps,
-    );
+    const arrival = record([errorEvent(), { type: 'security', payload: {} }, { type: 'attachment', payload: 'bytes' }]);
+    const result = await processArrival(arrival, w.deps);
 
     expect(result.assignments).toHaveLength(1);
     expect(result.outcomes).toEqual([
-      { projectId: PROJECT, recordedAt: T0, kind: 'discarded', reason: 'deferred', category: 'monitor', quantity: 1 },
-      { projectId: PROJECT, recordedAt: T0, kind: 'discarded', reason: 'deferred', category: 'session', quantity: 1 },
+      {
+        projectId: PROJECT,
+        recordedAt: T0,
+        kind: 'discarded',
+        reason: 'deferred',
+        category: 'security',
+        quantity: 1,
+        item: { recordId: arrival.id, index: 1 },
+      },
+      {
+        projectId: PROJECT,
+        recordedAt: T0,
+        kind: 'discarded',
+        reason: 'deferred',
+        category: 'attachment',
+        quantity: 1,
+        item: { recordId: arrival.id, index: 2 },
+      },
     ]);
     expect(w.archive.archived).toEqual(result.outcomes);
+  });
+
+  it('Missed check-in: a check_in item an SDK sent in an envelope reaches its Cron Monitor through MonitorClient, so a run that checked in is not missed', async () => {
+    const w = world();
+    w.monitors.hold(PROJECT, 'nightly-backup');
+    const result = await processArrival(record([{ type: 'check_in', payload: { monitor_slug: 'nightly-backup', status: 'ok' } }]), w.deps);
+
+    expect(w.monitors.checkIns).toEqual([{ projectId: PROJECT, monitorId: 'nightly-backup', status: 'ok' }]);
+    expect(result.outcomes).toEqual([]);
+  });
+
+  it('Missed check-in: a check-in for no monitor is discarded, and one that does not parse is invalid, each naming its item', async () => {
+    const w = world();
+    const arrival = record([
+      { type: 'check_in', payload: { monitor_slug: 'nobody', status: 'ok' } },
+      { type: 'check_in', payload: { status: 'ok' } },
+    ]);
+    const result = await processArrival(arrival, w.deps);
+
+    expect(result.outcomes).toEqual([
+      expect.objectContaining({
+        kind: 'discarded',
+        reason: 'unknown-monitor',
+        category: 'monitor',
+        item: { recordId: arrival.id, index: 0 },
+      }),
+      expect.objectContaining({
+        kind: 'invalid',
+        reason: 'malformed-check-in',
+        category: 'monitor',
+        item: { recordId: arrival.id, index: 1 },
+      }),
+    ]);
+    expect(w.monitors.checkIns).toHaveLength(1);
+  });
+
+  it('Missed check-in: a check-in that arrived on the cron endpoint is not forwarded again, since ingest already handed it to its monitor', async () => {
+    const w = world();
+    w.monitors.hold(PROJECT, 'nightly-backup');
+    const body = enc(JSON.stringify({ monitor_slug: 'nightly-backup', status: 'ok' }));
+    const result = await processArrival({ ...record([]), endpoint: 'checkin', body, blobKey: null }, w.deps);
+
+    expect(w.monitors.checkIns).toEqual([]);
+    expect(result.outcomes).toEqual([]);
+  });
+
+  it('Crash-free rate: Given sessions for a release, When a member opens the release, Then crash-free session and user rates are shown', async () => {
+    const w = world();
+    const attrs = { release: 'web@2.0.0', environment: 'production' };
+    const update = (did: string, status: string) => ({ type: 'session', payload: { sid: did, did, init: true, status, attrs } });
+    const aggregate = { type: 'sessions', payload: { attrs, aggregates: [{ started: '2026-11-01T00:00:00Z', exited: 2, crashed: 1 }] } };
+    const result = await processArrival(record([update('u-1', 'ok'), update('u-2', 'crashed'), aggregate]), w.deps);
+
+    expect(result.outcomes).toEqual([]);
+    expect(await releaseHealth(PROJECT, 'web@2.0.0', 'production', w)).toEqual({
+      release: 'web@2.0.0',
+      environment: 'production',
+      sessions: 5,
+      crashFreeSessionRate: 3 / 5,
+      users: 2,
+      crashFreeUserRate: 1 / 2,
+    });
+  });
+
+  it('Crash-free rate: a session item that does not parse is refused with an invalid Outcome naming the item', async () => {
+    const w = world();
+    const arrival = record([{ type: 'session', payload: { init: true, status: 'ok' } }]);
+    const result = await processArrival(arrival, w.deps);
+
+    expect(result.outcomes).toEqual([
+      expect.objectContaining({
+        kind: 'invalid',
+        reason: 'malformed-session',
+        category: 'session',
+        item: { recordId: arrival.id, index: 0 },
+      }),
+    ]);
   });
 
   it('refuses an event that does not normalize, and drops an Event a Tombstone holds, deleting its stored copy', async () => {

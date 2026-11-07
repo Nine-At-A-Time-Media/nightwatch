@@ -159,7 +159,12 @@ export async function admitArrival(arrival: Arrival, deps: AdmitArrivalDeps): Pr
   const retained = fates.some(isOpen) ? await retain({ arrival, envelope, fates, receivedAt, deps }) : null;
   const storage = retained?.storage ?? null;
   const decided = settleOpenItems({ fates, verdict: storageVerdict(storage) });
-  const outcomes = itemOutcomes({ fates: decided, projectId: arrival.projectId, recordedAt: receivedAt });
+  const outcomes = itemOutcomes({
+    fates: decided,
+    projectId: arrival.projectId,
+    recordedAt: receivedAt,
+    recordId: retained?.recordId ?? null,
+  });
   const retryAdvice = [...denials.values(), ...storageAdvice({ storage, settings: deps.settings })];
   return finish(decideAdmission({ fates: decided, outcomes, recordId: retained?.recordId ?? null, retryAdvice, storage }), deps);
 }

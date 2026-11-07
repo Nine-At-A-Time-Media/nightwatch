@@ -147,7 +147,15 @@ describe('pumpArrivals', () => {
     w.clock.advance(5);
     const outcomes = await pumpArrivals(w.deps);
 
-    const dead: Outcome = { projectId: 'p1', recordedAt: T0, kind: 'discarded', reason: 'dead-letter', category: 'default', quantity: 1 };
+    const dead: Outcome = {
+      projectId: 'p1',
+      recordedAt: T0,
+      kind: 'discarded',
+      reason: 'dead-letter',
+      category: 'default',
+      quantity: 1,
+      item: { recordId: 'a', index: null },
+    };
     expect(outcomes).toEqual([dead]);
     expect(w.archive.archived).toEqual([dead]);
     expect(w.script.dispatched).toEqual(['a', 'a', 'a']);

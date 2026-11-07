@@ -81,6 +81,12 @@ const outcome = (kind: string, reason: string | null, category: string, quantity
   quantity,
 });
 
+/** An accepted Outcome names its item: the Arrival Record and the item's index among the retained items. */
+const accepted = (category: string, index = 0) => ({
+  ...outcome('accepted', null, category),
+  item: { recordId: expect.stringMatching(/rec/) as unknown, index },
+});
+
 describe('admitArrival', () => {
   it('An SDK event is accepted: Given an active Client Key, When an SDK sends an error, Then Nightwatch acknowledges it and records an accepted Outcome', async () => {
     const deps = makeDeps();
@@ -89,10 +95,11 @@ describe('admitArrival', () => {
 
     expect(admission.decision).toBe('admitted');
     expect(admission.status).toBe(200);
-    expect(admission.outcomes).toEqual([outcome('accepted', null, 'error')]);
+    expect(admission.outcomes).toEqual([accepted('error')]);
     expect(deps.stream.records).toHaveLength(1);
     const record = deps.stream.records[0]!;
     expect(admission.decision === 'admitted' && admission.recordId).toBe(record.id);
+    expect(admission.outcomes[0]?.item).toEqual({ recordId: record.id, index: 0 });
     expect(record).toMatchObject({ projectId: PROJECT, receivedAt: NOW, endpoint: 'envelope', blobKey: null });
     expect(record.body).toEqual(sent.body);
     expect(deps.metrics.recorded).toEqual(admission.outcomes);
@@ -104,11 +111,7 @@ describe('admitArrival', () => {
     const body = envelope([errorItem, { type: 'session', payload: { sid: 's1' } }, { type: 'feedback', payload: { message: 'hi' } }]);
     const admission = await admitArrival(arrival({ body }), deps);
 
-    expect(admission.outcomes).toEqual([
-      outcome('accepted', null, 'error'),
-      outcome('accepted', null, 'session'),
-      outcome('accepted', null, 'feedback'),
-    ]);
+    expect(admission.outcomes).toEqual([accepted('error'), accepted('session', 1), accepted('feedback', 2)]);
     expect(deps.stream.records[0]!.body).toEqual(body);
   });
 
@@ -117,7 +120,7 @@ describe('admitArrival', () => {
     const admission = await admitArrival(arrival({ endpoint: 'store', body: enc('{"message":"boom"}') }), deps);
 
     expect(admission.decision).toBe('admitted');
-    expect(admission.outcomes).toEqual([outcome('accepted', null, 'error')]);
+    expect(admission.outcomes).toEqual([accepted('error')]);
     expect(deps.stream.records[0]!.endpoint).toBe('store');
   });
 
@@ -204,7 +207,7 @@ describe('admitArrival', () => {
     const admission = await admitArrival(arrival({ body }), deps);
 
     expect(admission.decision).toBe('admitted');
-    expect(admission.outcomes).toEqual([outcome('accepted', null, 'error'), outcome('invalid', 'too-large', 'attachment')]);
+    expect(admission.outcomes).toEqual([accepted('error'), outcome('invalid', 'too-large', 'attachment')]);
     const retained = parseEnvelope(deps.stream.records[0]!.body!);
     expect(!isRefusal(retained) && retained.items.map((i) => i.header.type)).toEqual(['event']);
   });
@@ -226,7 +229,7 @@ describe('admitArrival', () => {
 
     expect(admission.decision).toBe('admitted');
     expect(admission.retryAdvice.map((a) => a.categories)).toEqual([['error']]);
-    expect(admission.outcomes).toEqual([outcome('rate_limited', 'quota-exceeded', 'error'), outcome('accepted', null, 'session')]);
+    expect(admission.outcomes).toEqual([outcome('rate_limited', 'quota-exceeded', 'error'), accepted('session')]);
     const retained = parseEnvelope(deps.stream.records[0]!.body!);
     expect(!isRefusal(retained) && retained.items.map((i) => i.header.type)).toEqual(['session']);
   });
@@ -257,7 +260,7 @@ describe('admitArrival', () => {
     expect(flood.map((a) => a.decision)).toEqual(['admitted', 'admitted', 'admitted', 'refused', 'refused']);
     const other = await admitArrival(arrival({ projectId: quiet }), deps);
     expect(other.decision).toBe('admitted');
-    expect(other.outcomes).toEqual([{ ...outcome('accepted', null, 'error'), projectId: quiet }]);
+    expect(other.outcomes).toEqual([{ ...accepted('error'), projectId: quiet }]);
   });
 
   it('Noise is filtered: Given an Inbound Filter matches an event, When it arrives, Then it is not processed and a filtered Outcome records the filter', async () => {
@@ -285,7 +288,7 @@ describe('admitArrival', () => {
     const person = await admitArrival(arrival({ headers: { ...arrival().headers, 'user-agent': 'Mozilla/5.0 Firefox/130.0' } }), deps);
 
     expect(crawler.outcomes).toEqual([outcome('filtered', 'web-crawlers', 'error')]);
-    expect(person.outcomes).toEqual([outcome('accepted', null, 'error')]);
+    expect(person.outcomes).toEqual([accepted('error')]);
     expect(deps.stream.records).toHaveLength(1);
   });
 
@@ -317,7 +320,7 @@ describe('admitArrival', () => {
     expect(admission.decision).toBe('admitted');
     expect(admission.outcomes).toEqual([
       outcome('discarded', 'out-of-scope', 'profile'),
-      outcome('accepted', null, 'error'),
+      accepted('error'),
       outcome('discarded', 'unknown-item-kind', 'default'),
     ]);
     const retained = parseEnvelope(deps.stream.records[0]!.body!);
@@ -363,7 +366,7 @@ describe('admitArrival', () => {
     const deps = makeDeps();
     const admission = await admitArrival(arrival({ endpoint: 'attachment', body: enc('small') }), deps);
 
-    expect(admission.outcomes).toEqual([outcome('accepted', null, 'attachment')]);
+    expect(admission.outcomes).toEqual([accepted('attachment')]);
     expect(deps.stream.records[0]!.blobKey).toBe(`raw/${PROJECT}/${deps.stream.records[0]!.id}`);
   });
 

@@ -36,4 +36,14 @@ describe('outcomeTotals', () => {
     ]);
     expect(archive.queries).toEqual([{ projectId: 'web', range: { start: T0, end: T0 + 2 * DAY } }]);
   });
+
+  it('Outcome totals: an item admitted and then discarded by processing is counted once, as discarded', async () => {
+    const archive = new FakeArchiveQuery();
+    const item = { recordId: 'rec-1', index: 0 };
+    archive.seed([outcome('accepted', null, { item }), outcome('discarded', 'tombstone', { item })]);
+
+    const totals = await outcomeTotals('web', { start: T0, end: T0 + 2 * DAY }, { archive });
+
+    expect(totals.totals).toEqual([{ kind: 'discarded', reason: 'tombstone', quantity: 1 }]);
+  });
 });

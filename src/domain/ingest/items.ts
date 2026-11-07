@@ -70,6 +70,10 @@ function isOversizeItem({ item, limits }: { item: EnvelopeItem; limits: SizeLimi
   return item.payload.length > (item.header.type === 'attachment' ? limits.attachment : limits.event);
 }
 
+function isAccepted(fate: DecidedItem): boolean {
+  return fate.verdict.kind === 'accepted';
+}
+
 function isFilterable(fate: ItemFate): fate is OpenItem {
   return isOpen(fate) && fate.item.header.type === 'event';
 }
@@ -146,14 +150,25 @@ export function settleOpenItems({ fates, verdict }: { fates: readonly ItemFate[]
   return fates.map((fate) => (isOpen(fate) ? { ...fate, verdict } : fate));
 }
 
+/**
+ * One Outcome per item. An accepted item was retained, so its Outcome names
+ * it by its Arrival Record and its index among the record's items, which
+ * are the accepted ones, in order (keptBody).
+ */
 export function itemOutcomes({
   fates,
   projectId,
   recordedAt,
+  recordId,
 }: {
   fates: readonly DecidedItem[];
   projectId: string;
   recordedAt: number;
+  recordId: string | null;
 }): Outcome[] {
-  return fates.map((fate) => ({ projectId, recordedAt, ...fate.verdict, category: fate.category, quantity: 1 }));
+  return fates.map((fate, at) => {
+    const outcome: Outcome = { projectId, recordedAt, ...fate.verdict, category: fate.category, quantity: 1 };
+    if (recordId === null || !isAccepted(fate)) return outcome;
+    return { ...outcome, item: { recordId, index: fates.slice(0, at).filter(isAccepted).length } };
+  });
 }

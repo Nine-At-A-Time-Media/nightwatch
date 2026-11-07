@@ -66,7 +66,7 @@ describe('deadLetterKey', () => {
 });
 
 describe('deadLetterOutcome', () => {
-  it('a dead-lettered record ends discarded, with reason dead-letter, recorded at its receipt', () => {
+  it('a dead-lettered record ends discarded, with reason dead-letter, recorded at its receipt, for every item of the record', () => {
     expect(deadLetterOutcome(inline)).toEqual({
       projectId: 'p1',
       recordedAt: RECEIVED,
@@ -74,6 +74,7 @@ describe('deadLetterOutcome', () => {
       reason: 'dead-letter',
       category: 'default',
       quantity: 1,
+      item: { recordId: 'r1', index: null },
     });
   });
 });

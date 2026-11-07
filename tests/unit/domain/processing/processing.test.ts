@@ -60,12 +60,12 @@ describe('processingRoute', () => {
     const routes = ['event', 'feedback', 'user_report', 'check_in', 'session', 'sessions', 'attachment', 'security', 'mystery'].map(
       processingRoute,
     );
-    expect(routes).toEqual(['event', 'feedback', 'feedback', 'deferred', 'deferred', 'deferred', 'deferred', 'deferred', 'deferred']);
+    expect(routes).toEqual(['event', 'feedback', 'feedback', 'check-in', 'session', 'session', 'deferred', 'deferred', 'deferred']);
   });
 });
 
 describe('processingOutcome', () => {
-  it("records the item's fate in its own category, at receipt, in the record's Project", () => {
+  it("records the item's fate in its own category, at receipt, in the record's Project, naming the item by its record and index", () => {
     const expected: Outcome = {
       projectId: 'p1',
       recordedAt: RECEIVED,
@@ -73,9 +73,13 @@ describe('processingOutcome', () => {
       reason: 'deferred',
       category: 'monitor',
       quantity: 1,
+      item: { recordId: 'r1', index: 2 },
     };
-    expect(processingOutcome({ record, type: 'check_in', kind: 'discarded', reason: 'deferred' })).toEqual(expected);
-    expect(processingOutcome({ record, type: 'mystery', kind: 'invalid', reason: 'x' }).category).toBe('default');
+    expect(processingOutcome({ record, index: 2, type: 'check_in', kind: 'discarded', reason: 'deferred' })).toEqual(expected);
+    expect(processingOutcome({ record, index: null, type: 'mystery', kind: 'invalid', reason: 'x' })).toMatchObject({
+      category: 'default',
+      item: { recordId: 'r1', index: null },
+    });
   });
 });
 

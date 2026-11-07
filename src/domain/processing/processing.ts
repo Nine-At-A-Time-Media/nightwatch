@@ -43,12 +43,15 @@ export type ProcessingResult = {
 };
 
 /** Where an item goes: event processing, Report filing, or left for a use case that does not exist yet. */
-export type ProcessingRoute = 'event' | 'feedback' | 'deferred';
+export type ProcessingRoute = 'event' | 'feedback' | 'session' | 'check-in' | 'deferred';
 
 const ROUTES = new Map<string, ProcessingRoute>([
   ['event', 'event'],
   ['feedback', 'feedback'],
   ['user_report', 'feedback'],
+  ['session', 'session'],
+  ['sessions', 'session'],
+  ['check_in', 'check-in'],
 ]);
 
 /** The user fields that key an Event's user, most specific first, with the prefix that keeps their keys apart. */
@@ -68,21 +71,33 @@ export function processingRoute(type: string): ProcessingRoute {
   return ROUTES.get(type) ?? 'deferred';
 }
 
-/** The Outcome of an item whose fate processing decided, in the item's own category. */
+/**
+ * The Outcome of an item whose fate processing decided, in the item's own
+ * category, naming the item by its record and index so it supersedes the
+ * item's admission Outcome; a null index names the whole record.
+ */
 export function processingOutcome({
   record,
+  index,
   type,
   kind,
   reason,
 }: {
   record: ArrivalRecord;
+  index: number | null;
   type: string;
   kind: OutcomeKind;
   reason: string;
 }): Outcome {
   const kindOf = classifyItem(type);
   const category = kindOf.scope === 'unknown' ? 'default' : kindOf.category;
-  return { projectId: record.projectId, recordedAt: record.receivedAt, kind, reason, category, quantity: 1 };
+  const item = { recordId: record.id, index };
+  return { projectId: record.projectId, recordedAt: record.receivedAt, kind, reason, category, quantity: 1, item };
+}
+
+/** An Outcome another use case decided for an item of the record (a refused filing), named as that item. */
+export function itemOutcome({ outcome, record, index }: { outcome: Outcome; record: ArrivalRecord; index: number }): Outcome {
+  return { ...outcome, item: { recordId: record.id, index } };
 }
 
 // --- reading items ---

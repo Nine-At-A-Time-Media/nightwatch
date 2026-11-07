@@ -19,6 +19,7 @@ import { D1ControlStore } from '../../adapters/d1/d1-control-store.js';
 import { D1ProjectConfigSource } from '../../adapters/d1/d1-project-config-source.js';
 import { DurableProjectClient } from '../../adapters/do/durable-project-client.js';
 import { DurableQuotaGate } from '../../adapters/do/durable-quota-gate.js';
+import { ServiceMonitorClient } from '../../adapters/fetch/service-monitor-client.js';
 import { SendEmailMailer } from '../../adapters/email/send-email-mailer.js';
 import { LogArrivalStream } from '../../adapters/logdo/log-arrival-stream.js';
 import { QueueEffectQueue } from '../../adapters/queues/queue-effect-queue.js';
@@ -155,6 +156,7 @@ export function processArrivalDeps(
     ids,
     clock,
     archive,
+    monitors: new ServiceMonitorClient({ fetch: (url, init) => env.MONITORS.fetch(url, init) }),
     settings: processingSettings(env),
     reportSettings: reportSettings(env),
   };
