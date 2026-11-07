@@ -26,6 +26,8 @@
           :value="draft.message"
           required
           aria-required="true"
+          :aria-invalid="shownRefusal !== null"
+          :aria-describedby="shownRefusal !== null ? failureId : undefined"
           rows="5"
           :disabled="state.phase === 'sending'"
           data-testid="report-message"
@@ -40,6 +42,9 @@
           data-testid="report-screenshot"
           @change="handleScreenshot"
         />
+        <p v-if="shownRefusal !== null" :id="failureId" role="alert" class="failure" data-testid="report-failure">
+          {{ failureWording(shownRefusal) }}
+        </p>
         <div class="actions">
           <button type="submit" :disabled="state.phase === 'sending'" data-testid="report-submit">Submit</button>
           <button type="button" :disabled="state.phase === 'sending'" data-testid="report-cancel" @click="handleCancel">Cancel</button>
@@ -57,8 +62,9 @@
  * only for a message and an optional screenshot; never for who the reporter is.
  */
 import { computed, inject, shallowRef, useId } from 'vue';
-import { isRefusal } from '../domain/refusal.js';
+import { isRefusal, type Refusal } from '../domain/refusal.js';
 import {
+  failureWording,
   nextReportFormState,
   submissionOf,
   type ReportDraft,
@@ -84,6 +90,7 @@ const sender: ReportSender = injected;
 const titleId = `nw-title-${useId()}`;
 const messageId = `nw-message-${useId()}`;
 const screenshotId = `nw-screenshot-${useId()}`;
+const failureId = `nw-failure-${useId()}`;
 
 // Shallow: states are immutable values, and a File must reach the sender as itself, not a reactive proxy.
 const state = shallowRef<ReportFormState>({ phase: 'idle' });
@@ -97,6 +104,10 @@ const draft = computed<ReportDraft>(() =>
   state.value.phase === 'editing' || state.value.phase === 'sending' || state.value.phase === 'failed'
     ? state.value.draft
     : { message: '', screenshot: null },
+);
+
+const shownRefusal = computed<Refusal | null>(() =>
+  state.value.phase === 'editing' || state.value.phase === 'failed' ? state.value.refusal : null,
 );
 
 function dispatch(event: ReportFormEvent): void {
@@ -192,6 +203,10 @@ textarea {
   font: inherit;
   width: 100%;
   box-sizing: border-box;
+}
+.failure {
+  margin: 0;
+  color: #b3261e;
 }
 .actions {
   display: flex;
