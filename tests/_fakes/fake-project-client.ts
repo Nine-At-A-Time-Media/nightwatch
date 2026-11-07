@@ -13,6 +13,8 @@ import { recordReply } from '../../src/application/reports/record-reply.js';
 import { assignEvent } from '../../src/application/issues/assign-event.js';
 import { recordReleaseSeen } from '../../src/application/issues/record-release-seen.js';
 import { addTrackerComment } from '../../src/application/tracker/add-tracker-comment.js';
+import { recordCommitShipped } from '../../src/application/tracker/record-commit-shipped.js';
+import { resolveByCommit } from '../../src/application/tracker/resolve-by-commit.js';
 import { recordTrackerEvent } from '../../src/application/tracker/record-tracker-event.js';
 import type { EventSummary } from '../../src/domain/event/event-summary.js';
 import type { Fingerprint } from '../../src/domain/grouping/fingerprint.js';
@@ -144,5 +146,13 @@ export class FakeProjectClient implements ProjectClient {
   ): Promise<IssueChange[] | Refusal> {
     const { issueId, ...rest } = comment;
     return addTrackerComment(issueId, rest, { issues: this.store(projectId), effects: this.#side.effects, ids: this.#side.ids });
+  }
+
+  async resolveByCommit(projectId: ProjectId, fix: { shortId: number; commit: string; at: number }): Promise<IssueChange[] | Refusal> {
+    return resolveByCommit(fix, { issues: this.store(projectId), effects: this.#side.effects });
+  }
+
+  async recordCommitShipped(projectId: ProjectId, shipped: { commit: string; release: Release; at: number }): Promise<IssueChange[]> {
+    return recordCommitShipped(shipped, { issues: this.store(projectId), effects: this.#side.effects });
   }
 }

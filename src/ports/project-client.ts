@@ -66,4 +66,8 @@ export interface ProjectClient {
     projectId: ProjectId,
     comment: { issueId: IssueId; author: Member; text: string; at: number },
   ): Promise<IssueChange[] | Refusal>;
+  /** Resolves the Issue the Short Id counter names, pending the Commit keyed `commit`. */
+  resolveByCommit(projectId: ProjectId, fix: { shortId: number; commit: string; at: number }): Promise<IssueChange[] | Refusal>;
+  /** Names the Release in every pending Resolution that waits for the Commit keyed `commit`. */
+  recordCommitShipped(projectId: ProjectId, shipped: { commit: string; release: Release; at: number }): Promise<IssueChange[]>;
 }
