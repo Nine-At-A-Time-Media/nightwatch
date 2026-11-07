@@ -7,6 +7,9 @@
  * Report issue with no Event gets a neutral title, never the Report message.
  * Once the tracker has opened the issue, the External Link is recorded on
  * the Issue and indexed by its tracker issue, so Tracker Events find it.
+ * An Issue whose link is Broken is relinked instead (design Behaviors: Broken
+ * link relinked): once its Repository is connected again, the same tracker
+ * issue is read back and the link is Linked with nothing pending.
  * Ports: Tracker, ProjectClient, ControlStore. The Project is named beside
  * the Issue, which does not carry it.
  */
@@ -15,7 +18,7 @@ import type { EventSummary } from '../../domain/event/event-summary.js';
 import type { IssueId, ProjectId } from '../../domain/ids.js';
 import { issueNotFound, type IssueState, type Member } from '../../domain/issue/state.js';
 import { refusal, isRefusal, type Refusal } from '../../domain/refusal.js';
-import { link, type ExternalLink, type Repository } from '../../domain/tracker/external-link.js';
+import { link, relink, type ExternalLink, type Repository } from '../../domain/tracker/external-link.js';
 import { outboundIssueBody, type OutboundIssueFacts } from '../../domain/tracker/outbound.js';
 import type { TrackerSettings } from '../../domain/tracker/settings.js';
 import type { ControlStore } from '../../ports/control-store.js';
@@ -81,6 +84,13 @@ async function openOnTracker(
   return link({ issueId: issue.issueId, repository, number: opened.number, lastKnown: { state: 'open' } });
 }
 
+/** Broken to Linked: the tracker issue's current state becomes the last known one; nothing is opened. */
+async function relinkOnTracker(broken: ExternalLink, repository: Repository, tracker: Tracker): Promise<ExternalLink | Refusal> {
+  if (broken.repository !== repository) return refusal('transition_not_allowed');
+  const current = await tracker.getIssue({ repository, number: broken.number });
+  return isRefusal(current) ? current : relink(broken, { lastKnown: current });
+}
+
 async function recordLink(projectId: ProjectId, externalLink: ExternalLink, deps: OpenExternalIssueDeps): Promise<ExternalLink> {
   await deps.projects.recordExternalLink(projectId, externalLink);
   await deps.control.putLinkEntry({
@@ -105,7 +115,10 @@ export async function openExternalIssue(
   if (refused) return refused;
   const state = await deps.projects.getIssue(project, issue);
   if (state === null) return issueNotFound();
-  if ((await deps.projects.externalLinkOf(project, issue)) !== null) return refusal('already_linked');
-  const opened = await openOnTracker({ projectId: project, issue: state, repository }, deps);
-  return isRefusal(opened) ? opened : recordLink(project, opened, deps);
+  const existing = await deps.projects.externalLinkOf(project, issue);
+  if (existing?.state === 'linked') return refusal('already_linked');
+  const linked = existing
+    ? await relinkOnTracker(existing, repository, deps.tracker)
+    : await openOnTracker({ projectId: project, issue: state, repository }, deps);
+  return isRefusal(linked) ? linked : recordLink(project, linked, deps);
 }
