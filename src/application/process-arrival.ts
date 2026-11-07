@@ -51,6 +51,7 @@ import {
   type ProcessingResult,
   type ProcessingSettings,
 } from '../domain/processing/processing.js';
+import { monitorCheckIn } from '../domain/processing/check-in.js';
 import { sessionReports, type SessionReport } from '../domain/processing/sessions.js';
 import type { EnvelopeItem } from '../domain/protocol/envelope.js';
 import type { Session } from '../domain/release/health.js';
@@ -72,11 +73,13 @@ import { parseSourceMap, type SourceMap } from '../domain/sourcemap/source-map.j
 import type { ArchiveSink } from '../ports/archive-sink.js';
 import type { BlobStore } from '../ports/blob-store.js';
 import type { Ids } from '../ports/ids.js';
+import type { MonitorClient } from '../ports/monitor-client.js';
 import { fileReport, type FileReportDeps } from './reports/file-report.js';
 
 /** fileReport's ports, for feedback items, and the processor's own. */
 export type ProcessArrivalDeps = Omit<FileReportDeps, 'settings'> & {
   readonly archive: ArchiveSink;
+  readonly monitors: MonitorClient;
   readonly settings: ProcessingSettings;
   readonly reportSettings: ReportSettings;
 };
@@ -227,6 +230,22 @@ async function recordSessions(placed: Placed, processing: Processing, deps: Proc
   return processingResult({});
 }
 
+// --- flow: check-ins ---
+
+/**
+ * Hands an envelope check-in to its monitor. A check-in that came on the
+ * cron endpoint went to its monitor at ingest, so it is not sent again.
+ */
+async function checkIn(placed: Placed, processing: Processing, deps: ProcessArrivalDeps): Promise<ProcessingResult> {
+  const { record } = processing;
+  if (record.endpoint === 'checkin') return processingResult({});
+  const read = monitorCheckIn(placed.item, record.projectId);
+  if (isRefusal(read)) return processingResult({ outcomes: [itemFate(placed, processing, { kind: 'invalid', reason: read.refusal })] });
+  const taken = await deps.monitors.checkIn(read);
+  if (!isRefusal(taken)) return processingResult({});
+  return processingResult({ outcomes: [itemFate(placed, processing, { kind: 'discarded', reason: taken.refusal })] });
+}
+
 // --- flow: routing ---
 
 async function processItem(placed: Placed, processing: Processing, deps: ProcessArrivalDeps): Promise<ProcessingResult> {
@@ -234,6 +253,7 @@ async function processItem(placed: Placed, processing: Processing, deps: Process
   if (route === 'event') return processEvent(placed, processing, deps);
   if (route === 'feedback') return fileFeedback(placed, processing, deps);
   if (route === 'session') return recordSessions(placed, processing, deps);
+  if (route === 'check-in') return checkIn(placed, processing, deps);
 
   // Milestone: check-ins, sessions, attachments and security reports wait for their own use cases.
   const outcome = itemFate(placed, processing, { kind: 'discarded', reason: 'deferred' });

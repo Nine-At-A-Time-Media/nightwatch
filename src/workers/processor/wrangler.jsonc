@@ -64,5 +64,9 @@
   },
   // The local stage reads issuer keys from the local issuer Worker
   // (dev/local-issuer). Never bound on a deployed stage.
-  "services": [{ "binding": "LOCAL_ISSUER", "service": "nightwatch-local-issuer" }],
+  // Envelope check-in items go on to MonitorDO through the monitors Worker.
+  "services": [
+    { "binding": "LOCAL_ISSUER", "service": "nightwatch-local-issuer" },
+    { "binding": "MONITORS", "service": "nightwatch-monitors" },
+  ],
 }

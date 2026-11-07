@@ -60,7 +60,7 @@ describe('processingRoute', () => {
     const routes = ['event', 'feedback', 'user_report', 'check_in', 'session', 'sessions', 'attachment', 'security', 'mystery'].map(
       processingRoute,
     );
-    expect(routes).toEqual(['event', 'feedback', 'feedback', 'deferred', 'session', 'session', 'deferred', 'deferred', 'deferred']);
+    expect(routes).toEqual(['event', 'feedback', 'feedback', 'check-in', 'session', 'session', 'deferred', 'deferred', 'deferred']);
   });
 });
 
