@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
-import { formatShortId, isShortId, shortIdNumber } from '../../../../src/domain/issue/short-id.js';
+import { formatShortId, isShortId, shortIdNumber, shortIdSlug } from '../../../../src/domain/issue/short-id.js';
 
 describe('Short Id', () => {
   it('spells a Project counter as the slug and a base32 suffix', () => {
@@ -16,6 +16,22 @@ describe('Short Id', () => {
         expect(isShortId(id)).toBe(true);
         expect(shortIdNumber(id)).toBe(counter);
       }),
+    );
+  });
+});
+
+describe('Short Id slug', () => {
+  it("is the Project's own slug when it has one, and otherwise its id's letters and digits", () => {
+    expect(shortIdSlug({ projectId: 'project-1', slug: 'Web' })).toBe('Web');
+    expect(shortIdSlug({ projectId: 'project-1', slug: null })).toBe('project1');
+    expect(shortIdSlug({ projectId: '9f3a-77', slug: null })).toBe('P9f3a77');
+  });
+
+  it('property: any Project id gives Short Ids that match the grammar', () => {
+    fc.assert(
+      fc.property(fc.string(), fc.integer({ min: 0, max: 2 ** 40 }), (projectId, counter) =>
+        isShortId(formatShortId({ slug: shortIdSlug({ projectId, slug: null }), counter })),
+      ),
     );
   });
 });

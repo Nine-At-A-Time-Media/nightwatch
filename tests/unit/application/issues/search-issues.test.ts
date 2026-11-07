@@ -149,4 +149,20 @@ describe('searchIssues', () => {
     if (isRefusal(first) || first.next === null) throw new Error('expected a second page');
     expect(isRefusal(await searchIssues(query('is:resolved'), ana, first.next, w.deps))).toBe(true);
   });
+
+  it('each Issue names its own Project, and its Short Id carries that Project slug, by which free text finds it', async () => {
+    const w = world();
+    w.control.addProjectSlug(WEB, 'shop');
+    const inWeb = await issueIn(w, { project: WEB, fingerprint: 'web-1', release: 'web@1.0.0' });
+    const inApi = await issueIn(w, { project: API, fingerprint: 'api-1', release: 'web@1.0.0', at: T0 + HOUR });
+
+    const page = await searchIssues(query('is:unresolved'), ana, null, w.deps);
+    if (isRefusal(page)) throw new Error(page.refusal);
+    const byId = new Map(page.issues.map((issue) => [issue.state.issueId, issue]));
+    expect(byId.get(inWeb)).toMatchObject({ projectId: WEB, shortId: expect.stringMatching(/^SHOP-/) });
+    expect(byId.get(inApi)).toMatchObject({ projectId: API, shortId: expect.stringMatching(/^API-/) });
+
+    const shortId = byId.get(inWeb)?.shortId ?? '';
+    expect(ids(await searchIssues(query(shortId), ana, null, w.deps))).toEqual([inWeb]);
+  });
 });

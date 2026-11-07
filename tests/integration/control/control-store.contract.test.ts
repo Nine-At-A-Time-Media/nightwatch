@@ -224,6 +224,17 @@ describe.each<{ name: string; make: () => Subject }>([
       expect(await store.projectOfSlug({ organizationId: b.organizationId, slug: 'WEB' })).toBeNull();
       expect(await store.projectOfSlug({ organizationId: a.organizationId, slug: 'API' })).toBeNull();
     });
+
+    // --- task-038: the slug a Project's Short Ids carry ---
+
+    it('a Project names its slug as set; a Project with none, or unknown, names none', async () => {
+      const { store, seed } = make();
+      const { a, b } = await twoOrganizations(seed);
+      await seed.slug(a.projectId, 'Web');
+      expect(await store.slugOfProject(a.projectId)).toBe('Web');
+      expect(await store.slugOfProject(b.projectId)).toBeNull();
+      expect(await store.slugOfProject(uid('project'))).toBeNull();
+    });
   });
 
   describe('sign-in and Membership', () => {
