@@ -349,7 +349,7 @@ export async function recallFilingStep(r: ProjectRuntime, projectId: ProjectId, 
 export async function searchPageStep(
   r: ProjectRuntime,
   projectId: ProjectId,
-  search: { plan: SearchPlan; context: SearchContext },
+  search: { plan: SearchPlan; context: SearchContext; slug: string },
 ): Promise<IssuePage> {
   await claim(r, projectId);
   return searchProjectPage(projectId, search, { issues: r.issues, memberEmails: new Map() });

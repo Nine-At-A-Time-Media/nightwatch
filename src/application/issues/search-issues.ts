@@ -8,12 +8,16 @@
  * Organizations apart. The search context carries the viewer's address
  * (for `assigned:me`), the Organization's newest Release (for
  * `release:latest`, over every Project's first-seen Releases) and the time.
- * Pages are sorted by last seen, a fixed number of Issues per page.
+ * Pages are sorted by last seen, a fixed number of Issues per page. Each
+ * Project is sent the slug its Short Ids carry, read here from the
+ * ControlStore, so Short Ids are spelled where free text can match them and
+ * ProjectDO needs no ControlStore.
  *
  * Ports: ControlStore, ProjectClient, Clock.
  */
 
 import type { OrganizationId, ProjectId } from '../../domain/ids.js';
+import { shortIdSlug } from '../../domain/issue/short-id.js';
 import type { Member } from '../../domain/issue/state.js';
 import { isRefusal, refusal, type Refusal } from '../../domain/refusal.js';
 import { latestReleaseOf, type Release, type ReleaseFirstSeen } from '../../domain/release/ordering.js';
@@ -55,13 +59,22 @@ async function searchContext(scope: { viewer: Member; projectIds: readonly Proje
   };
 }
 
+async function projectPage(
+  search: { projectId: ProjectId; plan: SearchPlan; context: SearchContext },
+  deps: SearchIssuesDeps,
+): Promise<IssuePage> {
+  const { projectId, plan, context } = search;
+  const slug = shortIdSlug({ projectId, slug: await deps.control.slugOfProject(projectId) });
+  return deps.projects.searchPage(projectId, plan, context, slug);
+}
+
 async function searchOrganization(
   search: { organizationId: OrganizationId; viewer: Member; plan: SearchPlan },
   deps: SearchIssuesDeps,
 ): Promise<IssuePage> {
   const projectIds = await deps.control.projectsOf(search.organizationId);
   const context = await searchContext({ viewer: search.viewer, projectIds }, deps);
-  const pages = await Promise.all(projectIds.map((projectId) => deps.projects.searchPage(projectId, search.plan, context)));
+  const pages = await Promise.all(projectIds.map((projectId) => projectPage({ projectId, plan: search.plan, context }, deps)));
   return mergePages({ pages, plan: search.plan });
 }
 

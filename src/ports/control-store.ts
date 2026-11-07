@@ -124,6 +124,10 @@ export interface ControlStore {
   memberOfAddress(account: { organizationId: OrganizationId; email: string }): Promise<Member | null>;
   /** The Team a tracker team (`org/team`, any case) maps to in the Organization, or null when it maps to none. */
   teamOfTrackerTeam(account: { organizationId: OrganizationId; slug: string }): Promise<string | null>;
+  // --- task-038: the slug a Project's Short Ids carry ---
+
+  /** The slug the Project's Short Ids carry, as set; null when it has none or is unknown. */
+  slugOfProject(projectId: ProjectId): Promise<string | null>;
 }
 
 /** Where an External Link's tracker issue points in Nightwatch. */

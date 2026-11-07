@@ -11,6 +11,7 @@
  * - An Issue being deleted or merged matches nothing.
  */
 
+import type { ProjectId } from '../ids.js';
 import type { Level } from '../issue/priority.js';
 import type { ShortId } from '../issue/short-id.js';
 import type { IssueState } from '../issue/state.js';
@@ -22,6 +23,8 @@ export type AssigneeFacts = { readonly memberEmail: string } | { readonly team: 
 
 /** What a Project's store supplies about one Issue for search. */
 export type IssueFacts = {
+  /** The Project that holds the Issue. */
+  readonly projectId: ProjectId;
   /** Status, Substatus, counts, Priority, first and last seen, For Review. */
   readonly state: IssueState;
   readonly shortId: ShortId;

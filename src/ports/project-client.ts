@@ -123,8 +123,11 @@ export interface ProjectClient {
   recordFiling(projectId: ProjectId, filingKey: string, filing: RecordedFiling): Promise<void>;
   // --- task-031: search ---
 
-  /** The Project's page of a search: its Issues matching the plan, after its Cursor, in sort order, up to its limit. */
-  searchPage(projectId: ProjectId, plan: SearchPlan, context: SearchContext): Promise<IssuePage>;
+  /**
+   * The Project's page of a search: its Issues matching the plan, after its Cursor, in sort order, up to its limit.
+   * `slug` is the slug the Project's Short Ids carry (task-038), which the caller reads from the ControlStore.
+   */
+  searchPage(projectId: ProjectId, plan: SearchPlan, context: SearchContext, slug: string): Promise<IssuePage>;
   // --- task-027: assignment and Report moves ---
 
   /** Calls the ProjectDO use case assignIssue: a Member, or Nightwatch when the Project auto-assigns, sets the Assignee. */

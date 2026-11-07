@@ -27,6 +27,17 @@ export function isShortId(text: string): text is ShortId {
 
 const BASE32 = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
+/**
+ * The slug a Project's Short Ids carry: its own, or, while it has none, the
+ * letters and digits of its id, led by `P` when they do not start with a
+ * letter, so the Short Id always matches the grammar.
+ */
+export function shortIdSlug({ projectId, slug }: { projectId: string; slug: string | null }): string {
+  if (slug !== null) return slug;
+  const letters = projectId.replace(/[^A-Za-z0-9]/g, '');
+  return /^[A-Za-z]/.test(letters) ? letters : `P${letters}`;
+}
+
 /** The Short Id for a Project's issue counter, e.g. slug `web`, counter 32 -> `WEB-10`. */
 export function formatShortId({ slug, counter }: { slug: string; counter: number }): ShortId {
   let suffix = '';

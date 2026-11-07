@@ -217,8 +217,8 @@ export class ProjectDO extends DurableObject<CoreEnv> implements ProjectClient {
     return steps.recordFilingStep(this.#runtime, projectId, { filingKey, filing });
   }
 
-  searchPage(projectId: ProjectId, plan: SearchPlan, context: SearchContext): Promise<IssuePage> {
-    return steps.searchPageStep(this.#runtime, projectId, { plan, context });
+  searchPage(projectId: ProjectId, plan: SearchPlan, context: SearchContext, slug: string): Promise<IssuePage> {
+    return steps.searchPageStep(this.#runtime, projectId, { plan, context, slug });
   }
 
   // --- task-027: assignment and Report moves ---

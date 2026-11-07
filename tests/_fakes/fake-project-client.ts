@@ -282,10 +282,10 @@ export class FakeProjectClient implements ProjectClient {
   // --- task-031: search ---
 
   /** Runs the plan over the Issue facts the Project's store holds. */
-  async searchPage(projectId: ProjectId, plan: SearchPlan, context: SearchContext): Promise<IssuePage> {
+  async searchPage(projectId: ProjectId, plan: SearchPlan, context: SearchContext, slug: string): Promise<IssuePage> {
     return searchProjectPage(
       projectId,
-      { plan, context },
+      { plan, context, slug },
       { issues: this.store(projectId), memberEmails: this.#side.memberEmails ?? new Map() },
     );
   }

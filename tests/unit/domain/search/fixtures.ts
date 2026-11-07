@@ -29,6 +29,7 @@ export function facts(
       ...base,
       ...status,
     },
+    projectId: 'project-web',
     shortId: 'WEB-3K',
     title: 'TypeError: cannot read properties of undefined',
     culprit: 'app/checkout/cart.ts in total',

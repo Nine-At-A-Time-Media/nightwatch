@@ -367,6 +367,12 @@ export class D1ControlStore implements ControlStore {
     );
   }
 
+  // --- the slug a Project's Short Ids carry ---
+
+  async slugOfProject(projectId: ProjectId): Promise<string | null> {
+    return this.#value<string>('SELECT slug AS value FROM projects WHERE project_id = ?', projectId);
+  }
+
   // --- statements ---
 
   #statement(sql: string, ...values: unknown[]): D1PreparedStatement {

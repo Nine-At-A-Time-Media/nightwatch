@@ -205,8 +205,8 @@ export class DurableProjectClient implements ProjectClient {
     return this.#project(projectId).recordFiling(projectId, filingKey, filing);
   }
 
-  searchPage(projectId: ProjectId, plan: SearchPlan, context: SearchContext): Promise<IssuePage> {
-    return this.#project(projectId).searchPage(projectId, plan, context);
+  searchPage(projectId: ProjectId, plan: SearchPlan, context: SearchContext, slug: string): Promise<IssuePage> {
+    return this.#project(projectId).searchPage(projectId, plan, context, slug);
   }
 
   // --- task-027: assignment and Report moves ---

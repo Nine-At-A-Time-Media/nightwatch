@@ -47,6 +47,8 @@ export class FakeControlStore implements ControlStore {
   // --- task-030: owner suggestions ---
   readonly #ownershipConfigs = new Map<ProjectId, OwnershipConfig>();
   readonly #trackerTeams = new Map<string, string>();
+  // --- task-038: each Project's slug as set ---
+  readonly #slugOfProject = new Map<ProjectId, string>();
 
   /** Adds a Project to an Organization, creating the Organization if needed. */
   addProject(organizationId: OrganizationId, projectId: ProjectId): void {
@@ -236,6 +238,7 @@ export class FakeControlStore implements ControlStore {
   addProjectSlug(projectId: ProjectId, slug: string): void {
     const organizationId = this.#projects.get(projectId);
     if (organizationId !== undefined) this.#slugs.set(`${organizationId}/${slug.toUpperCase()}`, projectId);
+    if (organizationId !== undefined) this.#slugOfProject.set(projectId, slug);
   }
 
   async isRepositoryConnected(connection: { organizationId: OrganizationId; repository: Repository }): Promise<boolean> {
@@ -295,5 +298,11 @@ export class FakeControlStore implements ControlStore {
 
   async teamOfTrackerTeam(account: { organizationId: OrganizationId; slug: string }): Promise<string | null> {
     return this.#trackerTeams.get(`${account.organizationId}/${account.slug.toLowerCase()}`) ?? null;
+  }
+
+  // --- task-038: the slug a Project's Short Ids carry ---
+
+  async slugOfProject(projectId: ProjectId): Promise<string | null> {
+    return this.#slugOfProject.get(projectId) ?? null;
   }
 }
