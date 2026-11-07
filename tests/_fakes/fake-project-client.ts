@@ -10,6 +10,7 @@ import { addComment } from '../../src/application/reports/add-comment.js';
 import { openReportIssue } from '../../src/application/reports/open-report-issue.js';
 import { eraseReports } from '../../src/application/reports/erase-reports.js';
 import { markSpam } from '../../src/application/reports/mark-spam.js';
+import { moveReport } from '../../src/application/reports/move-report.js';
 import { recordReply } from '../../src/application/reports/record-reply.js';
 import { assignEvent } from '../../src/application/issues/assign-event.js';
 import { assignIssue } from '../../src/application/issues/assign-issue.js';
@@ -265,5 +266,9 @@ export class FakeProjectClient implements ProjectClient {
   ): Promise<IssueChange[] | Refusal> {
     const { clock, effects } = this.#side;
     return assignIssue(issueId, assignee, actor, { issues: this.store(projectId), effects, clock });
+  }
+
+  async moveReport(projectId: ProjectId, move: { reportId: ReportId; to: IssueId; actor: Member }): Promise<Report | Refusal> {
+    return moveReport(move.reportId, move.to, move.actor, { issues: this.store(projectId) });
   }
 }

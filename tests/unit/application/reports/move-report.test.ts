@@ -15,7 +15,7 @@ async function issueOf(w: World, reportId: string): Promise<string> {
 }
 
 function deps(w: World) {
-  return { issues: w.projects.store(PROJECT), clock: w.clock };
+  return { issues: w.projects.store(PROJECT) };
 }
 
 /** A Member resolves the Issue, as triageIssue would; returns the Issue Changes. */
@@ -57,7 +57,7 @@ describe('moveReport', () => {
     await replyAsReporter(bob.reference, { text: 'on firefox' }, assertionOf(BOB), w);
     const target = await issueOf(w, ada.reportId);
     await moveReport(bob.reportId, target, member, deps(w));
-    await resolveIssue(w, target);
+    for (const change of await resolveIssue(w, target)) await notifyReporters(PROJECT, change, w);
 
     const bobView = await viewFollowUp(bob.reference, assertionOf(BOB), w);
     const adaView = await viewFollowUp(ada.reference, assertionOf(ADA), w);

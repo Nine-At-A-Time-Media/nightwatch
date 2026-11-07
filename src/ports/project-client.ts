@@ -127,4 +127,6 @@ export interface ProjectClient {
     assignee: Assignee | null,
     actor: Member | 'system',
   ): Promise<IssueChange[] | Refusal>;
+  /** Calls the ProjectDO use case moveReport: a Member moves the Report to another Issue; returns the Report as moved. */
+  moveReport(projectId: ProjectId, move: { reportId: ReportId; to: IssueId; actor: Member }): Promise<Report | Refusal>;
 }
