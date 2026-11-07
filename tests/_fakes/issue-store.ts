@@ -11,6 +11,14 @@ import type { EventId, IssueId, ReportId } from '../../src/domain/ids.js';
 import type { AssignmentTarget, Tombstone } from '../../src/domain/issue/assignment.js';
 import type { IssueChange, IssueState } from '../../src/domain/issue/state.js';
 import { isHeldBy, type GroupedEvent } from '../../src/domain/issue/tally.js';
+import {
+  NO_SESSIONS,
+  type Environment,
+  type SessionBucket,
+  type SessionCounts,
+  type SessionStatus,
+  type UserCounts,
+} from '../../src/domain/release/health.js';
 import type { Release, ReleaseFirstSeen } from '../../src/domain/release/ordering.js';
 import type { Report, Reporter } from '../../src/domain/report/report.js';
 import type { Comment, ReportStatusChange } from '../../src/domain/report/thread.js';
@@ -37,6 +45,9 @@ export class FakeIssueStore implements IssueStore {
   readonly #reports = new Map<ReportId, Report>();
   readonly #comments: { issueId: IssueId; comment: Comment }[] = [];
   readonly #statusChanges = new Map<ReportId, ReportStatusChange[]>();
+  // --- task-022: Session counters ---
+  readonly #sessionBuckets = new Map<string, SessionBucket & { sessions: number }>();
+  readonly #sessionUsers = new Map<string, { release: Release; environment: Environment; crashed: boolean }>();
 
   constructor(options: { dedupWindow: number; projectNormalRate?: number }) {
     this.#dedupWindow = options.dedupWindow;
@@ -223,6 +234,44 @@ export class FakeIssueStore implements IssueStore {
 
   async statusChangesOf(reportId: ReportId): Promise<readonly ReportStatusChange[]> {
     return this.#statusChanges.get(reportId) ?? [];
+  }
+
+  // --- task-022: Session counters for Release Health ---
+
+  async addSessions(bucket: SessionBucket, quantity: number): Promise<void> {
+    const key = JSON.stringify([bucket.release, bucket.environment, bucket.status, bucket.minute]);
+    const held = this.#sessionBuckets.get(key);
+    this.#sessionBuckets.set(key, { ...bucket, sessions: (held?.sessions ?? 0) + quantity });
+  }
+
+  async markSessionUser(user: { release: Release; environment: Environment; userKey: string; crashed: boolean }): Promise<void> {
+    const key = JSON.stringify([user.release, user.environment, user.userKey]);
+    const held = this.#sessionUsers.get(key);
+    this.#sessionUsers.set(key, {
+      release: user.release,
+      environment: user.environment,
+      crashed: (held?.crashed ?? false) || user.crashed,
+    });
+  }
+
+  async sessionCounts(scope: { release: Release; environment: Environment }): Promise<SessionCounts> {
+    const counts: Record<SessionStatus, number> = { ...NO_SESSIONS };
+    for (const bucket of this.#sessionBuckets.values()) {
+      if (bucket.release === scope.release && bucket.environment === scope.environment) counts[bucket.status] += bucket.sessions;
+    }
+    return counts;
+  }
+
+  async sessionUsers(scope: { release: Release; environment: Environment }): Promise<UserCounts> {
+    const users = [...this.#sessionUsers.values()].filter(
+      (user) => user.release === scope.release && user.environment === scope.environment,
+    );
+    return { users: users.length, crashedUsers: users.filter((user) => user.crashed).length };
+  }
+
+  /** Every per-minute Session counter, oldest minute first, for assertions. */
+  sessionBuckets(): readonly (SessionBucket & { sessions: number })[] {
+    return [...this.#sessionBuckets.values()].sort((a, b) => a.minute - b.minute);
   }
 
   #removeComments(matches: (held: { issueId: IssueId; comment: Comment }) => boolean): void {

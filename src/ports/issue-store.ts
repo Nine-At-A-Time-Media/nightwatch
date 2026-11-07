@@ -2,7 +2,8 @@
  * IssueStore -- one Project's issue state (architecture Seams: Per-Project
  * issue state): Issues, their Fingerprints and Events, Tombstones, History,
  * hourly counts, Forecasts, the Releases first seen, and the Reports,
- * Comments and shown Report Status changes the Issues hold. Durable Object
+ * Comments and shown Report Status changes the Issues hold, and the
+ * per-minute Session counters Release Health reads. Durable Object
  * SQLite inside ProjectDO in production, an in-memory fake in tests.
  *
  * Atomicity: `transact` runs its work as one transaction, and transactions
@@ -17,6 +18,7 @@ import type { AssignmentTarget, Tombstone } from '../domain/issue/assignment.js'
 import type { Forecast } from '../domain/issue/forecast.js';
 import type { IssueChange, IssueState } from '../domain/issue/state.js';
 import type { GroupedEvent } from '../domain/issue/tally.js';
+import type { Environment, SessionBucket, SessionCounts, UserCounts } from '../domain/release/health.js';
 import type { Release, ReleaseFirstSeen } from '../domain/release/ordering.js';
 import type { Report, Reporter } from '../domain/report/report.js';
 import type { Comment, ReportStatusChange } from '../domain/report/thread.js';
@@ -98,4 +100,15 @@ export interface IssueStore {
   recordStatusChange(reportId: ReportId, change: ReportStatusChange): Promise<void>;
   /** The changes of the Report Status the Report's Reporter was shown, oldest first. */
   statusChangesOf(reportId: ReportId): Promise<readonly ReportStatusChange[]>;
+
+  // --- task-022: Session counters for Release Health ---
+
+  /** Adds `quantity` Sessions to the bucket's per-minute counter. */
+  addSessions(bucket: SessionBucket, quantity: number): Promise<void>;
+  /** Records a user's Session for the release and environment; once one crashed, the user stays crashed there. */
+  markSessionUser(user: { release: Release; environment: Environment; userKey: string; crashed: boolean }): Promise<void>;
+  /** Sessions per status for the release and environment, summed over every minute. */
+  sessionCounts(scope: { release: Release; environment: Environment }): Promise<SessionCounts>;
+  /** Distinct users with a Session for the release and environment, and how many of them crashed. */
+  sessionUsers(scope: { release: Release; environment: Environment }): Promise<UserCounts>;
 }

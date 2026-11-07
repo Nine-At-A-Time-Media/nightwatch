@@ -30,10 +30,26 @@ describe.each<{ name: string; make: () => Ids }>([
     expect(await ids.hashReference(other)).not.toBe(hash);
     expect(hash).not.toContain(reference);
   });
+
+  it('hashes content stably and apart from other content', async () => {
+    const ids = make();
+    const content = new Uint8Array([1, 2, 3]);
+    const hash = await ids.hashContent(content);
+    expect(hash).toMatch(/^[0-9a-f]+$/);
+    expect(await ids.hashContent(new Uint8Array([1, 2, 3]))).toBe(hash);
+    expect(await ids.hashContent(new Uint8Array([3, 2, 1]))).not.toBe(hash);
+    expect(await ids.hashContent(new Uint8Array([1, 2, 3, 0]))).not.toBe(hash);
+  });
 });
 
 describe('RandomIds', () => {
   it('hashes with SHA-256, written in hex', async () => {
     expect(await new RandomIds().hashReference('abc')).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  });
+
+  it('hashes content with SHA-256, written in hex', async () => {
+    expect(await new RandomIds().hashContent(new TextEncoder().encode('abc'))).toBe(
+      'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+    );
   });
 });

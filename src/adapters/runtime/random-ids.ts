@@ -1,7 +1,7 @@
 /**
  * RandomIds -- Ids from the Workers runtime's Web Crypto: random ids and
- * bytes from its cryptographic random source, Report Reference hashes as
- * SHA-256 written in lowercase hex.
+ * bytes from its cryptographic random source, Report Reference and content
+ * hashes as SHA-256 written in lowercase hex.
  */
 
 import type { ReportReference } from '../../domain/report/reference.js';
@@ -26,5 +26,11 @@ export class RandomIds implements Ids {
 
   async hashReference(reference: ReportReference): Promise<string> {
     return hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(reference)));
+  }
+
+  // --- task-022: content hashing (Artifact keys, Access Token hashes) ---
+
+  async hashContent(bytes: Uint8Array): Promise<string> {
+    return hex(await crypto.subtle.digest('SHA-256', new Uint8Array(bytes)));
   }
 }

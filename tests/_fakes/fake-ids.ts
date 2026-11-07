@@ -28,4 +28,11 @@ export class FakeIds implements Ids {
   async hashReference(reference: string): Promise<string> {
     return `hash:${[...reference].reverse().join('')}`;
   }
+
+  // --- task-022: content hashing (Artifact keys, Access Token hashes) ---
+
+  /** The length and then the bytes themselves, in hex: stable, never empty, and distinct for distinct content. */
+  async hashContent(bytes: Uint8Array): Promise<string> {
+    return [bytes.length.toString(16).padStart(8, '0'), ...[...bytes].map((byte) => byte.toString(16).padStart(2, '0'))].join('');
+  }
 }
