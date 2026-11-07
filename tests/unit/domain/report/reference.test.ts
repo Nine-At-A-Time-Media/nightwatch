@@ -54,9 +54,16 @@ describe('Report Reference', () => {
 
   it('only the canonical encoding of 128 bits is well-formed', () => {
     fc.assert(
-      fc.property(fc.string({ unit: fc.constantFrom(...'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'.split('')), minLength: 22, maxLength: 22 }), (text) => {
-        expect(isWellFormedReference(text)).toBe(encodeReference(decode(text)) === text);
-      }),
+      fc.property(
+        fc.string({
+          unit: fc.constantFrom(...'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'.split('')),
+          minLength: 22,
+          maxLength: 22,
+        }),
+        (text) => {
+          expect(isWellFormedReference(text)).toBe(encodeReference(decode(text)) === text);
+        },
+      ),
     );
   });
 });
