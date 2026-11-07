@@ -55,4 +55,11 @@ export interface ProjectClient {
   /** Counts one Session in the Project's per-minute counters; processing calls it once per Session. */
   recordSession(projectId: ProjectId, session: Session): Promise<void>;
   sessionTotals(projectId: ProjectId, scope: { release: Release; environment: Environment }): Promise<SessionTotals>;
+
+  // --- task-022: monitor issues ---
+
+  /** Opens the monitor issue under the id; an issue already open under it is left as it is. */
+  openMonitorIssue(projectId: ProjectId, opening: { issueId: IssueId; at: number }): Promise<IssueChange[]>;
+  /** Resolves the monitor issue; one gone or already moved out of Unresolved changes nothing. */
+  resolveMonitorIssue(projectId: ProjectId, resolving: { issueId: IssueId; at: number }): Promise<IssueChange[]>;
 }

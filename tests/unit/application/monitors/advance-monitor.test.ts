@@ -59,7 +59,7 @@ describe('advanceMonitor', () => {
 
     expect(await tick(w, T0 + HOUR + 5 * MINUTE)).toBeNull();
     expect(w.monitors.failuresOf(CRON)).toEqual([{ kind: 'missed', at: T0 + HOUR + 5 * MINUTE, reason: null }]);
-    expect(w.monitors.get(CRON)).resolves.toMatchObject({ state: { expectedAt: T0 + 2 * HOUR } });
+    expect(await w.monitors.get(CRON)).toMatchObject({ state: { expectedAt: T0 + 2 * HOUR } });
   });
 
   it('Overlong run: Given a run in progress, When it exceeds its maximum runtime, Then a timeout Failure is recorded', async () => {
@@ -131,7 +131,7 @@ describe('advanceMonitor', () => {
     expect(await advanceMonitor(UPTIME, null, w)).toEqual({ kind: 'issue-opened', at: T0 + 2 * MINUTE });
 
     expect(w.probe.checked).toEqual([URL, URL, URL]);
-    expect(w.monitors.failuresOf(UPTIME)).toEqual([{ kind: 'down', at: T0 + 2 * MINUTE, reason: 'down' }]);
+    expect(w.monitors.failuresOf(UPTIME)).toEqual([{ kind: 'down', at: T0 + 2 * MINUTE, reason: 'unreachable' }]);
     expect(await w.projects.getIssue(PROJECT, monitorIssueId(UPTIME, T0 + 2 * MINUTE))).toMatchObject({ status: 'unresolved' });
   });
 

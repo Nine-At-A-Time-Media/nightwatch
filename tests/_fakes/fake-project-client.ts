@@ -28,6 +28,8 @@ import type { EffectQueue } from '../../src/ports/effect-queue.js';
 import type { Ids } from '../../src/ports/ids.js';
 import type { ProjectClient, SessionTotals } from '../../src/ports/project-client.js';
 import { recordSession } from '../../src/application/releases/record-session.js';
+import { openMonitorIssue } from '../../src/application/monitors/open-monitor-issue.js';
+import { resolveMonitorIssue } from '../../src/application/monitors/resolve-monitor-issue.js';
 import type { Environment, Session } from '../../src/domain/release/health.js';
 import { FakeIssueStore } from './issue-store.js';
 
@@ -119,5 +121,15 @@ export class FakeProjectClient implements ProjectClient {
   async sessionTotals(projectId: ProjectId, scope: { release: Release; environment: Environment }): Promise<SessionTotals> {
     const store = this.store(projectId);
     return { sessions: await store.sessionCounts(scope), users: await store.sessionUsers(scope) };
+  }
+
+  // --- task-022: monitor issues ---
+
+  async openMonitorIssue(projectId: ProjectId, opening: { issueId: IssueId; at: number }): Promise<IssueChange[]> {
+    return openMonitorIssue(opening, { issues: this.store(projectId), effects: this.#side.effects });
+  }
+
+  async resolveMonitorIssue(projectId: ProjectId, resolving: { issueId: IssueId; at: number }): Promise<IssueChange[]> {
+    return resolveMonitorIssue(resolving, { issues: this.store(projectId), effects: this.#side.effects });
   }
 }
