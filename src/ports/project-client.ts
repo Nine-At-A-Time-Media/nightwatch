@@ -22,6 +22,7 @@ import type { IssueChange, IssueState, Member } from '../domain/issue/state.js';
 import type { Refusal } from '../domain/refusal.js';
 import type { Environment, Session, SessionCounts, UserCounts } from '../domain/release/health.js';
 import type { Release, ReleaseFirstSeen } from '../domain/release/ordering.js';
+import type { RecordedFiling } from '../domain/report/filing.js';
 import type { Report, Reporter } from '../domain/report/report.js';
 import type { SpamVerdict } from '../domain/report/spam.js';
 import type { Comment, MemberComment, ReporterComment, ReportStatusChange } from '../domain/report/thread.js';
@@ -111,4 +112,10 @@ export interface ProjectClient {
   resolveByCommit(projectId: ProjectId, fix: { shortId: number; commit: string; at: number }): Promise<IssueChange[] | Refusal>;
   /** Names the Release in every pending Resolution that waits for the Commit keyed `commit`. */
   recordCommitShipped(projectId: ProjectId, shipped: { commit: string; release: Release; at: number }): Promise<IssueChange[]>;
+  // --- task-025: filings recorded under a filing key ---
+
+  /** What was filed under the filing key in the Project, or null when nothing was. */
+  recallFiling(projectId: ProjectId, filingKey: string): Promise<RecordedFiling | null>;
+  /** Records the filing under the key in the Project, replacing what it held. */
+  recordFiling(projectId: ProjectId, filingKey: string, filing: RecordedFiling): Promise<void>;
 }

@@ -36,6 +36,13 @@ export type FilingReceipt = {
   readonly outcome: Outcome;
 };
 
+/**
+ * What a Project keeps of a filing made under a filing key: the Report it
+ * filed, and whether its receipt notice reached the Mailer. The Report
+ * Reference is not kept, since only its hash is ever stored.
+ */
+export type RecordedFiling = { readonly reportId: ReportId; readonly noticeSent: boolean };
+
 /** A refused filing, with the Outcome it records and, when a Quota refused it, when to retry. */
 export type FilingRefusal = Refusal & { readonly outcome?: Outcome; readonly advice?: RetryAdviceEntry; readonly retryable?: boolean };
 

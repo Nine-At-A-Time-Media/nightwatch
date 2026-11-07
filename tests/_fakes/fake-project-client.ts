@@ -29,6 +29,7 @@ import type { IssuePolicies } from '../../src/domain/issue/policies.js';
 import type { IssueChange, IssueState, Member } from '../../src/domain/issue/state.js';
 import type { Refusal } from '../../src/domain/refusal.js';
 import type { Release, ReleaseFirstSeen } from '../../src/domain/release/ordering.js';
+import type { RecordedFiling } from '../../src/domain/report/filing.js';
 import type { Report, Reporter } from '../../src/domain/report/report.js';
 import type { SpamVerdict } from '../../src/domain/report/spam.js';
 import type { Comment, MemberComment, ReporterComment, ReportStatusChange } from '../../src/domain/report/thread.js';
@@ -241,5 +242,16 @@ export class FakeProjectClient implements ProjectClient {
 
   async recordCommitShipped(projectId: ProjectId, shipped: { commit: string; release: Release; at: number }): Promise<IssueChange[]> {
     return recordCommitShipped(shipped, { issues: this.store(projectId), effects: this.#side.effects });
+  }
+
+  // --- task-025: filings recorded under a filing key ---
+
+  async recallFiling(projectId: ProjectId, filingKey: string): Promise<RecordedFiling | null> {
+    return this.store(projectId).recallFiling(filingKey);
+  }
+
+  async recordFiling(projectId: ProjectId, filingKey: string, filing: RecordedFiling): Promise<void> {
+    const store = this.store(projectId);
+    await store.transact(() => store.recordFiling(filingKey, filing));
   }
 }

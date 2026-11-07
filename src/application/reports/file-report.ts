@@ -10,6 +10,15 @@
  * receipt notice goes to the reporter's address whatever the form shows,
  * and whatever the Spam Judge decided, so a spam verdict stays silent.
  *
+ * A submission with a filing key is filed once per key and Reporter: the
+ * filing is recorded in the Project under its key, and a repeat (an
+ * Arrival Record redelivered, an SDK resend, a form double-submit) returns
+ * a receipt for the Report filed first, takes no Report Quota, and sends
+ * the receipt notice only if the first filing could not. Its Report
+ * Reference is newly minted, as only a reference's hash is kept. A repeat
+ * whose Report has since been removed files nothing. A key another
+ * Reporter used is not theirs to repeat: the submission is filed apart.
+ *
  * Ports: SignInVerifier, QuotaGate, ProjectClient, ControlStore, BlobStore,
  * SpamJudge, EffectQueue, Mailer, Ids, Clock. The Project comes from the route that
  * received the submission, never from the reporter.
@@ -17,17 +26,18 @@
 
 import type { Durability } from '../../domain/ingest/arrival.js';
 import type { OrganizationId, ProjectId, ReportId } from '../../domain/ids.js';
-import { isRefusal } from '../../domain/refusal.js';
+import { isRefusal, refusal } from '../../domain/refusal.js';
 import {
   filingOutcome,
   followUpUrl,
   reportAttachmentKey,
   type FilingReceipt,
   type FilingRefusal,
+  type RecordedFiling,
   type ReportSettings,
 } from '../../domain/report/filing.js';
 import { receiptNotice } from '../../domain/report/notice.js';
-import { validateSubmission, type Report, type ReportSubmission } from '../../domain/report/report.js';
+import { isFiledBy, validateSubmission, type Report, type ReportSubmission } from '../../domain/report/report.js';
 import { isJudgedSpam } from '../../domain/report/spam.js';
 import type { Assertion, SignIn } from '../../domain/signin/sign-in.js';
 import type { BlobStore } from '../../ports/blob-store.js';
@@ -61,6 +71,21 @@ export type FileReportDeps = {
 };
 
 type Filing = { projectId: ProjectId; organizationId: OrganizationId; signIn: SignIn; submission: ReportSubmission; at: number };
+
+/** A filing made earlier under the submission's filing key, by the same Reporter. */
+type Repeat = { filingKey: string; report: Report; recorded: RecordedFiling };
+
+/** A new filing, and the filing key to record it under, if any. */
+type NewFiling = { recordUnder: string | null };
+
+/** What a Report Reference minted for a Report links to. */
+type ReceiptLink = { reference: string; url: string };
+
+// --- predicates ---
+
+function isRepeat(recall: Repeat | NewFiling): recall is Repeat {
+  return 'report' in recall;
+}
 
 // --- helpers ---
 
@@ -102,12 +127,27 @@ async function admit(
   if (isRefusal(signIn)) return invalid(projectId, 'unsigned', at);
   const submission = validateSubmission(input.submission, { maxMessageLength: deps.settings.maxMessageLength });
   if (isRefusal(submission)) return invalid(projectId, submission.refusal, at);
-  const decision = await deps.quota.check({ projectId, publicKey: NO_CLIENT_KEY, category: 'feedback', quantity: 1 });
-  if (!decision.allowed) {
-    const outcome = filingOutcome({ projectId, kind: 'rate_limited', reason: decision.advice.reason, at });
-    return { refusal: 'rate-limited', advice: decision.advice, outcome };
-  }
   return { projectId, organizationId, signIn, submission, at };
+}
+
+/** One Report of the Project's Report Quota; null when it allows the filing. */
+async function takeQuota(filing: Filing, quota: QuotaGate): Promise<FilingRefusal | null> {
+  const { projectId, at } = filing;
+  const decision = await quota.check({ projectId, publicKey: NO_CLIENT_KEY, category: 'feedback', quantity: 1 });
+  if (decision.allowed) return null;
+  const outcome = filingOutcome({ projectId, kind: 'rate_limited', reason: decision.advice.reason, at });
+  return { refusal: 'rate-limited', advice: decision.advice, outcome };
+}
+
+/** The earlier filing a repeat names; a filing key never used, or used by another Reporter, makes a new filing. */
+async function recall(filing: Filing, projects: ProjectClient): Promise<Repeat | NewFiling | FilingRefusal> {
+  const { filingKey } = filing.submission;
+  if (filingKey === undefined) return { recordUnder: null };
+  const recorded = await projects.recallFiling(filing.projectId, filingKey);
+  if (recorded === null) return { recordUnder: filingKey };
+  const report = await projects.getReport(filing.projectId, recorded.reportId);
+  if (report === null) return refusal('already-filed');
+  return isFiledBy(report, filing.signIn) ? { filingKey, report, recorded } : { recordUnder: null };
 }
 
 // --- flow: storing ---
@@ -124,13 +164,28 @@ async function judgeSpam(report: Report, deps: FileReportDeps): Promise<void> {
   if (isJudgedSpam(verdict, deps.settings.spamThreshold)) await deps.projects.markSpam(report.projectId, report.id, verdict);
 }
 
-async function sendReceipt(report: Report, link: { reference: string; url: string }, mailer: Mailer): Promise<boolean> {
+async function sendReceipt(report: Report, link: ReceiptLink, mailer: Mailer): Promise<boolean> {
   const notice = receiptNotice({ reference: link.reference, link: link.url });
   const sent = await mailer.send({ to: report.reporter.email, subject: notice.subject, text: notice.text, headers: {} });
   return sent.ok;
 }
 
-async function file(filing: Filing, deps: FileReportDeps): Promise<FilingReceipt | FilingRefusal> {
+async function recordFiling(
+  filing: { projectId: ProjectId; filingKey: string | null; recorded: RecordedFiling },
+  projects: ProjectClient,
+): Promise<void> {
+  if (filing.filingKey !== null) await projects.recordFiling(filing.projectId, filing.filingKey, filing.recorded);
+}
+
+/** Sends the receipt notice and records that it reached the Mailer, so a repeat does not send it again. */
+async function notify(notice: { report: Report; link: ReceiptLink; filingKey: string | null }, deps: FileReportDeps): Promise<boolean> {
+  const { report, filingKey } = notice;
+  const noticeSent = await sendReceipt(report, notice.link, deps.mailer);
+  if (noticeSent) await recordFiling({ projectId: report.projectId, filingKey, recorded: { reportId: report.id, noticeSent } }, deps.projects);
+  return noticeSent;
+}
+
+async function file(filing: Filing, recordUnder: string | null, deps: FileReportDeps): Promise<FilingReceipt | FilingRefusal> {
   const reportId = deps.ids.newId();
   const attachments = await storeScreenshot(reportId, filing.submission.screenshot, deps.blobs);
   if (isRefusal(attachments)) return attachments;
@@ -139,11 +194,31 @@ async function file(filing: Filing, deps: FileReportDeps): Promise<FilingReceipt
   if (notStored) return notStored;
   const report = reportOf(filing, { reportId, issueId: deps.ids.newId(), referenceHash: minted.hash, attachments });
   await deps.effects.enqueue(await deps.projects.openReportIssue(filing.projectId, report));
+  await recordFiling({ projectId: filing.projectId, filingKey: recordUnder, recorded: { reportId, noticeSent: false } }, deps.projects);
+
+  // Milestone: the Report is filed; a repeat of this filing now finds it.
   await judgeSpam(report, deps);
   const url = followUpUrl(deps.settings.followUpBaseUrl, minted.reference);
-  const noticeSent = await sendReceipt(report, { reference: minted.reference, url }, deps.mailer);
+  const noticeSent = await notify({ report, link: { reference: minted.reference, url }, filingKey: recordUnder }, deps);
   const outcome = filingOutcome({ projectId: filing.projectId, kind: 'accepted', reason: null, at: filing.at });
   return { reportId, reference: minted.reference, followUpUrl: url, noticeSent, outcome };
+}
+
+/** A receipt for the Report filed first, with a new Report Reference; the notice goes only if it never reached the Mailer. */
+async function repeat(filing: Filing, earlier: Repeat, deps: FileReportDeps): Promise<FilingReceipt | FilingRefusal> {
+  const { report, recorded, filingKey } = earlier;
+  const minted = await mintReference({ organizationId: filing.organizationId, projectId: filing.projectId, reportId: report.id }, deps);
+  const notStored = unavailable(minted.stored);
+  if (notStored) return notStored;
+  const url = followUpUrl(deps.settings.followUpBaseUrl, minted.reference);
+  const noticeSent = recorded.noticeSent || (await notify({ report, link: { reference: minted.reference, url }, filingKey }, deps));
+  const outcome = filingOutcome({ projectId: filing.projectId, kind: 'accepted', reason: null, at: filing.at });
+  return { reportId: report.id, reference: minted.reference, followUpUrl: url, noticeSent, outcome };
+}
+
+async function fileNew(filing: Filing, recordUnder: string | null, deps: FileReportDeps): Promise<FilingReceipt | FilingRefusal> {
+  const overQuota = await takeQuota(filing, deps.quota);
+  return overQuota ?? file(filing, recordUnder, deps);
 }
 
 // --- exports ---
@@ -155,5 +230,8 @@ export async function fileReport(
   deps: FileReportDeps,
 ): Promise<FilingReceipt | FilingRefusal> {
   const filing = await admit(project, { submission, assertion }, deps);
-  return isRefusal(filing) ? filing : file(filing, deps);
+  if (isRefusal(filing)) return filing;
+  const recalled = await recall(filing, deps.projects);
+  if (isRefusal(recalled)) return recalled;
+  return isRepeat(recalled) ? repeat(filing, recalled, deps) : fileNew(filing, recalled.recordUnder, deps);
 }
