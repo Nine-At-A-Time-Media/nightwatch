@@ -14,8 +14,8 @@ import type { Fingerprint } from '../../src/domain/grouping/fingerprint.js';
 import type { IssueId, ProjectId, ReportId } from '../../src/domain/ids.js';
 import type { Assignment } from '../../src/domain/issue/assignment.js';
 import type { IssuePolicies } from '../../src/domain/issue/policies.js';
-import type { IssueChange } from '../../src/domain/issue/state.js';
-import type { Release } from '../../src/domain/release/ordering.js';
+import type { IssueChange, IssueState } from '../../src/domain/issue/state.js';
+import type { Release, ReleaseFirstSeen } from '../../src/domain/release/ordering.js';
 import type { Report } from '../../src/domain/report/report.js';
 import type { Comment, ReportStatusChange } from '../../src/domain/report/thread.js';
 import type { Clock } from '../../src/ports/clock.js';
@@ -58,6 +58,11 @@ export class FakeProjectClient implements ProjectClient {
     return openReportIssue(report, { issues: this.store(projectId) });
   }
 
+  async recordShownStatus(projectId: ProjectId, reportId: ReportId, change: ReportStatusChange): Promise<void> {
+    const store = this.store(projectId);
+    await store.transact(() => store.recordStatusChange(reportId, change));
+  }
+
   async getReport(projectId: ProjectId, reportId: ReportId): Promise<Report | null> {
     return this.store(projectId).getReport(reportId);
   }
@@ -72,5 +77,13 @@ export class FakeProjectClient implements ProjectClient {
 
   async commentsOn(projectId: ProjectId, issueId: IssueId): Promise<readonly Comment[]> {
     return this.store(projectId).commentsOn(issueId);
+  }
+
+  async getIssue(projectId: ProjectId, issueId: IssueId): Promise<IssueState | null> {
+    return this.store(projectId).getIssue(issueId);
+  }
+
+  async releasesSeen(projectId: ProjectId): Promise<ReleaseFirstSeen> {
+    return this.store(projectId).releaseFirstSeen();
   }
 }

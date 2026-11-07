@@ -14,8 +14,8 @@ import type { EventSummary } from '../domain/event/event-summary.js';
 import type { Fingerprint } from '../domain/grouping/fingerprint.js';
 import type { IssueId, ProjectId, ReportId } from '../domain/ids.js';
 import type { Assignment } from '../domain/issue/assignment.js';
-import type { IssueChange } from '../domain/issue/state.js';
-import type { Release } from '../domain/release/ordering.js';
+import type { IssueChange, IssueState } from '../domain/issue/state.js';
+import type { Release, ReleaseFirstSeen } from '../domain/release/ordering.js';
 import type { Report } from '../domain/report/report.js';
 import type { Comment, ReportStatusChange } from '../domain/report/thread.js';
 
@@ -26,6 +26,8 @@ export interface ProjectClient {
   recordReleaseSeen(projectId: ProjectId, release: Release): Promise<IssueChange[]>;
   /** Opens the Report issue the new Report names and attaches the Report to it. */
   openReportIssue(projectId: ProjectId, report: Report): Promise<IssueChange[]>;
+  /** Records a change of the Report Status the Reporter is shown. */
+  recordShownStatus(projectId: ProjectId, reportId: ReportId, change: ReportStatusChange): Promise<void>;
 
   // --- reads ---
 
@@ -33,4 +35,6 @@ export interface ProjectClient {
   reportsOn(projectId: ProjectId, issueId: IssueId): Promise<readonly Report[]>;
   statusChangesOf(projectId: ProjectId, reportId: ReportId): Promise<readonly ReportStatusChange[]>;
   commentsOn(projectId: ProjectId, issueId: IssueId): Promise<readonly Comment[]>;
+  getIssue(projectId: ProjectId, issueId: IssueId): Promise<IssueState | null>;
+  releasesSeen(projectId: ProjectId): Promise<ReleaseFirstSeen>;
 }
