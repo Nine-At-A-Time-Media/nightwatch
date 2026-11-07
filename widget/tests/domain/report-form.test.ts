@@ -135,6 +135,7 @@ describe('failure wording', () => {
     expect(failureWording(refusal('not-signed-in'))).toBe('You are not signed in.');
     expect(failureWording(refusal('too-many-reports'))).toBe('Too many reports right now, try again later.');
     expect(failureWording(refusal('not-sent'))).toBe('Your report was not sent.');
+    expect(failureWording(refusal('unreadable-receipt'))).toBe('Your report may have been sent, but no reference came back.');
     expect(failureWording(refusal('something-new'))).toBe('Your report was not accepted.');
   });
 

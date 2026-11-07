@@ -23,6 +23,7 @@ const WORDING: Readonly<Record<string, string>> = {
   'not-signed-in': 'You are not signed in.',
   'too-many-reports': 'Too many reports right now, try again later.',
   'not-sent': 'Your report was not sent.',
+  'unreadable-receipt': 'Your report may have been sent, but no reference came back.',
 };
 
 const UNKNOWN_REFUSAL_WORDING = 'Your report was not accepted.';
