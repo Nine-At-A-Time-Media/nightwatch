@@ -8,6 +8,8 @@
  * could reach over RPC.
  */
 
+import type { SearchContext } from '../../domain/search/match.js';
+import type { IssuePage, SearchPlan } from '../../domain/search/page.js';
 import { DurableObject } from 'cloudflare:workers';
 import type { AlertFiring } from '../../domain/alerts/alert-firing.js';
 import type { Assignee } from '../../domain/alerts/issue-alert-rule.js';
@@ -214,9 +216,7 @@ export class ProjectDO extends DurableObject<CoreEnv> implements ProjectClient {
     return steps.recordFilingStep(this.#runtime, projectId, { filingKey, filing });
   }
 
-  // --- task-035: the console's issue list ---
-
-  listIssues(projectId: ProjectId): Promise<readonly IssueState[]> {
-    return steps.listIssuesStep(this.#runtime, projectId);
+  searchPage(projectId: ProjectId, plan: SearchPlan, context: SearchContext): Promise<IssuePage> {
+    return steps.searchPageStep(this.#runtime, projectId, { plan, context });
   }
 }

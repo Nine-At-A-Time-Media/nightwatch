@@ -355,4 +355,20 @@ export class FakeIssueStore implements IssueStore {
   async recordFiling(filingKey: string, filing: RecordedFiling): Promise<void> {
     this.#filings.set(filingKey, filing);
   }
+
+  // --- task-031: retention expiry ---
+
+  async removeEventsBefore(cutoff: number): Promise<readonly EventId[]> {
+    const expired = [...this.#events].filter(([, held]) => held.event.summary.at < cutoff).map(([eventId]) => eventId);
+    expired.forEach((eventId) => this.#events.delete(eventId));
+    return expired;
+  }
+
+  async reportsFiledBefore(cutoff: number): Promise<readonly Report[]> {
+    return [...this.#reports.values()].filter((report) => report.filedAt < cutoff);
+  }
+
+  async forgetFilingsOf(reportIds: readonly ReportId[]): Promise<void> {
+    [...this.#filings].filter(([, filing]) => reportIds.includes(filing.reportId)).forEach(([key]) => this.#filings.delete(key));
+  }
 }

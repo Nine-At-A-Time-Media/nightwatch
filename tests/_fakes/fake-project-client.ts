@@ -43,9 +43,20 @@ import { recordSession } from '../../src/application/releases/record-session.js'
 import { openMonitorIssue } from '../../src/application/monitors/open-monitor-issue.js';
 import { resolveMonitorIssue } from '../../src/application/monitors/resolve-monitor-issue.js';
 import type { Environment, Session } from '../../src/domain/release/health.js';
+import type { SearchContext } from '../../src/domain/search/match.js';
+import type { IssuePage, SearchPlan } from '../../src/domain/search/page.js';
+import { searchProjectPage } from '../../src/application/issues/search-project-page.js';
 import { FakeIssueStore } from './issue-store.js';
 
-export type ProjectSide = { clock: Clock; ids: Ids; effects: EffectQueue; policies: IssuePolicies; dedupWindow: number };
+/** `memberEmails` names each Member's address, as ProjectDO keeps an Assignee's address for search; a Member it lacks is searched by id. */
+export type ProjectSide = {
+  clock: Clock;
+  ids: Ids;
+  effects: EffectQueue;
+  policies: IssuePolicies;
+  dedupWindow: number;
+  memberEmails?: ReadonlyMap<string, string>;
+};
 
 export class FakeProjectClient implements ProjectClient {
   readonly #side: ProjectSide;
@@ -255,9 +266,14 @@ export class FakeProjectClient implements ProjectClient {
     await store.transact(() => store.recordFiling(filingKey, filing));
   }
 
-  // --- task-035: the console's issue list ---
+  // --- task-031: search ---
 
-  async listIssues(projectId: ProjectId): Promise<readonly IssueState[]> {
-    return this.store(projectId).listIssues();
+  /** Runs the plan over the Issue facts the Project's store holds. */
+  async searchPage(projectId: ProjectId, plan: SearchPlan, context: SearchContext): Promise<IssuePage> {
+    return searchProjectPage(
+      projectId,
+      { plan, context },
+      { issues: this.store(projectId), memberEmails: this.#side.memberEmails ?? new Map() },
+    );
   }
 }

@@ -6,6 +6,8 @@
  * against the Project it holds.
  */
 
+import type { SearchContext } from '../../domain/search/match.js';
+import type { IssuePage, SearchPlan } from '../../domain/search/page.js';
 import type { AlertFiring } from '../../domain/alerts/alert-firing.js';
 import type { Assignee } from '../../domain/alerts/issue-alert-rule.js';
 import type { MetricAggregate } from '../../domain/alerts/metric-incident.js';
@@ -202,9 +204,7 @@ export class DurableProjectClient implements ProjectClient {
     return this.#project(projectId).recordFiling(projectId, filingKey, filing);
   }
 
-  // --- task-035: the console's issue list ---
-
-  listIssues(projectId: ProjectId): Promise<readonly IssueState[]> {
-    return this.#project(projectId).listIssues(projectId);
+  searchPage(projectId: ProjectId, plan: SearchPlan, context: SearchContext): Promise<IssuePage> {
+    return this.#project(projectId).searchPage(projectId, plan, context);
   }
 }

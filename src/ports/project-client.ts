@@ -25,6 +25,8 @@ import type { Release, ReleaseFirstSeen } from '../domain/release/ordering.js';
 import type { RecordedFiling } from '../domain/report/filing.js';
 import type { Report, Reporter } from '../domain/report/report.js';
 import type { SpamVerdict } from '../domain/report/spam.js';
+import type { IssuePage, SearchPlan } from '../domain/search/page.js';
+import type { SearchContext } from '../domain/search/match.js';
 import type { Comment, MemberComment, ReporterComment, ReportStatusChange } from '../domain/report/thread.js';
 
 /** A release and environment's Session counts and user counts, as the Project holds them. */
@@ -118,8 +120,8 @@ export interface ProjectClient {
   recallFiling(projectId: ProjectId, filingKey: string): Promise<RecordedFiling | null>;
   /** Records the filing under the key in the Project, replacing what it held. */
   recordFiling(projectId: ProjectId, filingKey: string, filing: RecordedFiling): Promise<void>;
-  // --- task-035: the console's issue list ---
+  // --- task-031: search ---
 
-  /** Every Issue the Project holds, in no promised order. */
-  listIssues(projectId: ProjectId): Promise<readonly IssueState[]>;
+  /** The Project's page of a search: its Issues matching the plan, after its Cursor, in sort order, up to its limit. */
+  searchPage(projectId: ProjectId, plan: SearchPlan, context: SearchContext): Promise<IssuePage>;
 }
