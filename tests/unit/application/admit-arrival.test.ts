@@ -126,6 +126,7 @@ describe('admitArrival', () => {
     expect(admission.outcomes).toEqual([outcome('invalid', 'malformed-envelope-header', 'default')]);
     expect(deps.stream.records).toHaveLength(0);
   });
+
   it('A disabled key is refused: Given a disabled Client Key, When an SDK sends an error, Then Nightwatch refuses it and records an invalid Outcome', async () => {
     const deps = makeDeps({ configs: { [PROJECT]: projectConfig({ clientKeys: [{ publicKey: 'k1', active: false }] }) } });
     const admission = await admitArrival(arrival(), deps);
@@ -156,5 +157,18 @@ describe('admitArrival', () => {
     expect(admission).toMatchObject({ decision: 'refused', status: 401 });
     expect(admission.outcomes).toEqual([outcome('invalid', 'missing-credentials', 'default')]);
     expect(deps.stream.records).toHaveLength(0);
+  });
+
+  it('A wrong origin is refused: Given a Project that restricts origins, When a browser sends from another origin, Then Nightwatch refuses it', async () => {
+    const deps = makeDeps({ configs: { [PROJECT]: projectConfig({ allowedOrigins: ['https://app.example'] }) } });
+    const admission = await admitArrival(arrival({ origin: 'https://evil.example' }), deps);
+
+    expect(admission).toMatchObject({ decision: 'refused', status: 403 });
+    expect(admission.outcomes).toEqual([outcome('invalid', 'origin-not-allowed', 'default')]);
+    expect(deps.stream.records).toHaveLength(0);
+    expect(deps.archive.archived).toEqual(admission.outcomes);
+
+    const allowed = await admitArrival(arrival({ origin: 'https://app.example' }), deps);
+    expect(allowed.decision).toBe('admitted');
   });
 });

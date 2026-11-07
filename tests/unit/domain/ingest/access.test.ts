@@ -37,4 +37,23 @@ describe('checkAccess', () => {
   it('passes on the reason credentials could not be located', () => {
     expect(checkAccess({ arrival: arrival({ query: {} }), config })).toEqual({ refusal: 'missing-credentials' });
   });
+
+  it('admits any origin when the Project allows *, and a server SDK that sends no origin', () => {
+    expect(checkAccess({ arrival: arrival({ origin: 'https://anything.example' }), config })).toEqual({ publicKey: 'live', client: null });
+    const restricted = { ...config, allowedOrigins: ['https://app.example'] };
+    expect(checkAccess({ arrival: arrival({ origin: null }), config: restricted })).toEqual({ publicKey: 'live', client: null });
+  });
+
+  it('admits a browser origin only when it matches an allowed origin, which may be a glob', () => {
+    const restricted = { ...config, allowedOrigins: ['https://app.example', 'https://*.staging.example'] };
+    for (const origin of ['https://app.example', 'HTTPS://APP.EXAMPLE', 'https://pr-7.staging.example']) {
+      expect(checkAccess({ arrival: arrival({ origin }), config: restricted })).toEqual({ publicKey: 'live', client: null });
+    }
+    for (const origin of ['https://evil.example', 'http://app.example', 'https://app.example.evil']) {
+      expect(checkAccess({ arrival: arrival({ origin }), config: restricted })).toEqual({ refusal: 'origin-not-allowed' });
+    }
+    expect(checkAccess({ arrival: arrival({ origin: 'https://app.example' }), config: { ...config, allowedOrigins: [] } })).toEqual({
+      refusal: 'origin-not-allowed',
+    });
+  });
 });
