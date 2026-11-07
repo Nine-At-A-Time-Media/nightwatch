@@ -5,10 +5,13 @@
  *
  * The Inbound Reply names the address the mail was delivered to (where the
  * Reply Token is), the address in its From header, and its plain text. The
- * mail's own authentication is checked here, before any use case sees it: a
- * message whose Authentication-Results report a DMARC failure is refused as
- * forged. A message that cannot be parsed or names no sender is refused as
- * unreadable. Verifying the token and matching the sender to the Member is
+ * mail's own authentication is checked here, before any use case sees it
+ * (design Security: a claimed sender alone is not authentication): the
+ * topmost Authentication-Results header, the one the receiving server added,
+ * must report DMARC passed for the From domain; any header below it could
+ * have been written by the sender. Anything else is refused as
+ * unauthenticated. A message that cannot be parsed or names no sender is
+ * refused as unreadable. Verifying the token and matching the sender to the Member is
  * applyEmailReply's.
  */
 
@@ -17,12 +20,13 @@ import type { InboundReply } from '../../domain/mail/reply-address.js';
 import { refusal, type Refusal } from '../../domain/refusal.js';
 
 const AUTHENTICATION_RESULTS = 'authentication-results';
-const DMARC_FAIL = /\bdmarc=fail\b/i;
+const DMARC_PASS = /(?:^|[;\s])dmarc=pass\b/i;
 
 // --- predicates ---
 
-function isForged(email: Email): boolean {
-  return email.headers.some((header) => header.key === AUTHENTICATION_RESULTS && DMARC_FAIL.test(header.value));
+function isAuthenticated(email: Email): boolean {
+  const receiving = email.headers.find((header) => header.key === AUTHENTICATION_RESULTS);
+  return receiving !== undefined && DMARC_PASS.test(receiving.value);
 }
 
 // --- helpers ---
@@ -49,7 +53,7 @@ export async function inboundReplyOf(delivered: {
 }): Promise<InboundReply | Refusal> {
   const email = await parsed(delivered.raw);
   if (email === null) return refusal('mail_unreadable');
-  if (isForged(email)) return refusal('mail_unauthenticated');
+  if (!isAuthenticated(email)) return refusal('mail_unauthenticated');
   const from = senderOf(email);
   if (from === null) return refusal('mail_unreadable');
   return { to: delivered.to, from, text: email.text ?? '' };
