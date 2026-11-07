@@ -19,7 +19,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
   e2e:
-    # Local Wrangler pipeline smoke; joins gate's needs after one green run.
+    # Local Wrangler pipeline smoke.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -32,7 +32,7 @@ jobs:
       - run: pnpm --filter @nightwatch/console build
       - run: pnpm test:e2e
   gate:
-    needs: [checks]
+    needs: [checks, e2e]
     runs-on: ubuntu-latest
     steps:
       - run: echo "all required checks passed"

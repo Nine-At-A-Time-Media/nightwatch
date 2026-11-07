@@ -46,6 +46,5 @@ remaining tasks are gaps the agents reported while building them.
   Packages; this repository uses public-registry tooling until ruled.
 - The fleet radar still names the deprecated `@cloudflare/vitest-pool-workers`;
   `docs/TECH-RADAR.md` proposes `@cloudflare/vitest-plugin`.
-- CI's `e2e` job joins `gate`'s needs after its first green run.
 
 ## Lessons Learned
