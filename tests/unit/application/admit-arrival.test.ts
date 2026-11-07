@@ -26,7 +26,10 @@ function projectConfig(overrides: Partial<ProjectConfig> = {}): ProjectConfig {
   };
 }
 
-function makeDeps({ configs, limits }: { configs?: Record<string, ProjectConfig>; limits?: ConstructorParameters<typeof FakeQuotaGate>[0] } = {}) {
+function makeDeps({
+  configs,
+  limits,
+}: { configs?: Record<string, ProjectConfig>; limits?: ConstructorParameters<typeof FakeQuotaGate>[0] } = {}) {
   return {
     config: new FakeProjectConfigSource(configs ?? { [PROJECT]: projectConfig() }),
     quota: new FakeQuotaGate(limits),
@@ -44,7 +47,10 @@ type ItemSpec = { type: string; payload: unknown };
 function envelope(items: readonly ItemSpec[]): Uint8Array {
   return serializeEnvelope({
     header: { event_id: 'e1' },
-    items: items.map((i) => ({ header: { type: i.type }, payload: enc(typeof i.payload === 'string' ? i.payload : JSON.stringify(i.payload)) })),
+    items: items.map((i) => ({
+      header: { type: i.type },
+      payload: enc(typeof i.payload === 'string' ? i.payload : JSON.stringify(i.payload)),
+    })),
   });
 }
 
@@ -95,7 +101,11 @@ describe('admitArrival', () => {
     const body = envelope([errorItem, { type: 'session', payload: { sid: 's1' } }, { type: 'feedback', payload: { message: 'hi' } }]);
     const admission = await admitArrival(arrival({ body }), deps);
 
-    expect(admission.outcomes).toEqual([outcome('accepted', null, 'error'), outcome('accepted', null, 'session'), outcome('accepted', null, 'feedback')]);
+    expect(admission.outcomes).toEqual([
+      outcome('accepted', null, 'error'),
+      outcome('accepted', null, 'session'),
+      outcome('accepted', null, 'feedback'),
+    ]);
     expect(deps.stream.records[0]!.body).toEqual(body);
   });
 

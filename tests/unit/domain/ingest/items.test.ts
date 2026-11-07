@@ -64,6 +64,10 @@ describe('classifyItem', () => {
   });
 
   it('classifies any string without throwing', () => {
-    fc.assert(fc.property(fc.string(), (type) => expect(['in', 'out', 'unknown']).toContain(classifyItem(type).scope)));
+    fc.assert(
+      fc.property(fc.string(), (type) => {
+        expect(['in', 'out', 'unknown']).toContain(classifyItem(type).scope);
+      }),
+    );
   });
 });
