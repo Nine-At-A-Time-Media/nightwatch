@@ -3,9 +3,9 @@
  * records). D1 in production, an in-memory fake in tests. Holds which
  * Organization a Project belongs to, the issuers each Organization trusts,
  * Membership, the Report Reference index, reporter subscriptions, and
- * Access Tokens (by hash), and the Artifact index.
- * Membership, the Report Reference index and reporter subscriptions, each
- * Project's processing config and its Artifact index.
+ * Access Tokens (by hash), each Project's processing config, alert rules
+ * and recipients, Members' notification settings, and the Artifact index,
+ * which is kept per Organization and read through a Project.
  *
  * The Report Reference index keeps only the hash of each reference, with the
  * Organization, Project and Report it names, and no reporter address. A
@@ -20,7 +20,6 @@ import type { Member } from '../domain/issue/state.js';
 import type { ProcessingConfig } from '../domain/processing/processing.js';
 import type { TrustedIssuer } from '../domain/signin/sign-in.js';
 import type { AccessTokenRecord } from '../domain/tenancy/access-token.js';
-import type { Release } from '../domain/release/ordering.js';
 import type { Artifact, ArtifactQuery } from '../domain/sourcemap/artifact.js';
 
 /** What a Report Reference's hash names. */
@@ -74,16 +73,6 @@ export interface ControlStore {
 
   /** Indexes an Artifact within its Organization; indexing an identical entry again changes nothing. */
   putArtifact(organizationId: OrganizationId, artifact: Artifact): Promise<Durability>;
-  /**
-   * The Organization's Artifacts whose debug id is one of `debugIds` (compared
-   * in normalizedDebugId form) or whose release is `release`: the candidates
-   * matchArtifact chooses from for one Event.
-   */
-  findArtifacts(lookup: {
-    organizationId: OrganizationId;
-    debugIds: readonly string[];
-    release: Release | null;
-  }): Promise<readonly Artifact[]>;
   // --- task-021: alert rules, recipients and notification settings ---
 
   /** The Project's Issue Alert Rules; empty when it has none. */
@@ -100,6 +89,11 @@ export interface ControlStore {
 
   /** What processing reads about a Project (Scrubbing, Fingerprint and Stack Trace Rules, Grouping Version, Event Retention); null for an unknown Project. */
   processingConfig(projectId: ProjectId): Promise<ProcessingConfig | null>;
-  /** The Project's Artifact index entries of the query's release, or carrying one of its debug ids (compared without case or dashes). */
+  /**
+   * The Artifact index entries of the Project's Organization (where putArtifact
+   * indexed them) of the query's release, or carrying one of its debug ids
+   * (compared in normalizedDebugId form), in the order they were indexed;
+   * empty for an unknown Project. The one Artifact index read.
+   */
   artifactsFor(projectId: ProjectId, query: ArtifactQuery): Promise<readonly Artifact[]>;
 }

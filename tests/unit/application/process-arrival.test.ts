@@ -168,7 +168,7 @@ describe('processArrival', () => {
 
   it('Source map applied: Given a matching Artifact was uploaded, When a minified browser error is processed, Then its frames show original file, line and function', async () => {
     const w = world();
-    w.control.addArtifact(PROJECT, artifact);
+    await w.control.putArtifact(ORG, artifact);
     await w.blobs.put('artifacts/map-1', enc(JSON.stringify(rawMap)));
     const result = await processArrival(record([browserError()]), w.deps);
 
@@ -208,7 +208,7 @@ describe('processArrival', () => {
 
   it('Missing source map: Given no matching Artifact, When a minified error is processed, Then frames stay minified and the event records why', async () => {
     const w = world();
-    w.control.addArtifact(PROJECT, { ...artifact, release: 'web@0.9.0' });
+    await w.control.putArtifact(ORG, { ...artifact, release: 'web@0.9.0' });
     await w.blobs.put('artifacts/map-1', enc(JSON.stringify(rawMap)));
     await processArrival(record([browserError()]), w.deps);
 
@@ -221,12 +221,12 @@ describe('processArrival', () => {
 
   it('Missing source map: an Artifact whose file is gone or is no source map counts as missing, and non-browser events record nothing', async () => {
     const w = world();
-    w.control.addArtifact(PROJECT, artifact);
+    await w.control.putArtifact(ORG, artifact);
     await processArrival(record([browserError()]), w.deps);
     expect((await storedEvent(w)).event['errors']).toEqual([{ path: 'exceptions.0.frames.0', reason: 'missing-artifact' }]);
 
     const v = world();
-    v.control.addArtifact(PROJECT, artifact);
+    await v.control.putArtifact(ORG, artifact);
     await v.blobs.put('artifacts/map-1', enc('not a source map'));
     await processArrival(record([browserError()]), v.deps);
     expect((await storedEvent(v)).event['errors']).toEqual([{ path: 'exceptions.0.frames.0', reason: 'missing-artifact' }]);

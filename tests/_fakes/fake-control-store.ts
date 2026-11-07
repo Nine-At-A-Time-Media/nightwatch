@@ -13,7 +13,6 @@ import type { Member } from '../../src/domain/issue/state.js';
 import type { ProcessingConfig } from '../../src/domain/processing/processing.js';
 import type { TrustedIssuer } from '../../src/domain/signin/sign-in.js';
 import type { AccessTokenRecord } from '../../src/domain/tenancy/access-token.js';
-import type { Release } from '../../src/domain/release/ordering.js';
 import { normalizedDebugId, type Artifact, type ArtifactQuery } from '../../src/domain/sourcemap/artifact.js';
 import type { ControlStore, Membership, ReferenceEntry } from '../../src/ports/control-store.js';
 
@@ -134,22 +133,6 @@ export class FakeControlStore implements ControlStore {
     return { ok: true };
   }
 
-  async findArtifacts(lookup: {
-    organizationId: OrganizationId;
-    debugIds: readonly string[];
-    release: Release | null;
-  }): Promise<readonly Artifact[]> {
-    return this.artifacts
-      .filter(({ organizationId }) => organizationId === lookup.organizationId)
-      .map(({ artifact }) => artifact)
-      .filter(
-        (artifact) =>
-          (artifact.debugId !== null &&
-            lookup.debugIds.some((id) => normalizedDebugId(id) === normalizedDebugId(artifact.debugId ?? ''))) ||
-          (lookup.release !== null && artifact.release === lookup.release),
-      );
-  }
-
   // --- task-021: alert rules, recipients and notification settings ---
 
   addIssueAlertRule(projectId: ProjectId, rule: IssueAlertRule): void {
@@ -195,14 +178,9 @@ export class FakeControlStore implements ControlStore {
   // --- task-008: processing config and the Artifact index ---
 
   readonly #processing = new Map<ProjectId, ProcessingConfig>();
-  readonly #artifacts = new Map<ProjectId, Artifact[]>();
 
   setProcessingConfig(projectId: ProjectId, config: ProcessingConfig): void {
     this.#processing.set(projectId, config);
-  }
-
-  addArtifact(projectId: ProjectId, artifact: Artifact): void {
-    this.#artifacts.set(projectId, [...(this.#artifacts.get(projectId) ?? []), artifact]);
   }
 
   async processingConfig(projectId: ProjectId): Promise<ProcessingConfig | null> {
@@ -210,12 +188,15 @@ export class FakeControlStore implements ControlStore {
   }
 
   async artifactsFor(projectId: ProjectId, query: ArtifactQuery): Promise<readonly Artifact[]> {
-    const plain = (id: string) => id.replaceAll('-', '').toLowerCase();
-    const debugIds = new Set(query.debugIds.map(plain));
-    return (this.#artifacts.get(projectId) ?? []).filter(
-      (artifact) =>
-        (query.release !== null && artifact.release === query.release) ||
-        (artifact.debugId !== null && debugIds.has(plain(artifact.debugId))),
-    );
+    const organizationId = this.#projects.get(projectId);
+    const debugIds = new Set(query.debugIds.map(normalizedDebugId));
+    return this.artifacts
+      .filter((entry) => entry.organizationId === organizationId)
+      .map(({ artifact }) => artifact)
+      .filter(
+        (artifact) =>
+          (query.release !== null && artifact.release === query.release) ||
+          (artifact.debugId !== null && debugIds.has(normalizedDebugId(artifact.debugId))),
+      );
   }
 }
