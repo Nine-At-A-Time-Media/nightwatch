@@ -58,7 +58,7 @@ describe('inboundReplyOf', () => {
   });
 
   it('refuses a reply no authentication result vouches for', async () => {
-    const { 'Authentication-Results': _, ...unauthenticated } = PLAIN;
+    const unauthenticated = Object.fromEntries(Object.entries(PLAIN).filter(([key]) => key !== 'Authentication-Results'));
     expect(await inboundReplyOf({ to: TO, raw: raw(unauthenticated, 'hi') })).toEqual({ refusal: 'mail_unauthenticated' });
   });
 

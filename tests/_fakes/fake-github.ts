@@ -198,4 +198,20 @@ export class FakeGitHub {
       issue.state_reason = 'reopened';
     }
   }
+
+  // --- task-033: a person acting on GitHub, for the local fake GitHub Worker ---
+
+  /** The issue's state and close reason, or null when the Repository has no such issue. */
+  issueState(issue: { repository: string; number: number }): { state: 'open' | 'closed'; stateReason: string | null } | null {
+    const held = this.#issues.get(issue.repository)?.[issue.number - 1];
+    return held ? { state: held.state, stateReason: held.state_reason } : null;
+  }
+
+  /** Closes or reopens the issue as a person on GitHub would; false when there is no such issue. */
+  setIssueState(change: { repository: string; number: number; state: 'open' | 'closed'; reason: string | null }): boolean {
+    const held = this.#issues.get(change.repository)?.[change.number - 1];
+    if (!held) return false;
+    this.#patch(held, { state: change.state, state_reason: change.reason });
+    return true;
+  }
 }
