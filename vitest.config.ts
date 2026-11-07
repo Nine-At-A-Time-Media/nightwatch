@@ -4,9 +4,30 @@
 // a local D1 `CONTROL` database and the control-plane migrations as
 // `TEST_MIGRATIONS`, which suites apply with applyD1Migrations;
 // `integration-core` does the same against the core Worker's (ProjectDO);
+// `integration-monitors` and `integration-scheduler` run their Worker's
+// config with a test entry that also hosts ProjectDO (built from the core
+// Worker's vars), since a cross-script Durable Object needs a pre-bundled
+// auxiliary Worker under the plugin; outbound fetches answer by host
+// (`down.example.test` 503, `up.example.test` 200), so no request leaves;
 // `widget` is the report widget package's own project (widget/vitest.config.ts).
 import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-plugin';
 import { defineConfig } from 'vitest/config';
+import { unstable_readConfig } from 'wrangler';
+
+/** ProjectDO's settings, read from the core Worker's config so a test entry hosting it matches. */
+const CORE_VARS = unstable_readConfig({ config: './src/workers/core/wrangler.jsonc' }).vars;
+
+/** What a hosted ProjectDO needs beside its vars, and the fake outbound network. */
+const HOSTED_PROJECT_DO = {
+  durableObjects: { PROJECT: { className: 'ProjectDO', useSQLite: true } },
+  queueProducers: { EFFECTS: { queueName: 'nightwatch-effects' } },
+  r2Buckets: ['BLOBS'],
+  outboundService: (request: Request) => {
+    const host = new URL(request.url).hostname;
+    if (host === 'up.example.test') return new Response('ok');
+    return new Response('unavailable', { status: host === 'down.example.test' ? 503 : 502 });
+  },
+};
 
 export default defineConfig({
   test: {
@@ -34,7 +55,7 @@ export default defineConfig({
         test: {
           name: 'integration',
           include: ['tests/integration/**/*.test.ts'],
-          exclude: ['tests/integration/core/**'],
+          exclude: ['tests/integration/core/**', 'tests/integration/monitors/**', 'tests/integration/scheduler/**'],
           testTimeout: 10_000,
         },
       },
@@ -43,6 +64,22 @@ export default defineConfig({
         test: {
           name: 'integration-core',
           include: ['tests/integration/core/**/*.test.ts'],
+          testTimeout: 10_000,
+        },
+      },
+      {
+        plugins: [
+          cloudflareTest(async () => ({
+            remoteBindings: false,
+            main: './tests/integration/monitors/worker.ts',
+            wrangler: { configPath: './src/workers/monitors/wrangler.jsonc' },
+            additionalExports: { ProjectDO: 'DurableObject' },
+            miniflare: { ...HOSTED_PROJECT_DO, bindings: { ...CORE_VARS, TEST_MIGRATIONS: await readD1Migrations('./migrations') } },
+          })),
+        ],
+        test: {
+          name: 'integration-monitors',
+          include: ['tests/integration/monitors/**/*.test.ts'],
           testTimeout: 10_000,
         },
       },
