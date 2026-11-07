@@ -1,5 +1,6 @@
 packages:
   - '.'
+  - 'widget'
 onlyBuiltDependencies:
   - esbuild
   - workerd

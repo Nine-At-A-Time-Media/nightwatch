@@ -3,7 +3,19 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['.claude/**', '.agents/**', '.codex/**', 'node_modules/**', '.wrangler/**', '.state/**', 'reports/**', '**/*.d.ts'] },
+  {
+    ignores: [
+      '.claude/**',
+      '.agents/**',
+      '.codex/**',
+      'node_modules/**',
+      '.wrangler/**',
+      '.state/**',
+      'reports/**',
+      'widget/dist/**',
+      '**/*.d.ts',
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.strict,
   { files: ['tests/**/*.ts'], rules: { '@typescript-eslint/no-non-null-assertion': 'off' } },
