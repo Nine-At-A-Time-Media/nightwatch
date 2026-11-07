@@ -104,6 +104,11 @@ describe('nextExpectedRun', () => {
     expect(nextExpectedRun(nightly, at('2026-11-01T05:30:00Z'))).toBe(at('2026-11-02T06:30:00Z'));
   });
 
+  it('keeps a stepped minute running through a repeated local hour', () => {
+    // 01:55 EDT is followed by 01:00 EST, five minutes later.
+    expect(nextExpectedRun(crontab('*/5 * * * *', 'America/New_York'), at('2026-11-01T05:55:00Z'))).toBe(at('2026-11-01T06:00:00Z'));
+  });
+
   it('adds the interval for an interval schedule', () => {
     const after = at('2026-11-07T10:20:30Z');
     expect(nextExpectedRun({ kind: 'interval', every: 2, unit: 'hour' }, after)).toBe(after + 2 * HOUR);
