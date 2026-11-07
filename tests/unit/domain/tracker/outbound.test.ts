@@ -103,6 +103,7 @@ describe('Outbound issue body', () => {
     expect(body).toContain('```a ``x`` @team # heading```');
     expect(body).not.toMatch(/^# heading/m);
     expect(body).toContain('| Culprit | (none) |');
+    expect(outboundIssueBody({ ...FACTS, culprit: 'a|b' })).toContain('| Culprit | `a\\|b` |');
   });
 
   it('an evidence link with markup characters stays one link', () => {
