@@ -274,6 +274,31 @@ describe('processArrival', () => {
     expect(result.outcomes).toEqual([]);
   });
 
+  it('Duplicate arrival: Given a feedback item was already filed, When its Arrival Record is delivered again, Then no second Report is filed and no second notice sent', async () => {
+    const w = world();
+    const feedback = { type: 'feedback', payload: { event_id: 'f'.repeat(32), contexts: { feedback: { message: 'it broke' } } } };
+    const arrival = record([feedback], { assertion: assertionOf(ADA) });
+    const first = await processArrival(arrival, w.deps);
+    const again = await processArrival(arrival, w.deps);
+    const resent = await processArrival(record([feedback], { assertion: assertionOf(ADA) }), w.deps);
+
+    expect(again.filingReceipts[0]?.reportId).toBe(first.filingReceipts[0]?.reportId);
+    expect(resent.filingReceipts[0]?.reportId).toBe(first.filingReceipts[0]?.reportId);
+    expect(await w.projects.store(PROJECT).reportsBy({ email: ADA })).toHaveLength(1);
+    expect(w.mailer.sentTo(ADA)).toHaveLength(1);
+  });
+
+  it('Duplicate arrival: a legacy user report is filed once per Arrival Record and item, since its event_id names the Event it is about', async () => {
+    const w = world();
+    const report = { type: 'user_report', payload: { event_id: EVENT_ID, comments: 'it crashed' } };
+    const arrival = record([report, report], { assertion: assertionOf(ADA) });
+    await processArrival(arrival, w.deps);
+    await processArrival(arrival, w.deps);
+
+    expect(await w.projects.store(PROJECT).reportsBy({ email: ADA })).toHaveLength(2);
+    expect(w.mailer.sentTo(ADA)).toHaveLength(2);
+  });
+
   it('refuses feedback without a sign-in, with the filing Outcome archived', async () => {
     const w = world();
     const report = { type: 'user_report', payload: { event_id: EVENT_ID, comments: 'it crashed' } };

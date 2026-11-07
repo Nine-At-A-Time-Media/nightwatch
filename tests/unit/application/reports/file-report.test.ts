@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { fileReport } from '../../../../src/application/reports/file-report.js';
 import { isRefusal } from '../../../../src/domain/refusal.js';
 import { isWellFormedReference } from '../../../../src/domain/report/reference.js';
-import { ADA, assertionOf, filed, PROJECT, submission, T0, world, type World } from './world.js';
+import { ADA, assertionOf, BOB, filed, PROJECT, submission, T0, world, type World } from './world.js';
 
 async function nothingFiled(w: World): Promise<void> {
   expect(w.control.references.size).toBe(0);
@@ -153,5 +153,53 @@ describe('fileReport', () => {
     const report = await w.projects.store(PROJECT).getReport(receipt.reportId);
     expect(report).toMatchObject({ spam: false });
     expect(await w.projects.store(PROJECT).getIssue(report?.issueId ?? '')).toMatchObject({ status: 'unresolved' });
+  });
+
+  it('files once per filing key: a double-submit returns the first Report with a working Report Reference and sends one receipt notice', async () => {
+    const w = world();
+    const first = await fileReport(PROJECT, submission('it broke', { filingKey: 'form-1' }), assertionOf(ADA), w);
+    const again = await fileReport(PROJECT, submission('it broke', { filingKey: 'form-1' }), assertionOf(ADA), w);
+    if (isRefusal(first) || isRefusal(again)) throw new Error('refused');
+
+    expect(again.reportId).toBe(first.reportId);
+    expect(again.noticeSent).toBe(true);
+    expect(isWellFormedReference(again.reference)).toBe(true);
+    expect(w.control.references.get(await w.ids.hashReference(again.reference))).toMatchObject({ reportId: first.reportId });
+    expect(await w.projects.store(PROJECT).reportsBy({ email: ADA })).toHaveLength(1);
+    expect(w.mailer.sentTo(ADA)).toHaveLength(1);
+  });
+
+  it('a repeat takes no Report Quota, and a submission without a filing key is filed each time', async () => {
+    const w = world({ quota: { [PROJECT]: { feedback: 2 } } });
+    await fileReport(PROJECT, submission('it broke', { filingKey: 'form-1' }), assertionOf(ADA), w);
+    expect(isRefusal(await fileReport(PROJECT, submission('it broke', { filingKey: 'form-1' }), assertionOf(ADA), w))).toBe(false);
+    await filed(w, ADA, 'it broke');
+    expect(await w.projects.store(PROJECT).reportsBy({ email: ADA })).toHaveLength(2);
+  });
+
+  it("a filing key is its reporter's own: another reporter's submission under it is filed apart", async () => {
+    const w = world();
+    const ada = await fileReport(PROJECT, submission('it broke', { filingKey: 'form-1' }), assertionOf(ADA), w);
+    const bob = await fileReport(PROJECT, submission('mine too', { filingKey: 'form-1' }), assertionOf(BOB), w);
+    if (isRefusal(ada) || isRefusal(bob)) throw new Error('refused');
+
+    expect(bob.reportId).not.toBe(ada.reportId);
+    expect(await w.projects.store(PROJECT).reportsBy({ email: BOB })).toMatchObject([{ message: 'mine too' }]);
+  });
+
+  it('a repeat sends the receipt notice the first filing could not, and only once', async () => {
+    const w = world();
+    w.mailer.failure = { retryable: true };
+    const first = await fileReport(PROJECT, submission('it broke', { filingKey: 'form-1' }), assertionOf(ADA), w);
+    w.mailer.failure = null;
+    const again = await fileReport(PROJECT, submission('it broke', { filingKey: 'form-1' }), assertionOf(ADA), w);
+    await fileReport(PROJECT, submission('it broke', { filingKey: 'form-1' }), assertionOf(ADA), w);
+    if (isRefusal(first) || isRefusal(again)) throw new Error('refused');
+
+    expect(first.noticeSent).toBe(false);
+    expect(again).toMatchObject({ reportId: first.reportId, noticeSent: true });
+    const mail = w.mailer.sentTo(ADA);
+    expect(mail).toHaveLength(1);
+    expect(mail[0]?.text).toContain(again.reference);
   });
 });

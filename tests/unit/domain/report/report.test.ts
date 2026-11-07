@@ -40,6 +40,19 @@ describe('Report Submission', () => {
     });
   });
 
+  it('keeps a filing key, and refuses one that is not a non-empty string within the bound', () => {
+    expect(validateSubmission({ message: 'it broke', filingKey: 'form-1' }, LIMITS)).toEqual({
+      message: 'it broke',
+      screenshot: null,
+      associatedEventId: null,
+      filingKey: 'form-1',
+    });
+    expect(validateSubmission({ message: 'it broke', filingKey: 'k'.repeat(200) }, LIMITS)).toMatchObject({ filingKey: 'k'.repeat(200) });
+    for (const filingKey of ['', 42, 'k'.repeat(201)]) {
+      expect(validateSubmission({ message: 'it broke', filingKey }, LIMITS)).toEqual({ refusal: 'invalid-filing-key' });
+    }
+  });
+
   it('Empty message refused: Given a message that is empty, When the reporter submits, Then the Report is not filed and the form says why', () => {
     expect(validateSubmission({ message: '' }, LIMITS)).toEqual({ refusal: 'empty-message' });
     expect(validateSubmission({}, LIMITS)).toEqual({ refusal: 'empty-message' });
