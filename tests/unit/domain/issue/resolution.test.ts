@@ -41,7 +41,9 @@ describe('Regression Policy', () => {
       fc.property(version, version, (a, b) => {
         expect(isRegression({ kind: 'in_release', release: a }, a, seen)).toBe(false);
         if (a !== b) {
-          expect(isRegression({ kind: 'in_release', release: a }, b, seen)).toBe(!isRegression({ kind: 'in_release', release: b }, a, seen));
+          expect(isRegression({ kind: 'in_release', release: a }, b, seen)).toBe(
+            !isRegression({ kind: 'in_release', release: b }, a, seen),
+          );
         }
       }),
     );
