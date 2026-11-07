@@ -11,3 +11,4 @@ tasks
 .agents
 .codex
 **/worker-configuration.d.ts
+widget/dist

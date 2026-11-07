@@ -12,6 +12,7 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     environment: 'happy-dom',
     globals: false,
+    css: true,
     sequence: { shuffle: true },
     testTimeout: 1000,
   },
