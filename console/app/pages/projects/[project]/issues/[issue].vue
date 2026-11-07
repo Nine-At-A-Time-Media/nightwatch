@@ -2,11 +2,23 @@
   <main>
     <p v-if="error" role="alert">This issue was not found, or you are not a member of its project.</p>
     <template v-else-if="data">
-      <h1>{{ data.title ?? 'User report' }}</h1>
+      <h1>
+        <span data-testid="issue-short-id">{{ data.shortId }}</span>
+        {{ data.title ?? 'User report' }}
+      </h1>
       <p>{{ data.culprit }}</p>
       <dl>
         <dt>Status</dt>
-        <dd data-testid="issue-status">{{ data.state.status }}</dd>
+        <dd data-testid="issue-status">
+          {{ 'substatus' in data.state ? `${data.state.status} (${data.state.substatus})` : data.state.status }}
+        </dd>
+        <dt>Priority</dt>
+        <dd>
+          <label for="issue-priority">Priority</label>
+          <select id="issue-priority" :value="data.state.priority.level" @change="handlePriority">
+            <option v-for="level in PRIORITY_LEVELS" :key="level" :value="level">{{ level }}</option>
+          </select>
+        </dd>
         <dt>Events</dt>
         <dd>{{ data.state.count }}</dd>
         <dt>Users</dt>
@@ -22,6 +34,25 @@
           }}
         </dd>
       </dl>
+
+      <section aria-label="Triage">
+        <template v-if="data.state.status === 'unresolved'">
+          <button type="button" @click="triage({ kind: 'resolve', resolution: { kind: 'plain' } })">Resolve</button>
+          <button type="button" @click="triage({ kind: 'resolve', resolution: { kind: 'in_next_release' } })">
+            Resolve in next release
+          </button>
+          <label for="issue-archive">Archive</label>
+          <select id="issue-archive" v-model="archiveChoice">
+            <option value="until_escalating">until escalating</option>
+            <option value="forever">forever</option>
+          </select>
+          <button type="button" @click="handleArchive">Archive</button>
+        </template>
+        <button v-if="data.state.status === 'resolved'" type="button" @click="triage({ kind: 'unresolve' })">Unresolve</button>
+        <button v-if="data.state.status === 'archived'" type="button" @click="triage({ kind: 'unarchive' })">Unarchive</button>
+        <button v-if="data.state.forReviewSince !== null" type="button" @click="triage({ kind: 'mark_reviewed' })">Mark reviewed</button>
+        <button type="button" @click="handleAssignToMe">Assign to me</button>
+      </section>
 
       <h2>Comments</h2>
       <ol>
@@ -54,11 +85,13 @@
 </template>
 
 <script setup lang="ts">
-// One Issue for a Member: its summary, every Comment (shared or private),
-// a comment box marked shared or private, and opening a GitHub issue.
-// Resolve, archive and unresolve are not offered: no triage use case is
-// reachable from the console yet.
+// One Issue for a Member: its summary and Short Id, the triage actions
+// (resolve, resolve in next release, archive, unresolve, unarchive, mark
+// reviewed, Priority, assign to me), every Comment (shared or private), a
+// comment box marked shared or private, and opening a GitHub issue.
 import type { IssueView } from '#nightwatch/application/issues/view-issue.js';
+import type { PriorityLevel } from '#nightwatch/domain/issue/priority.js';
+import type { TriageAction } from '#nightwatch/domain/issue/triage.js';
 import { isoInstant, utcMinute } from '../../../../utils/format';
 
 const route = useRoute();
@@ -71,12 +104,42 @@ const comment = ref('');
 const shared = ref(false);
 const repository = ref('');
 const actionRefusal = ref<string | null>(null);
+const archiveChoice = ref<'until_escalating' | 'forever'>('until_escalating');
+
+const PRIORITY_LEVELS: readonly PriorityLevel[] = ['low', 'medium', 'high'];
 
 useHead({ title: 'Issue' });
 
 function refusalOf(caught: unknown): string {
   const data = (caught as { data?: { refusal?: string } }).data;
   return data?.refusal ?? 'unavailable';
+}
+
+async function post(path: string, body: Record<string, unknown>): Promise<void> {
+  actionRefusal.value = null;
+  try {
+    await $fetch(`${base.value}/${path}`, { method: 'POST', body });
+    await refresh();
+  } catch (caught) {
+    actionRefusal.value = refusalOf(caught);
+  }
+}
+
+async function triage(action: TriageAction): Promise<void> {
+  await post('triage', action);
+}
+
+async function handleArchive(): Promise<void> {
+  await triage({ kind: 'archive', archive: { substatus: archiveChoice.value } });
+}
+
+async function handlePriority(event: Event): Promise<void> {
+  const level = (event.target as HTMLSelectElement).value as PriorityLevel;
+  await triage({ kind: 'set_priority', level });
+}
+
+async function handleAssignToMe(): Promise<void> {
+  await post('assign', { assignee: 'me' });
 }
 
 async function handleComment(): Promise<void> {

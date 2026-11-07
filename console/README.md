@@ -44,8 +44,13 @@ copy of each module in the Worker bundle with no build step in between.
 | `GET /api/follow-up/:reference` | `viewFollowUp` | 200 Follow-up View. 404 for anyone but the reporter and the Project's Members. |
 | `POST /api/follow-up/:reference/reply` | `replyAsReporter` | `{text}` -> 201. |
 | `GET /api/my-reports` | `listMyReports` | 200 `{reports}`. |
-| `GET /api/projects/:project/issues?query=&cursor=` | `searchIssues` | 200 `{issues, next}`. The page covers the Member's Organization. |
-| `GET /api/projects/:project/issues/:issue` | `viewIssue` | 200 Issue, every Comment, External Link. |
+| `GET /api/projects/:project/issues?query=&cursor=` | `searchIssues` | 200 `{issues, next}`. The page covers the Member's Organization; each Issue names its own `projectId`. |
+| `GET /api/projects/:project/issues/:issue` | `viewIssue` | 200 Issue, Short Id, every Comment, External Link. |
+| `POST /api/projects/:project/issues/:issue/triage` | `triageIssue` | A triage action, e.g. `{kind: "resolve", resolution: {kind: "in_next_release"}}` -> 200 `{changes}`. 409 for a transition the State Machine refuses. |
+| `POST /api/projects/:project/issues/:issue/merge` | `mergeIssues` | `{sources}` -> 200 `{changes}`; the sources merge into this Issue. |
+| `POST /api/projects/:project/issues/:issue/split` | `splitIssue` | `{fingerprints}` -> 200 `{changes}`. |
+| `POST /api/projects/:project/issues/:issue/discard` | `discardIssue` | 200 `{changes}`. |
+| `POST /api/projects/:project/issues/:issue/assign` | `assignIssue` | `{assignee}`: `"me"`, `{member}`, `{team}` or `null` -> 200 `{changes}`. |
 | `POST /api/projects/:project/issues/:issue/comments` | `ProjectClient.addComment` | `{text, shared}` -> 201. |
 | `POST /api/projects/:project/issues/:issue/github` | `openExternalIssue` | `{repository}` -> 201 External Link. 503 when no GitHub App is configured. |
 

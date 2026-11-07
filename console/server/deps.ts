@@ -23,7 +23,7 @@ import { MemoryTokenCache } from '#nightwatch/adapters/github/token-cache.js';
 import { KvProjectConfigSource } from '#nightwatch/adapters/kv/kv-project-config-source.js';
 import { QueueEffectQueue } from '#nightwatch/adapters/queues/queue-effect-queue.js';
 import { R2BlobStore } from '#nightwatch/adapters/r2/r2-blob-store.js';
-import { AbstainingSpamJudge } from '#nightwatch/adapters/rules/abstaining-spam-judge.js';
+import { RulesSpamJudge } from '#nightwatch/adapters/rules/rules-spam-judge.js';
 import { RandomIds } from '#nightwatch/adapters/runtime/random-ids.js';
 import { SystemClock } from '#nightwatch/adapters/runtime/system-clock.js';
 import type { ReportSettings } from '#nightwatch/domain/report/filing.js';
@@ -113,7 +113,7 @@ export function consoleDeps(env: ConsoleBindings) {
     projects: new DurableProjectClient({ namespace: projectNamespace }),
     quota: new DurableQuotaGate({ limits: config, counterFor: (projectId) => quotaNamespace.getByName(projectId), clock }),
     blobs: new R2BlobStore(env.BLOBS),
-    spam: new AbstainingSpamJudge(),
+    spam: new RulesSpamJudge(),
     effects: new QueueEffectQueue(env.EFFECTS),
     mailer: new SendEmailMailer({ binding: env.MAIL, from: env.MAIL_FROM }),
     ids: new RandomIds(),

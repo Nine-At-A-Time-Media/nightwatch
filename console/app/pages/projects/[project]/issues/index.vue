@@ -24,7 +24,7 @@
       <tbody>
         <tr v-for="issue in data?.issues ?? []" :key="issue.issueId" data-testid="issue-list-entry">
           <td>
-            <NuxtLink :to="`/projects/${encodeURIComponent(project)}/issues/${encodeURIComponent(issue.issueId)}`">
+            <NuxtLink :to="`/projects/${encodeURIComponent(issue.projectId)}/issues/${encodeURIComponent(issue.issueId)}`">
               {{ issue.shortId }} {{ issue.title }}
             </NuxtLink>
             <div>{{ issue.culprit }}</div>
@@ -44,11 +44,13 @@
 
 <script setup lang="ts">
 // A Member's Issue search (design Issues, Search). The query is the Issue
-// Query language; the API searches the Member's Organization.
+// Query language; the API searches the Member's Organization, so each
+// result links to the Project that holds it.
 import { isoInstant, utcMinute } from '../../../../utils/format';
 
 type ListedIssue = {
   issueId: string;
+  projectId: string;
   shortId: string;
   title: string;
   culprit: string;
