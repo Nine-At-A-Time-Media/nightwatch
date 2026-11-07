@@ -1,0 +1,47 @@
+// The scheduler Worker -- Cron Triggers only: once a day it runs retention
+// in every Project's ProjectDO (which also sets a lost sweep alarm again)
+// and compares Platform Usage with the Platform Soft Limits.
+// The top level is the local stage (architecture, Local development): it
+// declares no remote-only binding. Locally the cron is fired by hand with
+// `pnpm dev:tick`. Adopters add `nonprod` and `prod` environment blocks,
+// repeat every binding there, and set CLOUDFLARE_ACCOUNT_ID plus the
+// CLOUDFLARE_API_TOKEN secret (Account Analytics read) for the usage API.
+{
+  "$schema": "../../../node_modules/wrangler/config-schema.json",
+  "name": "nightwatch-scheduler",
+  "main": "index.ts",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": false,
+  "observability": { "enabled": true },
+  "triggers": { "crons": ["17 3 * * *"] },
+  "durable_objects": {
+    "bindings": [{ "name": "PROJECT", "class_name": "ProjectDO", "script_name": "nightwatch-core" }],
+  },
+  // The Organizations and Projects retention walks.
+  "d1_databases": [
+    {
+      "binding": "CONTROL",
+      "database_name": "nightwatch-control",
+      "database_id": "nightwatch-control-local",
+      "migrations_dir": "../../../migrations",
+    },
+  ],
+  "vars": {
+    // `local` measures no Platform Usage (no account); any other stage reads
+    // the Cloudflare analytics API.
+    "STAGE": "local",
+    // RetentionPolicy windows in milliseconds, for every Organization until
+    // Organization settings carry their own: 30, 90, 30, 365, 90, 365 days.
+    "RAW_RETENTION_MS": 2592000000,
+    "EVENT_RETENTION_MS": 7776000000,
+    "ATTACHMENT_RETENTION_MS": 2592000000,
+    "REPORT_RETENTION_MS": 31536000000,
+    "OUTCOME_RETENTION_MS": 7776000000,
+    "HISTORY_RETENTION_MS": 31536000000,
+    // Platform Soft Limits, one per product the UsageSource measures, for the
+    // current month: the Workers Paid included requests.
+    "PLATFORM_SOFT_LIMITS": { "workers_requests": 10000000, "durable_objects_requests": 1000000 },
+    // Webhook URLs the operator is alerted at when a product crosses its limit.
+    "OPERATOR_WEBHOOK_URLS": [],
+  },
+}

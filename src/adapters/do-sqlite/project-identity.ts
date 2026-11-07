@@ -4,7 +4,8 @@
  * the first call records the Project it names; a later call naming another
  * Project is refused by throwing, since it can only be a wiring fault
  * (architecture Security mitigations: Cross-tenant). The sweep alarm is the
- * object's one alarm.
+ * object's one alarm; the scheduler's retention run sets it again if it was
+ * ever lost.
  */
 
 const SCHEMA = `CREATE TABLE IF NOT EXISTS project_identity (project_id TEXT NOT NULL)`;
@@ -30,4 +31,9 @@ export function claimProject(sql: SqlStorage, projectId: string): boolean {
 
 export async function scheduleSweep(storage: DurableObjectStorage, at: number): Promise<void> {
   await storage.setAlarm(at);
+}
+
+/** Sets the sweep alarm only when none is set, so a running schedule keeps its time. */
+export async function scheduleSweepIfNone(storage: DurableObjectStorage, at: number): Promise<void> {
+  if ((await storage.getAlarm()) === null) await storage.setAlarm(at);
 }

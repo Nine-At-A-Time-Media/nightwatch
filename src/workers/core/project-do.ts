@@ -22,6 +22,7 @@ import type { Assignment } from '../../domain/issue/assignment.js';
 import type { IssueChange, IssueState, Member } from '../../domain/issue/state.js';
 import type { TriageAction } from '../../domain/issue/triage.js';
 import type { Refusal } from '../../domain/refusal.js';
+import type { Expiry, RetentionPolicy } from '../../domain/retention/retention.js';
 import type { Environment, Session } from '../../domain/release/health.js';
 import type { Release, ReleaseFirstSeen } from '../../domain/release/ordering.js';
 import type { RecordedFiling } from '../../domain/report/filing.js';
@@ -234,6 +235,10 @@ export class ProjectDO extends DurableObject<CoreEnv> implements ProjectClient {
 
   moveReport(projectId: ProjectId, move: { reportId: ReportId; to: IssueId; actor: Member }): Promise<Report | Refusal> {
     return steps.moveReportStep(this.#runtime, projectId, move);
+  }
+  // --- task-034: retention from the scheduler ---
+  enforceRetention(projectId: ProjectId, retention: RetentionPolicy): Promise<Expiry> {
+    return steps.enforceRetentionStep(this.#runtime, projectId, retention);
   }
 
   // --- task-038: triage, merge, split, discard ---

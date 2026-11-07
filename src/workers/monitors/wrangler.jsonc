@@ -1,0 +1,42 @@
+// The monitors Worker -- hosts MonitorDO (one per Cron or Uptime Monitor)
+// and MetricRuleDO (one per Metric Alert Rule), each driven by its alarm,
+// and takes the HTTP cron check-ins the ingest Worker forwards.
+// The top level is the local stage (architecture, Local development): it
+// declares no remote-only binding. Adopters add `nonprod` and `prod`
+// environment blocks and repeat every binding there; bindings do not inherit.
+{
+  "$schema": "../../../node_modules/wrangler/config-schema.json",
+  "name": "nightwatch-monitors",
+  "main": "index.ts",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": false,
+  "observability": { "enabled": true },
+  "durable_objects": {
+    "bindings": [
+      { "name": "MONITOR", "class_name": "MonitorDO" },
+      { "name": "METRIC_RULE", "class_name": "MetricRuleDO" },
+      // Monitor issues open and close in the Project's ProjectDO, and metric
+      // rules read its counters; it lives in the core Worker.
+      { "name": "PROJECT", "class_name": "ProjectDO", "script_name": "nightwatch-core" },
+    ],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MonitorDO", "MetricRuleDO"] }],
+  // Alert recipients for metric rule actions.
+  "d1_databases": [
+    {
+      "binding": "CONTROL",
+      "database_name": "nightwatch-control",
+      "database_id": "nightwatch-control-local",
+      "migrations_dir": "../../../migrations",
+    },
+  ],
+  "vars": {
+    // Any other stage refuses to build a monitor object until its adapters
+    // (the email Channel among them) exist.
+    "STAGE": "local",
+    // Milliseconds one uptime check may take before it is down with reason timeout.
+    "UPTIME_TIMEOUT_MS": 10000,
+    // How many times one metric alert delivery is attempted.
+    "DELIVERY_ATTEMPTS": 3,
+  },
+}

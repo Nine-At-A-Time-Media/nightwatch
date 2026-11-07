@@ -6,7 +6,10 @@
  * Routes: POST /api/<project>/envelope/, /store/ and /security/, and the HTTP
  * cron check-in /api/<project>/cron/<monitor>/[<key>/], whose optional last
  * segment is the Client Key. OPTIONS on any route answers a CORS preflight;
- * the POST that follows is still held to the Project's allowed origins.
+ * the POST that follows is still held to the Project's allowed origins. An
+ * admitted check-in is also read as the Check-in the monitors Worker takes:
+ * its monitor from the route, its status from the query, else the JSON body,
+ * else ok.
  */
 
 import type { Admission } from '../../domain/ingest/admission.js';
@@ -15,11 +18,16 @@ import { rateLimitHeader, retryAfterSeconds } from '../../domain/protocol/retry-
 
 export type Route = { readonly projectId: string; readonly endpoint: EndpointKind; readonly pathKey: string | null };
 
+/** A check-in as the monitors Worker takes it. */
+export type ForwardedCheckIn = { readonly projectId: string; readonly monitorId: string; readonly status: 'in_progress' | 'ok' | 'error' };
+
 /** Past the platform's own request cap, a decoded body is cut off here; the cut body fails its size or envelope checks. */
 const DECODED_BODY_CEILING = 100 * 1024 * 1024;
 const DECODABLE = new Set(['gzip', 'deflate']);
 const ITEM_ROUTE = /^\/api\/([^/]+)\/(envelope|store|security)\/?$/;
-const CHECKIN_ROUTE = /^\/api\/([^/]+)\/cron\/[^/]+(?:\/([^/]+))?\/?$/;
+const CHECKIN_ROUTE = /^\/api\/([^/]+)\/cron\/([^/]+)(?:\/([^/]+))?\/?$/;
+const CHECKIN_STATUSES: ReadonlySet<string> = new Set<ForwardedCheckIn['status']>(['in_progress', 'ok', 'error']);
+const DEFAULT_CHECKIN_STATUS = 'ok';
 const ALLOWED_HEADERS = 'x-sentry-auth, authorization, content-type, content-encoding, sentry-trace, baggage';
 const EXPOSED_HEADERS = 'x-sentry-rate-limits, retry-after';
 
@@ -29,8 +37,32 @@ export function routeOf(pathname: string): Route | null {
   const item = ITEM_ROUTE.exec(pathname);
   if (item?.[1] && item[2]) return { projectId: item[1], endpoint: item[2] as EndpointKind, pathKey: null };
   const checkin = CHECKIN_ROUTE.exec(pathname);
-  if (checkin?.[1]) return { projectId: checkin[1], endpoint: 'checkin', pathKey: checkin[2] ?? null };
+  if (checkin?.[1]) return { projectId: checkin[1], endpoint: 'checkin', pathKey: checkin[3] ?? null };
   return null;
+}
+
+// --- check-ins ---
+
+function isCheckInStatus(status: unknown): status is ForwardedCheckIn['status'] {
+  return typeof status === 'string' && CHECKIN_STATUSES.has(status);
+}
+
+function bodyStatus(body: Uint8Array): unknown {
+  try {
+    const parsed: unknown = JSON.parse(new TextDecoder().decode(body));
+    return typeof parsed === 'object' && parsed !== null && 'status' in parsed ? parsed.status : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The check-in a cron route carries, or null for another route or a status the monitors do not take. */
+export function checkInOf({ url, body }: { url: URL; body: Uint8Array }): ForwardedCheckIn | null {
+  const checkin = CHECKIN_ROUTE.exec(url.pathname);
+  const [, projectId, monitorId] = checkin ?? [];
+  if (projectId === undefined || monitorId === undefined) return null;
+  const status = url.searchParams.get('status') ?? bodyStatus(body) ?? DEFAULT_CHECKIN_STATUS;
+  return isCheckInStatus(status) ? { projectId, monitorId, status } : null;
 }
 
 // --- requests ---

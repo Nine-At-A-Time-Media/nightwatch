@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import { newCronMonitor, type CronMonitorConfig } from '../../../../src/domain/monitor/cron-monitor.js';
-import { advance, monitorIssueId, withIssue, type Monitor } from '../../../../src/domain/monitor/monitor.js';
+import { advance, monitorIssueId, nextAlarmAt, withIssue, type Monitor } from '../../../../src/domain/monitor/monitor.js';
 import { createMonitorIssue, resolveMonitorIssue } from '../../../../src/domain/monitor/monitor-issue.js';
 import { NEW_UPTIME_MONITOR } from '../../../../src/domain/monitor/uptime-monitor.js';
 import { archive } from '../../../../src/domain/issue/commands.js';
@@ -33,6 +33,7 @@ const uptime: Monitor = {
   projectId: 'project-1',
   issueId: null,
   url: 'https://status.example/health',
+  interval: MINUTE,
   config: { uptimeFailureCount: 1, recoveryCount: 1 },
   state: NEW_UPTIME_MONITOR,
 };
@@ -93,5 +94,39 @@ describe('monitor issue', () => {
     const archived = archive(opened.state, { substatus: 'forever', spam: false }, { member: 'm' }, T0);
     if (isRefusal(archived)) throw new Error(archived.refusal);
     expect(resolveMonitorIssue(archived.state, T0 + HOUR)).toEqual({ state: archived.state, changes: [] });
+  });
+});
+
+describe('nextAlarmAt', () => {
+  it('wakes a Cron Monitor at its expected run plus margin while no run is in progress', () => {
+    expect(nextAlarmAt(cron, T0)).toBe(T0 + HOUR + 5 * MINUTE);
+  });
+
+  it('wakes a Cron Monitor at the maximum runtime once a run starts', () => {
+    const started = advance(cron, { status: 'in_progress', at: T0 + HOUR }, T0 + HOUR);
+    if (started === null) throw new Error('the check-in moved nothing');
+    expect(nextAlarmAt(started.state, T0 + HOUR)).toBe(T0 + HOUR + 30 * MINUTE);
+  });
+
+  it('wakes an Uptime Monitor one Uptime interval from now', () => {
+    expect(nextAlarmAt(uptime, T0 + 7)).toBe(T0 + 7 + MINUTE);
+  });
+
+  it('a Cron Monitor ticked at its alarm always moves on to a later alarm', () => {
+    fc.assert(
+      fc.property(fc.array(fc.nat({ max: 3 * HOUR }), { maxLength: 6 }), (gaps) => {
+        let monitor: Monitor = cron;
+        let now = T0;
+        for (const gap of gaps) {
+          now += gap;
+          const started = advance(monitor, { status: 'in_progress', at: now }, now);
+          if (started !== null) monitor = started.state;
+        }
+        const alarm = Math.max(nextAlarmAt(monitor, now), now);
+        const ticked = advance(monitor, null, alarm);
+        if (ticked === null) return false;
+        return nextAlarmAt(ticked.state, alarm) > alarm;
+      }),
+    );
   });
 });

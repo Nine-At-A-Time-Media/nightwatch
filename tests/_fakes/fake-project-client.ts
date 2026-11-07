@@ -48,6 +48,9 @@ import type { Environment, Session } from '../../src/domain/release/health.js';
 import type { SearchContext } from '../../src/domain/search/match.js';
 import type { IssuePage, SearchPlan } from '../../src/domain/search/page.js';
 import { searchProjectPage } from '../../src/application/issues/search-project-page.js';
+import { enforceRetention } from '../../src/application/operating/enforce-retention.js';
+import type { Expiry, RetentionPolicy } from '../../src/domain/retention/retention.js';
+
 import { discardIssue } from '../../src/application/issues/discard-issue.js';
 import { mergeIssues } from '../../src/application/issues/merge-issues.js';
 import { splitIssue } from '../../src/application/issues/split-issue.js';
@@ -65,7 +68,7 @@ export type ProjectSide = {
   policies: IssuePolicies;
   dedupWindow: number;
   memberEmails?: ReadonlyMap<string, string>;
-  /** task-038: where discarded Events' blobs are deleted; an empty FakeBlobStore when not given. */
+  /** Where retention (task-034) and discard (task-038) delete Event and Report blobs; an empty FakeBlobStore when omitted. */
   blobs?: BlobStore;
 };
 
@@ -304,6 +307,12 @@ export class FakeProjectClient implements ProjectClient {
 
   async moveReport(projectId: ProjectId, move: { reportId: ReportId; to: IssueId; actor: Member }): Promise<Report | Refusal> {
     return moveReport(move.reportId, move.to, move.actor, { issues: this.store(projectId) });
+  }
+
+  // --- task-034: retention from the scheduler ---
+
+  async enforceRetention(projectId: ProjectId, retention: RetentionPolicy): Promise<Expiry> {
+    return enforceRetention(projectId, { issues: this.store(projectId), blobs: this.#blobs, clock: this.#side.clock, retention });
   }
 
   // --- task-038: triage, merge, split, discard ---

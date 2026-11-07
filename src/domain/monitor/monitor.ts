@@ -10,6 +10,12 @@
  * not take moves nothing. Each opening of a monitor issue gets its own
  * Issue id, named by the monitor and the time it opened, so repeating a step
  * opens the same issue rather than a second one.
+ *
+ * `nextAlarmAt` is when MonitorDO next wakes the monitor with no input
+ * (architecture Mechanism: Releases, health and monitors): a Cron Monitor at
+ * its expected run plus margin, or at the maximum runtime while a run is in
+ * progress; an Uptime Monitor one Uptime interval after now. Wall-clock
+ * times, never ingest times.
  */
 
 import type { IssueId, ProjectId } from '../ids.js';
@@ -31,6 +37,8 @@ export type CronMonitor = MonitorBase & { readonly kind: 'cron'; readonly config
 export type UptimeMonitor = MonitorBase & {
   readonly kind: 'uptime';
   readonly url: string;
+  /** The Uptime interval: milliseconds between checks of the URL (design Parameters). */
+  readonly interval: number;
   readonly config: UptimeMonitorConfig;
   readonly state: UptimeMonitorState;
 };
@@ -62,6 +70,11 @@ function advanceUptime(monitor: UptimeMonitor, input: MonitorInput): MonitorStep
   return { ...step, state: { ...monitor, state: step.state } };
 }
 
+function cronAlarmAt(monitor: CronMonitor): number {
+  const { run, expectedAt } = monitor.state;
+  return run === null ? expectedAt + monitor.config.margin : run.startedAt + monitor.config.maxRuntime;
+}
+
 // --- exports ---
 
 /** Moves the Monitor by one input at `now`; null when it does not take that input. */
@@ -76,4 +89,9 @@ export function monitorIssueId(monitorId: MonitorId, openedAt: number): IssueId 
 
 export function withIssue(monitor: Monitor, issueId: IssueId | null): Monitor {
   return { ...monitor, issueId };
+}
+
+/** When the monitor next needs a step with no input; a time already past means at once. */
+export function nextAlarmAt(monitor: Monitor, now: number): number {
+  return monitor.kind === 'cron' ? cronAlarmAt(monitor) : now + monitor.interval;
 }

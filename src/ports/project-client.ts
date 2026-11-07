@@ -21,6 +21,7 @@ import type { Assignment } from '../domain/issue/assignment.js';
 import type { IssueChange, IssueState, Member } from '../domain/issue/state.js';
 import type { TriageAction } from '../domain/issue/triage.js';
 import type { Refusal } from '../domain/refusal.js';
+import type { Expiry, RetentionPolicy } from '../domain/retention/retention.js';
 import type { Environment, Session, SessionCounts, UserCounts } from '../domain/release/health.js';
 import type { Release, ReleaseFirstSeen } from '../domain/release/ordering.js';
 import type { RecordedFiling } from '../domain/report/filing.js';
@@ -139,6 +140,11 @@ export interface ProjectClient {
   ): Promise<IssueChange[] | Refusal>;
   /** Calls the ProjectDO use case moveReport: a Member moves the Report to another Issue; returns the Report as moved. */
   moveReport(projectId: ProjectId, move: { reportId: ReportId; to: IssueId; actor: Member }): Promise<Report | Refusal>;
+  // --- task-034: retention from the scheduler ---
+
+  /** Calls the ProjectDO use case enforceRetention under the Organization's RetentionPolicy; returns what it removed. */
+  enforceRetention(projectId: ProjectId, retention: RetentionPolicy): Promise<Expiry>;
+
   // --- task-038: triage, merge, split, discard ---
 
   /** Calls the ProjectDO use case triageIssue: a Member resolves, archives, unarchives, unresolves, sets Priority or marks reviewed. */

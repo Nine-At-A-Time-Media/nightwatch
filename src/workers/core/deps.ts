@@ -22,13 +22,12 @@ import type { IssueStore } from '../../ports/issue-store.js';
 export type ProjectRuntime = {
   readonly issues: IssueStore;
   readonly effects: EffectQueue;
+  readonly blobs: BlobStore;
   readonly clock: Clock;
   readonly ids: Ids;
   readonly policies: IssuePolicies;
   readonly storage: DurableObjectStorage;
   readonly sweepInterval: number;
-  /** task-038: where a discarded Issue's Event blobs are deleted. */
-  readonly blobs: BlobStore;
 };
 
 const LOCAL_STAGE = 'local';
@@ -75,11 +74,11 @@ export function projectRuntime({ storage, env }: { storage: DurableObjectStorage
   return {
     issues: new SqliteIssueStore({ storage, dedupWindow: positive({ name: 'DEDUP_WINDOW_MS', value: env.DEDUP_WINDOW_MS }) }),
     effects: new QueueEffectQueue(env.EFFECTS),
+    blobs: new R2BlobStore(env.BLOBS),
     clock: new SystemClock(),
     ids: new RandomIds(),
     policies: issuePolicies(env),
     storage,
     sweepInterval: positive({ name: 'SWEEP_INTERVAL_MS', value: env.SWEEP_INTERVAL_MS }),
-    blobs: new R2BlobStore(env.BLOBS),
   };
 }
