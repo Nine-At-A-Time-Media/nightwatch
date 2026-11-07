@@ -28,6 +28,8 @@ import type { Comment, MemberComment, ReporterComment, ReportStatusChange } from
 
 /** A release and environment's Session counts and user counts, as the Project holds them. */
 export type SessionTotals = { readonly sessions: SessionCounts; readonly users: UserCounts };
+import type { ExternalLink } from '../domain/tracker/external-link.js';
+import type { TrackerEvent } from '../domain/tracker/tracker-event.js';
 
 export interface ProjectClient {
   // --- ProjectDO use cases and steps ---
@@ -87,4 +89,26 @@ export interface ProjectClient {
   ): Promise<IssueChange[]>;
   /** The Project-wide aggregate at or after `since`; null when the Project cannot measure it. */
   metricValue(projectId: ProjectId, query: { aggregate: MetricAggregate; since: number }): Promise<number | null>;
+  // --- task-011: Code and GitHub ---
+
+  /** The Issue's External Link, Linked or Broken; null when it has none. */
+  externalLinkOf(projectId: ProjectId, issueId: IssueId): Promise<ExternalLink | null>;
+  /** Saves an External Link as the github runtime left it. */
+  recordExternalLink(projectId: ProjectId, externalLink: ExternalLink): Promise<void>;
+  /** The Issue's most recent Event Summary, or null when it holds none. */
+  latestEventOf(projectId: ProjectId, issueId: IssueId): Promise<EventSummary | null>;
+  /** Applies a Tracker Event to the Issue and its External Link; `appActor` is the App's own login, for no echo. */
+  recordTrackerEvent(
+    projectId: ProjectId,
+    tracked: { issueId: IssueId; event: TrackerEvent; appActor: string; at: number },
+  ): Promise<IssueChange[] | Refusal>;
+  /** Saves a tracker comment marked for the reporter as a shared Comment by the Member its author maps to. */
+  addTrackerComment(
+    projectId: ProjectId,
+    comment: { issueId: IssueId; author: Member; text: string; at: number },
+  ): Promise<IssueChange[] | Refusal>;
+  /** Resolves the Issue the Short Id counter names, pending the Commit keyed `commit`. */
+  resolveByCommit(projectId: ProjectId, fix: { shortId: number; commit: string; at: number }): Promise<IssueChange[] | Refusal>;
+  /** Names the Release in every pending Resolution that waits for the Commit keyed `commit`. */
+  recordCommitShipped(projectId: ProjectId, shipped: { commit: string; release: Release; at: number }): Promise<IssueChange[]>;
 }

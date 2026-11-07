@@ -15,7 +15,8 @@ import type { TrustedIssuer } from '../../src/domain/signin/sign-in.js';
 import type { AccessTokenRecord } from '../../src/domain/tenancy/access-token.js';
 import type { Release } from '../../src/domain/release/ordering.js';
 import { normalizedDebugId, type Artifact, type ArtifactQuery } from '../../src/domain/sourcemap/artifact.js';
-import type { ControlStore, Membership, ReferenceEntry } from '../../src/ports/control-store.js';
+import type { ControlStore, Membership, ReferenceEntry, LinkEntry } from '../../src/ports/control-store.js';
+import type { Repository } from '../../src/domain/tracker/external-link.js';
 
 /** An Artifact index entry with the Organization it belongs to. */
 export type IndexedArtifact = { readonly organizationId: OrganizationId; readonly artifact: Artifact };
@@ -39,6 +40,10 @@ export class FakeControlStore implements ControlStore {
   readonly #owners = new Map<ProjectId, string[]>();
   readonly #members = new Map<ProjectId, string[]>();
   readonly #settings = new Map<string, NotificationSettings>();
+  readonly #repositories = new Map<Repository, OrganizationId>();
+  readonly #linkEntries = new Map<string, LinkEntry>();
+  readonly #trackerAccounts = new Map<string, Member>();
+  readonly #slugs = new Map<string, ProjectId>();
 
   /** Adds a Project to an Organization, creating the Organization if needed. */
   addProject(organizationId: OrganizationId, projectId: ProjectId): void {
@@ -217,5 +222,55 @@ export class FakeControlStore implements ControlStore {
         (query.release !== null && artifact.release === query.release) ||
         (artifact.debugId !== null && debugIds.has(plain(artifact.debugId))),
     );
+  }
+
+  // --- task-011: Code and GitHub ---
+
+  /** Connects the Repository to the Organization through its installed app. */
+  connectRepository(organizationId: OrganizationId, repository: Repository): void {
+    this.#repositories.set(repository, organizationId);
+  }
+
+  /** Maps a tracker account to a Member of the Organization. */
+  mapTrackerAccount(organizationId: OrganizationId, login: string, member: Member): void {
+    this.#trackerAccounts.set(`${organizationId}/${login.toLowerCase()}`, member);
+  }
+
+  /** Gives the Project the slug its Short Ids carry. */
+  addProjectSlug(projectId: ProjectId, slug: string): void {
+    const organizationId = this.#projects.get(projectId);
+    if (organizationId !== undefined) this.#slugs.set(`${organizationId}/${slug.toUpperCase()}`, projectId);
+  }
+
+  async isRepositoryConnected(connection: { organizationId: OrganizationId; repository: Repository }): Promise<boolean> {
+    return this.#repositories.get(connection.repository) === connection.organizationId;
+  }
+
+  async organizationOfRepository(repository: Repository): Promise<OrganizationId | null> {
+    return this.#repositories.get(repository) ?? null;
+  }
+
+  async disconnectRepositories(repositories: readonly Repository[]): Promise<void> {
+    repositories.forEach((repository) => this.#repositories.delete(repository));
+  }
+
+  async putLinkEntry(entry: LinkEntry): Promise<void> {
+    this.#linkEntries.set(`${entry.repository}#${entry.number}`, entry);
+  }
+
+  async findLinkEntry(issue: { repository: Repository; number: number }): Promise<LinkEntry | null> {
+    return this.#linkEntries.get(`${issue.repository}#${issue.number}`) ?? null;
+  }
+
+  async linkEntriesIn(repositories: readonly Repository[]): Promise<readonly LinkEntry[]> {
+    return [...this.#linkEntries.values()].filter((entry) => repositories.includes(entry.repository));
+  }
+
+  async memberOfTrackerAccount(account: { organizationId: OrganizationId; login: string }): Promise<Member | null> {
+    return this.#trackerAccounts.get(`${account.organizationId}/${account.login.toLowerCase()}`) ?? null;
+  }
+
+  async projectOfSlug(slug: { organizationId: OrganizationId; slug: string }): Promise<ProjectId | null> {
+    return this.#slugs.get(`${slug.organizationId}/${slug.slug.toUpperCase()}`) ?? null;
   }
 }
