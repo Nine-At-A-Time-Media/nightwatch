@@ -219,4 +219,19 @@ export class ProjectDO extends DurableObject<CoreEnv> implements ProjectClient {
   searchPage(projectId: ProjectId, plan: SearchPlan, context: SearchContext): Promise<IssuePage> {
     return steps.searchPageStep(this.#runtime, projectId, { plan, context });
   }
+
+  // --- task-027: assignment and Report moves ---
+
+  assignIssue(
+    projectId: ProjectId,
+    issueId: IssueId,
+    assignee: Assignee | null,
+    actor: Member | 'system',
+  ): Promise<IssueChange[] | Refusal> {
+    return steps.assignIssueStep(this.#runtime, projectId, { issueId, assignee, actor });
+  }
+
+  moveReport(projectId: ProjectId, move: { reportId: ReportId; to: IssueId; actor: Member }): Promise<Report | Refusal> {
+    return steps.moveReportStep(this.#runtime, projectId, move);
+  }
 }

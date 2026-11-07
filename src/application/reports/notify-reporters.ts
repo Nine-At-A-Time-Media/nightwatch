@@ -105,7 +105,8 @@ async function factsOf(scope: { projectId: ProjectId; organizationId: Organizati
   const comments = await projects.commentsOn(scope.projectId, issue.issueId);
   const releasesSeen = await projects.releasesSeen(scope.projectId);
   const externalLink = await projects.externalLinkOf(scope.projectId, issue.issueId);
-  return { ...scope, issue, externalLink, comments, facts: { triage: triageOf(comments), releasesSeen } };
+  const assignee = await projects.assigneeOf(scope.projectId, issue.issueId);
+  return { ...scope, issue, externalLink, comments, facts: { triage: triageOf(comments, assignee), releasesSeen } };
 }
 
 // --- exports ---

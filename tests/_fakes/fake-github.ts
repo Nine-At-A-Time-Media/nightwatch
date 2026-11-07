@@ -5,11 +5,14 @@
  * public key, mints installation tokens that expire after an hour on the
  * injected clock, checks each issue call's token belongs to the Repository
  * owner's installation, and keeps issues and comments per Repository.
+ * Files put with `putFile` are served by the contents API and blamed by the
+ * GraphQL endpoint, with the same installation-token check.
  * Every request is recorded for request-shape assertions. `refusing` makes
  * every issue call answer with that HTTP status.
  */
 
 import { jwtVerify } from 'jose';
+import type { HostedFile } from './fake-code-host.js';
 
 export type RecordedRequest = {
   readonly method: string;
@@ -27,6 +30,7 @@ const ACCESS_TOKENS = /^\/app\/installations\/(\d+)\/access_tokens$/;
 const ISSUES = /^\/repos\/([^/]+)\/([^/]+)\/issues$/;
 const ISSUE = /^\/repos\/([^/]+)\/([^/]+)\/issues\/(\d+)$/;
 const COMMENTS = /^\/repos\/([^/]+)\/([^/]+)\/issues\/(\d+)\/comments$/;
+const CONTENTS = /^\/repos\/([^/]+)\/([^/]+)\/contents\/(.+)$/;
 
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -41,6 +45,7 @@ export class FakeGitHub {
   readonly #installations: Readonly<Record<string, number>>;
   readonly #tokens = new Map<string, { installation: number; expiresAt: number }>();
   readonly #issues = new Map<string, Issue[]>();
+  readonly #files = new Map<string, HostedFile>();
   #minted = 0;
 
   /** `installations` maps a Repository owner to the id of the App's installation on it. */
@@ -69,8 +74,53 @@ export class FakeGitHub {
       body,
     });
     if (url.origin !== 'https://api.github.com') return json(404, { message: 'Not Found' });
-    return this.#route(request.method, url.pathname, request.headers.get('authorization') ?? '', body);
+    const authorization = request.headers.get('authorization') ?? '';
+    if (url.pathname === '/graphql' && request.method === 'POST') return this.#graphql(authorization, body);
+    const contents = CONTENTS.exec(url.pathname);
+    if (contents && request.method === 'GET')
+      return this.#contents(authorization, { match: contents, ref: url.searchParams.get('ref') ?? '' });
+    return this.#route(request.method, url.pathname, authorization, body);
   };
+
+  /** Puts a file, with its text and blame ranges, in a Repository at a ref. */
+  putFile(file: HostedFile): void {
+    this.#files.set(`${file.repository}@${file.ref}:${file.path}`, file);
+  }
+
+  #contents(authorization: string, request: { match: RegExpExecArray; ref: string }): Response {
+    const [, owner = '', name = '', path = ''] = request.match;
+    if (!this.#tokenAllows(authorization, owner)) return json(401, { message: 'Bad credentials' });
+    if (this.refusing !== null) return json(this.refusing, { message: 'Refused' });
+    const file = this.#files.get(`${owner}/${name}@${request.ref}:${decodeURIComponent(path)}`);
+    if (!file) return json(404, { message: 'Not Found' });
+    const content = Buffer.from(file.text, 'utf8').toString('base64');
+    return json(200, { type: 'file', encoding: 'base64', content: content.replace(/.{60}/g, '$&\n') });
+  }
+
+  #graphql(authorization: string, body: unknown): Response {
+    const variables = (typeof body === 'object' && body !== null && 'variables' in body ? body.variables : {}) as Record<string, string>;
+    const { owner = '', name = '', ref = '', path = '' } = variables;
+    if (!this.#tokenAllows(authorization, owner)) return json(401, { message: 'Bad credentials' });
+    if (this.refusing !== null) return json(this.refusing, { message: 'Refused' });
+    const hasRef = [...this.#files.values()].some((file) => file.repository === `${owner}/${name}` && file.ref === ref);
+    if (!hasRef) return json(200, { data: { repository: { object: null } } });
+    const file = this.#files.get(`${owner}/${name}@${ref}:${path}`);
+    if (!file)
+      return json(200, { data: { repository: { object: { blame: null } } }, errors: [{ type: 'NOT_FOUND', message: 'no such path' }] });
+    const ranges = file.blame.map((range) => ({
+      startingLine: range.startingLine,
+      endingLine: range.endingLine,
+      commit: {
+        oid: range.commit.hash,
+        committedDate: new Date(range.commit.at).toISOString(),
+        author: {
+          email: range.commit.author.email ?? '',
+          user: range.commit.author.login === null ? null : { login: range.commit.author.login },
+        },
+      },
+    }));
+    return json(200, { data: { repository: { object: { blame: { ranges } } } } });
+  }
 
   async #route(method: string, path: string, authorization: string, body: unknown): Promise<Response> {
     const installation = INSTALLATION.exec(path);

@@ -17,6 +17,7 @@ import type { NotificationSettings } from '../domain/alerts/notification-setting
 import type { Durability } from '../domain/ingest/arrival.js';
 import type { IssueId, OrganizationId, ProjectId, ReportId } from '../domain/ids.js';
 import type { Member } from '../domain/issue/state.js';
+import type { OwnershipConfig } from '../domain/ownership/config.js';
 import type { ProcessingConfig } from '../domain/processing/processing.js';
 import type { TrustedIssuer } from '../domain/signin/sign-in.js';
 import type { AccessTokenRecord } from '../domain/tenancy/access-token.js';
@@ -115,6 +116,14 @@ export interface ControlStore {
   memberOfTrackerAccount(account: { organizationId: OrganizationId; login: string }): Promise<Member | null>;
   /** The Project of the Organization whose Short Ids carry the slug (any case), or null. */
   projectOfSlug(slug: { organizationId: OrganizationId; slug: string }): Promise<ProjectId | null>;
+  // --- task-030: owner suggestions ---
+
+  /** The Project's Ownership Rules, Code Mappings and auto-assign setting; none set reads as NO_OWNERSHIP_CONFIG. */
+  ownershipConfig(projectId: ProjectId): Promise<OwnershipConfig>;
+  /** The Member of the Organization with the address (any case), or null when none has it. */
+  memberOfAddress(account: { organizationId: OrganizationId; email: string }): Promise<Member | null>;
+  /** The Team a tracker team (`org/team`, any case) maps to in the Organization, or null when it maps to none. */
+  teamOfTrackerTeam(account: { organizationId: OrganizationId; slug: string }): Promise<string | null>;
 }
 
 /** Where an External Link's tracker issue points in Nightwatch. */

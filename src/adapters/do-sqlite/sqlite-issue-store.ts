@@ -534,6 +534,28 @@ export class SqliteIssueStore implements IssueStore {
     for (const reportId of reportIds) this.#sql.exec("DELETE FROM filings WHERE json_extract(filing, '$.reportId') = ?", reportId);
   }
 
+  // --- task-027: Assignee writes and Report moves ---
+
+  async setAssignee(issueId: IssueId, assignee: Assignee | null): Promise<void> {
+    if (assignee === null) this.#sql.exec('DELETE FROM assignees WHERE issue_id = ?', issueId);
+    else {
+      this.#sql.exec(
+        'INSERT INTO assignees (issue_id, assignee) VALUES (?1, ?2) ON CONFLICT (issue_id) DO UPDATE SET assignee = excluded.assignee',
+        issueId,
+        JSON.stringify(assignee),
+      );
+    }
+  }
+
+  async moveReport(move: { reportId: ReportId; to: IssueId }): Promise<void> {
+    this.#sql.exec(
+      `UPDATE reports SET issue_id = ?2, report = json_set(report, '$.issueId', ?2) WHERE report_id = ?1`,
+      move.reportId,
+      move.to,
+    );
+    this.#sql.exec('UPDATE comments SET issue_id = ?2 WHERE report_id = ?1', move.reportId, move.to);
+  }
+
   #one(query: string, ...bindings: SqlStorageValue[]): Row {
     return this.#sql.exec(query, ...bindings).one();
   }

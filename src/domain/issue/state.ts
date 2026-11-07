@@ -68,9 +68,10 @@ export type Member = { readonly member: string };
 
 /**
  * `merge` and `split` changes name the Issue the Events came from and the one
- * they went to; a `comment` change names the Comment saved, never its text.
+ * they went to; a `comment` change names the Comment saved, never its text;
+ * an `assignee` change names the Assignee before and after (src/domain/issue/assignee).
  */
-export type IssueChangeKind = 'status' | 'priority' | 'resolution' | 'for_review' | 'merge' | 'split' | 'comment';
+export type IssueChangeKind = 'status' | 'priority' | 'resolution' | 'for_review' | 'merge' | 'split' | 'comment' | 'assignee';
 
 /** One entry of an Issue's History. */
 export type IssueChange = {

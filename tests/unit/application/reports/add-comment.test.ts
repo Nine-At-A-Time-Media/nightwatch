@@ -45,10 +45,20 @@ describe('addComment', () => {
     expect(await threadOf(w, receipt.reference)).toEqual(before);
   });
 
+  it('makes the commenting Member a follower of the Issue (design Alerts and notifications, Subscriptions)', async () => {
+    const w = world();
+    const receipt = await filed(w, ADA);
+    await commentOnReport(w, receipt.reportId, { text: 'probably the cache', shared: false });
+    const issueId = (await w.projects.store(PROJECT).getReport(receipt.reportId))?.issueId ?? '';
+
+    expect(await w.projects.participationsOf(PROJECT, issueId)).toEqual([{ member: member.member, reason: 'commented' }]);
+  });
+
   it('saves nothing on an Issue the Project does not hold', async () => {
     const w = world();
     const issues = w.projects.store(PROJECT);
     expect(await addComment('issue-404', { text: 'hello', shared: true }, member, { issues, effects: w.effects, clock: w.clock, ids: w.ids })).toEqual([]);
     expect(await issues.commentsOn('issue-404')).toEqual([]);
+    expect(await issues.participationsOf('issue-404')).toEqual([]);
   });
 });

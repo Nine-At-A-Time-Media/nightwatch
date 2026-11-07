@@ -124,4 +124,15 @@ export interface ProjectClient {
 
   /** The Project's page of a search: its Issues matching the plan, after its Cursor, in sort order, up to its limit. */
   searchPage(projectId: ProjectId, plan: SearchPlan, context: SearchContext): Promise<IssuePage>;
+  // --- task-027: assignment and Report moves ---
+
+  /** Calls the ProjectDO use case assignIssue: a Member, or Nightwatch when the Project auto-assigns, sets the Assignee. */
+  assignIssue(
+    projectId: ProjectId,
+    issueId: IssueId,
+    assignee: Assignee | null,
+    actor: Member | 'system',
+  ): Promise<IssueChange[] | Refusal>;
+  /** Calls the ProjectDO use case moveReport: a Member moves the Report to another Issue; returns the Report as moved. */
+  moveReport(projectId: ProjectId, move: { reportId: ReportId; to: IssueId; actor: Member }): Promise<Report | Refusal>;
 }
