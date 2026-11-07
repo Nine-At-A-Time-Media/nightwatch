@@ -22,3 +22,24 @@ const SHORT_ID = new RegExp(`^${SHORT_ID_PATTERN}$`);
 export function isShortId(text: string): text is ShortId {
   return SHORT_ID.test(text);
 }
+
+// --- helpers ---
+
+const BASE32 = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+
+/** The Short Id for a Project's issue counter, e.g. slug `web`, counter 32 -> `WEB-10`. */
+export function formatShortId({ slug, counter }: { slug: string; counter: number }): ShortId {
+  let suffix = '';
+  let rest = counter;
+  do {
+    suffix = (BASE32[rest % 32] ?? '0') + suffix;
+    rest = Math.floor(rest / 32);
+  } while (rest > 0);
+  return `${slug.toUpperCase()}-${suffix}`;
+}
+
+/** The counter a Short Id names. */
+export function shortIdNumber(id: ShortId): number {
+  const suffix = id.slice(id.lastIndexOf('-') + 1);
+  return [...suffix].reduce((n, ch) => n * 32 + BASE32.indexOf(ch), 0);
+}
