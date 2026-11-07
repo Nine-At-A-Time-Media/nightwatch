@@ -131,7 +131,11 @@ async function assign(
   return deps.projects.assignEvent(projectId, placement.summary, [...placement.fingerprints]);
 }
 
-/** What follows an Assignment: a dropped Event's copy is deleted; a new one's changes are enqueued and its Summary archived. */
+/**
+ * What follows an Assignment: a dropped Event's copy is deleted; a new one's
+ * changes are enqueued and its Summary archived; a duplicate's were already,
+ * so nothing follows it.
+ */
 async function settle(
   placed: { assignment: Assignment; summary: EventSummary; item: EnvelopeItem },
   processing: Processing,
@@ -143,6 +147,7 @@ async function settle(
     const outcome = processingOutcome({ record: processing.record, type: item.header.type, kind: 'discarded', reason: 'tombstone' });
     return processingResult({ assignments: [assignment], outcomes: [outcome] });
   }
+  if (assignment.duplicate) return processingResult({ assignments: [assignment] });
   if (assignment.changes.length > 0) await deps.effects.enqueue(assignment.changes);
   await deps.archive.events(processing.record.projectId, [summary]);
   return processingResult({ assignments: [assignment] });
