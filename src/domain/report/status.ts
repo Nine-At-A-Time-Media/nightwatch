@@ -14,13 +14,14 @@
 import type { ReleaseFirstSeen } from '../release/ordering.js';
 import type { Resolution } from '../issue/resolution.js';
 import type { IssueState } from '../issue/state.js';
+import type { ExternalLink } from '../tracker/external-link.js';
+
+/** What Report Status needs of an External Link: only its place in State Machine: External Link. */
+type LinkStanding = Pick<ExternalLink, 'state'>;
 
 export const REPORT_STATUSES = ['received', 'acknowledged', 'fixed', 'released', 'closed'] as const;
 
 export type ReportStatus = (typeof REPORT_STATUSES)[number];
-
-/** The tie between an Issue and a GitHub issue, in its place in State Machine: External Link. */
-export type ExternalLink = { readonly state: 'linked' | 'broken' };
 
 /** Whether a Member has triaged an Issue by hand, other than by linking it externally. */
 export type IssueTriage = {
@@ -38,7 +39,7 @@ export type ReportStatusFacts = {
 
 // --- predicates ---
 
-function isTriaged(triage: IssueTriage, externalLink: ExternalLink | null): boolean {
+function isTriaged(triage: IssueTriage, externalLink: LinkStanding | null): boolean {
   return triage.assigned || triage.commentedByMember || externalLink !== null;
 }
 
@@ -49,7 +50,7 @@ function isReleaseSeen(resolution: Resolution, releasesSeen: ReleaseFirstSeen): 
 // --- exports ---
 
 /** The Report Status of every Report attached to `issue`. */
-export function reportStatusOf(issue: IssueState, externalLink: ExternalLink | null, facts: ReportStatusFacts): ReportStatus {
+export function reportStatusOf(issue: IssueState, externalLink: LinkStanding | null, facts: ReportStatusFacts): ReportStatus {
   switch (issue.status) {
     case 'unresolved':
       return issue.substatus === 'new' && !isTriaged(facts.triage, externalLink) ? 'received' : 'acknowledged';

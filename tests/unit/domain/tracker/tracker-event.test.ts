@@ -69,7 +69,7 @@ describe('Tracker Event to Issue command', () => {
   });
 
   it('a Broken link carries no change from GitHub', () => {
-    fc.assert(fc.property(anyEvent, (event) => expect(issueCommandFor(event, markBroken(linked))).toBe('none')));
+    fc.assert(fc.property(anyEvent, (event) => issueCommandFor(event, markBroken(linked)) === 'none'));
   });
 });
 
