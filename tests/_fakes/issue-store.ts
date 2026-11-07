@@ -6,6 +6,9 @@
  * and the Short Id counter are exposed for assertions.
  */
 
+import type { AlertFiring } from '../../src/domain/alerts/alert-firing.js';
+import type { Assignee } from '../../src/domain/alerts/issue-alert-rule.js';
+import type { Participation } from '../../src/domain/alerts/notification-settings.js';
 import type { Fingerprint } from '../../src/domain/grouping/fingerprint.js';
 import type { EventId, IssueId, ReportId } from '../../src/domain/ids.js';
 import type { AssignmentTarget, Tombstone } from '../../src/domain/issue/assignment.js';
@@ -37,6 +40,10 @@ export class FakeIssueStore implements IssueStore {
   readonly #reports = new Map<ReportId, Report>();
   readonly #comments: { issueId: IssueId; comment: Comment }[] = [];
   readonly #statusChanges = new Map<ReportId, ReportStatusChange[]>();
+  // --- task-021: Assignee, Alert Firings and follow participations ---
+  readonly #assignees = new Map<IssueId, Assignee>();
+  readonly #firings: AlertFiring[] = [];
+  readonly #participations: { issueId: IssueId; participation: Participation }[] = [];
 
   constructor(options: { dedupWindow: number; projectNormalRate?: number }) {
     this.#dedupWindow = options.dedupWindow;
@@ -232,5 +239,42 @@ export class FakeIssueStore implements IssueStore {
 
   async #eventsSince(range: { issueId: IssueId; since: number }): Promise<readonly GroupedEvent[]> {
     return (await this.eventsOf(range.issueId)).filter((event) => event.summary.at >= range.since);
+  }
+
+  // --- task-021: Assignee, Alert Firings and follow participations ---
+
+  /** Test helper: sets the Issue's Assignee, as a triage action would. */
+  setAssignee(issueId: IssueId, assignee: Assignee | null): void {
+    if (assignee === null) this.#assignees.delete(issueId);
+    else this.#assignees.set(issueId, assignee);
+  }
+
+  async assigneeOf(issueId: IssueId): Promise<Assignee | null> {
+    return this.#assignees.get(issueId) ?? null;
+  }
+
+  async lastFiring(key: { ruleId: string; issueId: IssueId }): Promise<AlertFiring | null> {
+    const firings = this.#firings.filter((firing) => firing.ruleId === key.ruleId && firing.issueId === key.issueId);
+    return firings.reduce<AlertFiring | null>((latest, firing) => (latest === null || firing.at >= latest.at ? firing : latest), null);
+  }
+
+  async recordFiring(firing: AlertFiring): Promise<void> {
+    const index = this.#firings.findIndex(
+      (kept) => kept.ruleId === firing.ruleId && kept.issueId === firing.issueId && kept.at === firing.at,
+    );
+    if (index === -1) this.#firings.push(firing);
+    else this.#firings[index] = firing;
+  }
+
+  async firingsOf(ruleId: string): Promise<readonly AlertFiring[]> {
+    return this.#firings.filter((firing) => firing.ruleId === ruleId);
+  }
+
+  async participationsOf(issueId: IssueId): Promise<readonly Participation[]> {
+    return this.#participations.filter((held) => held.issueId === issueId).map((held) => held.participation);
+  }
+
+  async addParticipation(issueId: IssueId, participation: Participation): Promise<void> {
+    this.#participations.push({ issueId, participation });
   }
 }
