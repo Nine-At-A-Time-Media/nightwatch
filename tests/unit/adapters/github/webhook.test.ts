@@ -6,7 +6,7 @@ const SECRET = 'webhook-secret-for-tests';
 
 async function signatureOf(secret: string, body: Uint8Array): Promise<string> {
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, body));
+  const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, Uint8Array.from(body)));
   return `sha256=${Buffer.from(mac).toString('hex')}`;
 }
 
