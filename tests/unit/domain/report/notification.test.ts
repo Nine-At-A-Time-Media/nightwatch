@@ -52,7 +52,11 @@ describe('Reporter Notification', () => {
   });
 
   it('Duplicate reports share outcome: Given two Reports moved onto one issue, When that issue is resolved, Then both Reports become Fixed and both reporters are notified', () => {
-    const facts = { triage: { assigned: true, commentedByMember: false }, releasesSeen: new Map<string, number>(), lastShown: 'acknowledged' as const };
+    const facts = {
+      triage: { assigned: true, commentedByMember: false },
+      releasesSeen: new Map<string, number>(),
+      lastShown: 'acknowledged' as const,
+    };
     const before = reportStatusOf(issueIn({ status: 'unresolved', substatus: 'ongoing' }), null, facts);
     const after = reportStatusOf(issueIn({ status: 'resolved', resolution: { kind: 'plain' } }), null, facts);
     const first = reportOf();
