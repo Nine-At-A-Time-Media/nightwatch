@@ -19,6 +19,7 @@ import type { Fingerprint } from '../domain/grouping/fingerprint.js';
 import type { IssueId, ProjectId, ReportId } from '../domain/ids.js';
 import type { Assignment } from '../domain/issue/assignment.js';
 import type { IssueChange, IssueState, Member } from '../domain/issue/state.js';
+import type { TriageAction } from '../domain/issue/triage.js';
 import type { Refusal } from '../domain/refusal.js';
 import type { Environment, Session, SessionCounts, UserCounts } from '../domain/release/health.js';
 import type { Release, ReleaseFirstSeen } from '../domain/release/ordering.js';
@@ -135,4 +136,19 @@ export interface ProjectClient {
   ): Promise<IssueChange[] | Refusal>;
   /** Calls the ProjectDO use case moveReport: a Member moves the Report to another Issue; returns the Report as moved. */
   moveReport(projectId: ProjectId, move: { reportId: ReportId; to: IssueId; actor: Member }): Promise<Report | Refusal>;
+  // --- task-038: triage, merge, split, discard ---
+
+  /** Calls the ProjectDO use case triageIssue: a Member resolves, archives, unarchives, unresolves, sets Priority or marks reviewed. */
+  triageIssue(projectId: ProjectId, issueId: IssueId, action: TriageAction, actor: Member): Promise<IssueChange[] | Refusal>;
+  /** Calls the ProjectDO use case mergeIssues: the sources' Fingerprints and Events move to the target. */
+  mergeIssues(projectId: ProjectId, merge: { target: IssueId; sources: IssueId[]; actor: Member }): Promise<IssueChange[] | Refusal>;
+  /** Calls the ProjectDO use case splitIssue: the chosen Fingerprints and their Events move to a new Issue. */
+  splitIssue(
+    projectId: ProjectId,
+    split: { issueId: IssueId; fingerprints: Fingerprint[]; actor: Member },
+  ): Promise<IssueChange[] | Refusal>;
+  /** Calls the ProjectDO use case discardIssue: the Issue is removed and a Tombstone keeps its Fingerprints. */
+  discardIssue(projectId: ProjectId, issueId: IssueId, actor: Member): Promise<IssueChange[] | Refusal>;
+  /** The Issue's Short Id counter in the Project, or null when the Project does not hold the Issue. */
+  shortIdOf(projectId: ProjectId, issueId: IssueId): Promise<number | null>;
 }

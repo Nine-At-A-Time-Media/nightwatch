@@ -20,6 +20,7 @@ import type { Fingerprint } from '../../domain/grouping/fingerprint.js';
 import type { IssueId, ProjectId, ReportId } from '../../domain/ids.js';
 import type { Assignment } from '../../domain/issue/assignment.js';
 import type { IssueChange, IssueState, Member } from '../../domain/issue/state.js';
+import type { TriageAction } from '../../domain/issue/triage.js';
 import type { Refusal } from '../../domain/refusal.js';
 import type { Environment, Session } from '../../domain/release/health.js';
 import type { Release, ReleaseFirstSeen } from '../../domain/release/ordering.js';
@@ -233,5 +234,30 @@ export class ProjectDO extends DurableObject<CoreEnv> implements ProjectClient {
 
   moveReport(projectId: ProjectId, move: { reportId: ReportId; to: IssueId; actor: Member }): Promise<Report | Refusal> {
     return steps.moveReportStep(this.#runtime, projectId, move);
+  }
+
+  // --- task-038: triage, merge, split, discard ---
+
+  triageIssue(projectId: ProjectId, issueId: IssueId, action: TriageAction, actor: Member): Promise<IssueChange[] | Refusal> {
+    return steps.triageIssueStep(this.#runtime, projectId, { issueId, action, actor });
+  }
+
+  mergeIssues(projectId: ProjectId, merge: { target: IssueId; sources: IssueId[]; actor: Member }): Promise<IssueChange[] | Refusal> {
+    return steps.mergeIssuesStep(this.#runtime, projectId, merge);
+  }
+
+  splitIssue(
+    projectId: ProjectId,
+    split: { issueId: IssueId; fingerprints: Fingerprint[]; actor: Member },
+  ): Promise<IssueChange[] | Refusal> {
+    return steps.splitIssueStep(this.#runtime, projectId, split);
+  }
+
+  discardIssue(projectId: ProjectId, issueId: IssueId, actor: Member): Promise<IssueChange[] | Refusal> {
+    return steps.discardIssueStep(this.#runtime, projectId, { issueId, actor });
+  }
+
+  shortIdOf(projectId: ProjectId, issueId: IssueId): Promise<number | null> {
+    return steps.shortIdOfStep(this.#runtime, projectId, issueId);
   }
 }

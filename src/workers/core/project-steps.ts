@@ -14,6 +14,10 @@ import type { IssuePage, SearchPlan } from '../../domain/search/page.js';
 import { claimedProject, claimProject, scheduleSweep } from '../../adapters/do-sqlite/project-identity.js';
 import { assignEvent } from '../../application/issues/assign-event.js';
 import { assignIssue } from '../../application/issues/assign-issue.js';
+import { discardIssue } from '../../application/issues/discard-issue.js';
+import { mergeIssues } from '../../application/issues/merge-issues.js';
+import { splitIssue } from '../../application/issues/split-issue.js';
+import { triageIssue } from '../../application/issues/triage-issue.js';
 import { recordReleaseSeen } from '../../application/issues/record-release-seen.js';
 import { sweepIssues } from '../../application/issues/sweep-issues.js';
 import { openMonitorIssue } from '../../application/monitors/open-monitor-issue.js';
@@ -38,6 +42,7 @@ import type { Fingerprint } from '../../domain/grouping/fingerprint.js';
 import type { IssueId, ProjectId, ReportId } from '../../domain/ids.js';
 import type { Assignment } from '../../domain/issue/assignment.js';
 import type { IssueChange, IssueState, Member } from '../../domain/issue/state.js';
+import type { TriageAction } from '../../domain/issue/triage.js';
 import type { GroupedEvent } from '../../domain/issue/tally.js';
 import type { Refusal } from '../../domain/refusal.js';
 import type { Environment, Session } from '../../domain/release/health.js';
@@ -368,4 +373,48 @@ export async function moveReportStep(
 ): Promise<Report | Refusal> {
   await claim(r, projectId);
   return moveReport(move.reportId, move.to, move.actor, { issues: r.issues });
+}
+
+// --- task-038: triage, merge, split, discard ---
+
+export async function triageIssueStep(
+  r: ProjectRuntime,
+  projectId: ProjectId,
+  triaging: { issueId: IssueId; action: TriageAction; actor: Member },
+): Promise<IssueChange[] | Refusal> {
+  await claim(r, projectId);
+  return triageIssue(triaging.issueId, triaging.action, triaging.actor, { issues: r.issues, effects: r.effects, clock: r.clock });
+}
+
+export async function mergeIssuesStep(
+  r: ProjectRuntime,
+  projectId: ProjectId,
+  merge: { target: IssueId; sources: IssueId[]; actor: Member },
+): Promise<IssueChange[] | Refusal> {
+  await claim(r, projectId);
+  return mergeIssues(merge.target, merge.sources, merge.actor, { issues: r.issues, blobs: r.blobs, effects: r.effects, clock: r.clock });
+}
+
+export async function splitIssueStep(
+  r: ProjectRuntime,
+  projectId: ProjectId,
+  split: { issueId: IssueId; fingerprints: Fingerprint[]; actor: Member },
+): Promise<IssueChange[] | Refusal> {
+  await claim(r, projectId);
+  return splitIssue(split.issueId, split.fingerprints, split.actor, { issues: r.issues, ids: r.ids, clock: r.clock });
+}
+
+/** The object passes its own Project, which keys the discarded Events' blobs. */
+export async function discardIssueStep(
+  r: ProjectRuntime,
+  projectId: ProjectId,
+  discard: { issueId: IssueId; actor: Member },
+): Promise<IssueChange[] | Refusal> {
+  await claim(r, projectId);
+  return discardIssue(discard.issueId, discard.actor, { projectId, issues: r.issues, blobs: r.blobs, clock: r.clock });
+}
+
+export async function shortIdOfStep(r: ProjectRuntime, projectId: ProjectId, issueId: IssueId): Promise<number | null> {
+  await claim(r, projectId);
+  return r.issues.shortIdOf(issueId);
 }

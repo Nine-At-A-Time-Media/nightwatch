@@ -7,10 +7,12 @@
  */
 
 import { SqliteIssueStore } from '../../adapters/do-sqlite/sqlite-issue-store.js';
+import { R2BlobStore } from '../../adapters/r2/r2-blob-store.js';
 import { QueueEffectQueue } from '../../adapters/queues/queue-effect-queue.js';
 import { RandomIds } from '../../adapters/runtime/random-ids.js';
 import { SystemClock } from '../../adapters/runtime/system-clock.js';
 import type { IssuePolicies } from '../../domain/issue/policies.js';
+import type { BlobStore } from '../../ports/blob-store.js';
 import type { Clock } from '../../ports/clock.js';
 import type { EffectQueue } from '../../ports/effect-queue.js';
 import type { Ids } from '../../ports/ids.js';
@@ -25,6 +27,8 @@ export type ProjectRuntime = {
   readonly policies: IssuePolicies;
   readonly storage: DurableObjectStorage;
   readonly sweepInterval: number;
+  /** task-038: where a discarded Issue's Event blobs are deleted. */
+  readonly blobs: BlobStore;
 };
 
 const LOCAL_STAGE = 'local';
@@ -76,5 +80,6 @@ export function projectRuntime({ storage, env }: { storage: DurableObjectStorage
     policies: issuePolicies(env),
     storage,
     sweepInterval: positive({ name: 'SWEEP_INTERVAL_MS', value: env.SWEEP_INTERVAL_MS }),
+    blobs: new R2BlobStore(env.BLOBS),
   };
 }

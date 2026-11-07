@@ -48,6 +48,13 @@ import type { Environment, Session } from '../../src/domain/release/health.js';
 import type { SearchContext } from '../../src/domain/search/match.js';
 import type { IssuePage, SearchPlan } from '../../src/domain/search/page.js';
 import { searchProjectPage } from '../../src/application/issues/search-project-page.js';
+import { discardIssue } from '../../src/application/issues/discard-issue.js';
+import { mergeIssues } from '../../src/application/issues/merge-issues.js';
+import { splitIssue } from '../../src/application/issues/split-issue.js';
+import { triageIssue } from '../../src/application/issues/triage-issue.js';
+import type { TriageAction } from '../../src/domain/issue/triage.js';
+import type { BlobStore } from '../../src/ports/blob-store.js';
+import { FakeBlobStore } from './fake-blob-store.js';
 import { FakeIssueStore } from './issue-store.js';
 
 /** `memberEmails` names each Member's address, as ProjectDO keeps an Assignee's address for search; a Member it lacks is searched by id. */
@@ -58,15 +65,19 @@ export type ProjectSide = {
   policies: IssuePolicies;
   dedupWindow: number;
   memberEmails?: ReadonlyMap<string, string>;
+  /** task-038: where discarded Events' blobs are deleted; an empty FakeBlobStore when not given. */
+  blobs?: BlobStore;
 };
 
 export class FakeProjectClient implements ProjectClient {
   readonly #side: ProjectSide;
   readonly #stores = new Map<ProjectId, FakeIssueStore>();
+  readonly #blobs: BlobStore;
 
   /** `side` is what the ProjectDO composition root would hand its use cases. */
   constructor(side: ProjectSide) {
     this.#side = side;
+    this.#blobs = side.blobs ?? new FakeBlobStore();
   }
 
   /** The Project's store, created empty on first use. */
@@ -293,5 +304,33 @@ export class FakeProjectClient implements ProjectClient {
 
   async moveReport(projectId: ProjectId, move: { reportId: ReportId; to: IssueId; actor: Member }): Promise<Report | Refusal> {
     return moveReport(move.reportId, move.to, move.actor, { issues: this.store(projectId) });
+  }
+
+  // --- task-038: triage, merge, split, discard ---
+
+  async triageIssue(projectId: ProjectId, issueId: IssueId, action: TriageAction, actor: Member): Promise<IssueChange[] | Refusal> {
+    const { clock, effects } = this.#side;
+    return triageIssue(issueId, action, actor, { issues: this.store(projectId), effects, clock });
+  }
+
+  async mergeIssues(projectId: ProjectId, merge: { target: IssueId; sources: IssueId[]; actor: Member }): Promise<IssueChange[] | Refusal> {
+    const { clock, effects } = this.#side;
+    return mergeIssues(merge.target, merge.sources, merge.actor, { issues: this.store(projectId), blobs: this.#blobs, effects, clock });
+  }
+
+  async splitIssue(
+    projectId: ProjectId,
+    split: { issueId: IssueId; fingerprints: Fingerprint[]; actor: Member },
+  ): Promise<IssueChange[] | Refusal> {
+    const { clock, ids } = this.#side;
+    return splitIssue(split.issueId, split.fingerprints, split.actor, { issues: this.store(projectId), ids, clock });
+  }
+
+  async discardIssue(projectId: ProjectId, issueId: IssueId, actor: Member): Promise<IssueChange[] | Refusal> {
+    return discardIssue(issueId, actor, { projectId, issues: this.store(projectId), blobs: this.#blobs, clock: this.#side.clock });
+  }
+
+  async shortIdOf(projectId: ProjectId, issueId: IssueId): Promise<number | null> {
+    return this.store(projectId).shortIdOf(issueId);
   }
 }
