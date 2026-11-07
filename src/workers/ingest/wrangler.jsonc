@@ -1,0 +1,33 @@
+// The ingest Worker -- the SDK ingest routes over admitArrival.
+// The top level is the local stage (architecture, Local development): it
+// declares no remote-only binding. Adopters add `nonprod` and `prod`
+// environment blocks and repeat every binding there; bindings do not inherit.
+{
+  "$schema": "../../../node_modules/wrangler/config-schema.json",
+  "name": "nightwatch-ingest",
+  "main": "index.ts",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": false,
+  "observability": { "enabled": true },
+  // LogDO (the K2 stand-in) and QuotaDO are hosted here until the core Worker
+  // lands (task-012); a cross-script binding needs a bundled auxiliary Worker
+  // under the Vitest plugin.
+  "durable_objects": {
+    "bindings": [
+      { "name": "LOG", "class_name": "LogDO" },
+      { "name": "QUOTA", "class_name": "QuotaDO" },
+    ],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["LogDO", "QuotaDO"] }],
+  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "nightwatch-blobs" }],
+  "kv_namespaces": [{ "binding": "PROJECT_CONFIG", "id": "nightwatch-project-config-local" }],
+  "vars": {
+    // Picks the local stand-ins (LogDO for K2, R2 NDJSON for the archive).
+    // Any other stage refuses every request until its real adapters exist.
+    "STAGE": "local",
+    // IngestSettings: bytes, then seconds.
+    "STREAM_RECORD_LIMIT": 1000000,
+    "RETRY_ADVICE_CEILING_SECONDS": 300,
+    "UNAVAILABLE_RETRY_SECONDS": 30,
+  },
+}

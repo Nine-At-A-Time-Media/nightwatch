@@ -10,3 +10,4 @@ tasks
 .claude
 .agents
 .codex
+**/worker-configuration.d.ts
