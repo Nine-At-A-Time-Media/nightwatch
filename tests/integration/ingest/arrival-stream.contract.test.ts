@@ -165,6 +165,25 @@ describe.each<{ name: string; make: (clock: FakeClock) => Log }>([
     expect(ids(await log.pull({ subscription: SUBSCRIPTION, workerId: 'w1', max: 10 }))).toEqual(['a']);
   });
 
+  it('each lease of a record counts one more delivery, so a consumer can bound its retries', async () => {
+    await log.subscribe({ subscription: SUBSCRIPTION, start: 'earliest' });
+    await appendAll(log, ['a']);
+    const first = await log.pull({ subscription: SUBSCRIPTION, workerId: 'w1', max: 10 });
+    await log.nack({ subscription: SUBSCRIPTION, workerId: 'w1', offsets: first.map((l) => l.offset) });
+    const second = await log.pull({ subscription: SUBSCRIPTION, workerId: 'w1', max: 10 });
+    clock.advance(LEASE_MS);
+    const third = await log.pull({ subscription: SUBSCRIPTION, workerId: 'w2', max: 10 });
+    expect([first, second, third].map((leased) => leased.map((l) => l.deliveries))).toEqual([[1], [2], [3]]);
+  });
+
+  it('delivery counts are kept per subscription', async () => {
+    await log.subscribe({ subscription: 'one', start: 'earliest' });
+    await log.subscribe({ subscription: 'two', start: 'earliest' });
+    await appendAll(log, ['a']);
+    await log.pull({ subscription: 'one', workerId: 'w1', max: 10 });
+    expect((await log.pull({ subscription: 'two', workerId: 'w1', max: 10 })).map((l) => l.deliveries)).toEqual([1]);
+  });
+
   it('pulling from a subscription that was never made delivers nothing', async () => {
     await appendAll(log, ['a']);
     expect(await log.pull({ subscription: 'nobody', workerId: 'w1', max: 10 })).toEqual([]);
