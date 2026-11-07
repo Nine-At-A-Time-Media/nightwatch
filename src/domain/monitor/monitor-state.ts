@@ -33,13 +33,16 @@ export type MonitorThresholds = { readonly failureThreshold: number; readonly re
 /** A monitor issue opening or resolving, at the time of the result that caused it. */
 export type MonitorChange = { readonly kind: 'issue-opened' | 'issue-resolved'; readonly at: number };
 
-/** missed, timeout (overlong) and error are a Cron Monitor's; down is an Uptime Monitor's. */
-export type FailureKind = 'missed' | 'timeout' | 'error' | 'down';
+/** missed, late, timeout (overlong) and error are a Cron Monitor's; down is an Uptime Monitor's. */
+export type FailureKind = 'missed' | 'late' | 'timeout' | 'error' | 'down';
 
-/** A missed, overlong, failed or down result, recorded once per expected run. */
+/** A missed, late, failed, overlong or down result, recorded once per expected run. */
 export type Failure = { readonly kind: FailureKind; readonly at: number; readonly reason: string | null };
 
 export type CountsStep = { readonly counts: MonitorCounts; readonly change: MonitorChange | null };
+
+/** What a monitor step returns: the next state, the monitor issue change it caused if any, and the Failures it recorded. */
+export type MonitorStep<State> = { readonly state: State; readonly change: MonitorChange | null; readonly failures: readonly Failure[] };
 
 export const INITIAL_MONITOR_COUNTS: MonitorCounts = { status: 'ok', consecutiveFailures: 0, consecutiveSuccesses: 0 };
 
