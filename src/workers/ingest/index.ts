@@ -3,11 +3,8 @@
  * It also hosts LogDO and QuotaDO until the core Worker lands.
  */
 
-import { DurableObject } from 'cloudflare:workers';
-
 export { LogDO } from './log-do.js';
-
-export class QuotaDO extends DurableObject<IngestEnv> {}
+export { QuotaDO } from './quota-do.js';
 
 export default {
   async fetch(): Promise<Response> {

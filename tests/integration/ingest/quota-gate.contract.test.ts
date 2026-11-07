@@ -15,7 +15,7 @@ import { FakeQuotaGate } from '../../_fakes/fake-quota-gate.js';
 type Limits = Record<string, Partial<Record<DataCategory, number>>>;
 
 const WINDOW_SECONDS = 60;
-const START = 1_700_000_040_000; // 40 seconds into a 60-second window
+const START = 1_700_000_080_000; // 40 seconds into a 60-second window
 
 const config: ProjectConfig = {
   clientKeys: [{ publicKey: 'k1', active: true }],
