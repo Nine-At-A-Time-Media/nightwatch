@@ -91,4 +91,19 @@ describe('<nightwatch-report> form', () => {
     expect(wrapper.get('[role="alert"]').text()).toBe('Too many reports right now, try again later.');
     expect(wrapper.find('[data-testid="report-sent"]').exists()).toBe(false);
   });
+  it("Failed send is visible: Given Nightwatch is unreachable, When the reporter submits in Nightwatch's form, Then the form says the Report was not sent", async () => {
+    const { wrapper, sender } = mountForm([new TypeError('Failed to fetch'), receipt]);
+    await openWith(wrapper, 'Totals are wrong');
+    await submit(wrapper);
+
+    expect(wrapper.get('[role="alert"]').text()).toBe('Your report was not sent.');
+    expect((wrapper.get('[data-testid="report-message"]').element as HTMLTextAreaElement).value).toBe('Totals are wrong');
+    expect(wrapper.find('[data-testid="report-sent"]').exists()).toBe(false);
+
+    await wrapper.get('[data-testid="report-retry"]').trigger('click');
+    await flushPromises();
+
+    expect(sender.calls.map((call) => call.submission.message)).toEqual(['Totals are wrong', 'Totals are wrong']);
+    expect(wrapper.get('[data-testid="report-reference"]').text()).toBe('NW-7K2Q');
+  });
 });
