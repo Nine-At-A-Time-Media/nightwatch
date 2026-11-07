@@ -27,3 +27,4 @@ with the first code that uses them.
 | Worker tests | @cloudflare/vitest-plugin | proposed | Replaces the deprecated `@cloudflare/vitest-pool-workers` fleet row. |
 | JWT | jose | proposed | Access assertion verification; the local issuer. |
 | Source maps | @jridgewell/trace-mapping | proposed | Pure lookup used by the source-map domain. |
+| Inbound mail | postal-mime | proposed | MIME parse of reply-by-email messages in the email adapter (inbound-mail Worker). |
