@@ -16,10 +16,14 @@ import type { IssueId, ProjectId, ReportId } from '../domain/ids.js';
 import type { Assignment } from '../domain/issue/assignment.js';
 import type { IssueChange, IssueState, Member } from '../domain/issue/state.js';
 import type { Refusal } from '../domain/refusal.js';
+import type { Environment, Session, SessionCounts, UserCounts } from '../domain/release/health.js';
 import type { Release, ReleaseFirstSeen } from '../domain/release/ordering.js';
 import type { Report, Reporter } from '../domain/report/report.js';
 import type { SpamVerdict } from '../domain/report/spam.js';
 import type { Comment, ReporterComment, ReportStatusChange } from '../domain/report/thread.js';
+
+/** A release and environment's Session counts and user counts, as the Project holds them. */
+export type SessionTotals = { readonly sessions: SessionCounts; readonly users: UserCounts };
 
 export interface ProjectClient {
   // --- ProjectDO use cases and steps ---
@@ -45,4 +49,10 @@ export interface ProjectClient {
   commentsOn(projectId: ProjectId, issueId: IssueId): Promise<readonly Comment[]>;
   getIssue(projectId: ProjectId, issueId: IssueId): Promise<IssueState | null>;
   releasesSeen(projectId: ProjectId): Promise<ReleaseFirstSeen>;
+
+  // --- task-022: Sessions for Release Health ---
+
+  /** Counts one Session in the Project's per-minute counters; processing calls it once per Session. */
+  recordSession(projectId: ProjectId, session: Session): Promise<void>;
+  sessionTotals(projectId: ProjectId, scope: { release: Release; environment: Environment }): Promise<SessionTotals>;
 }

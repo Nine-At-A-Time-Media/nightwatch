@@ -26,7 +26,9 @@ import type { Comment, ReporterComment, ReportStatusChange } from '../../src/dom
 import type { Clock } from '../../src/ports/clock.js';
 import type { EffectQueue } from '../../src/ports/effect-queue.js';
 import type { Ids } from '../../src/ports/ids.js';
-import type { ProjectClient } from '../../src/ports/project-client.js';
+import type { ProjectClient, SessionTotals } from '../../src/ports/project-client.js';
+import { recordSession } from '../../src/application/releases/record-session.js';
+import type { Environment, Session } from '../../src/domain/release/health.js';
 import { FakeIssueStore } from './issue-store.js';
 
 export type ProjectSide = { clock: Clock; ids: Ids; effects: EffectQueue; policies: IssuePolicies; dedupWindow: number };
@@ -106,5 +108,16 @@ export class FakeProjectClient implements ProjectClient {
 
   async releasesSeen(projectId: ProjectId): Promise<ReleaseFirstSeen> {
     return this.store(projectId).releaseFirstSeen();
+  }
+
+  // --- task-022: Sessions for Release Health ---
+
+  async recordSession(projectId: ProjectId, session: Session): Promise<void> {
+    return recordSession(session, { issues: this.store(projectId) });
+  }
+
+  async sessionTotals(projectId: ProjectId, scope: { release: Release; environment: Environment }): Promise<SessionTotals> {
+    const store = this.store(projectId);
+    return { sessions: await store.sessionCounts(scope), users: await store.sessionUsers(scope) };
   }
 }
