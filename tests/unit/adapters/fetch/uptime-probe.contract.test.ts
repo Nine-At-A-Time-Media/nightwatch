@@ -91,7 +91,7 @@ describe('FetchUptimeProbe', () => {
     expect(await timedOut.check(HEALTHY)).toMatchObject({ status: 'down', reason: 'timeout' });
   });
 
-  it('counts a redirect it was not led through, and a client error, as down', async () => {
+  it('counts a client error as down', async () => {
     const clock = new FakeClock(T0);
     const probe = new FetchUptimeProbe({ fetch: fakeFetch(clock, { [HEALTHY]: 404 }), clock, timeout: 10_000 });
     expect(await probe.check(HEALTHY)).toMatchObject({ status: 'down', reason: 'status 404' });
