@@ -1,8 +1,9 @@
 // The ingest Worker end to end in workerd: a real SDK request against SELF,
-// with the Project's config seeded in KV, ends as an Arrival Record in the
+// with the Project's config seeded in D1 (the local stage reads it there
+// directly), ends as an Arrival Record in the
 // LogDO arrival log, or as the refusal its Admission names.
-import { env, SELF } from 'cloudflare:test';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { applyD1Migrations, env, SELF } from 'cloudflare:test';
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { LogArrivalStream } from '../../../src/adapters/logdo/log-arrival-stream.js';
 import type { ArrivalRecord } from '../../../src/domain/ingest/arrival.js';
 import { serializeEnvelope } from '../../../src/domain/protocol/envelope.js';
@@ -31,7 +32,12 @@ async function seedProject(quotas?: object): Promise<void> {
     inboundFilters: { browserExtensions: false, localhost: false, webCrawlers: false, releases: [], messages: [], addresses: [] },
     ...(quotas ? { quotas } : {}),
   };
-  await env.PROJECT_CONFIG.put(project, JSON.stringify(config));
+  const organization = `org-${project}`;
+  await env.CONTROL.batch([
+    env.CONTROL.prepare('INSERT OR IGNORE INTO organizations (organization_id) VALUES (?)').bind(organization),
+    env.CONTROL.prepare('INSERT OR IGNORE INTO projects (project_id, organization_id) VALUES (?, ?)').bind(project, organization),
+    env.CONTROL.prepare('INSERT OR REPLACE INTO project_configs (project_id, config) VALUES (?, ?)').bind(project, JSON.stringify(config)),
+  ]);
 }
 
 function post(path: string, init: { body: BodyInit; headers?: Record<string, string> }): Promise<Response> {
@@ -50,6 +56,10 @@ async function gzip(bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuf
   const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
+
+beforeAll(async () => {
+  await applyD1Migrations(env.CONTROL, env.TEST_MIGRATIONS);
+});
 
 beforeEach(async () => {
   project = String(Math.floor(Math.random() * 1e9));
@@ -84,9 +94,20 @@ describe('ingest Worker', () => {
     expect(response.status).toBe(200);
   });
 
-  it('a cron check-in with its key in the path is acknowledged', async () => {
+  it('a cron check-in with its key in the path is acknowledged and forwarded to the monitors Worker', async () => {
     const response = await post(`/api/${project}/cron/nightly/k-live/`, { body: JSON.stringify({ status: 'ok' }) });
     expect(response.status).toBe(200);
+    expect(JSON.parse((await env.PROJECT_CONFIG.get(`forwarded-check-in:${project}`)) ?? 'null')).toEqual({
+      projectId: project,
+      monitorId: 'nightly',
+      status: 'ok',
+    });
+  });
+
+  it('a refused check-in is not forwarded', async () => {
+    const response = await post(`/api/${project}/cron/nightly/k-off/`, { body: JSON.stringify({ status: 'ok' }) });
+    expect(response.status).toBe(401);
+    expect(await env.PROJECT_CONFIG.get(`forwarded-check-in:${project}`)).toBeNull();
   });
 
   it('a disabled key is refused 401 and nothing is acknowledged', async () => {

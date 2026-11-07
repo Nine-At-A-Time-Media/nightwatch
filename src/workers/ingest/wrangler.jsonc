@@ -21,6 +21,18 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["LogDO", "QuotaDO"] }],
   "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "nightwatch-blobs" }],
   "kv_namespaces": [{ "binding": "PROJECT_CONFIG", "id": "nightwatch-project-config-local" }],
+  // The control plane. The local stage reads Project config here directly
+  // (D1 is its truth); a deployed stage reads the KV copy the console writes.
+  "d1_databases": [
+    {
+      "binding": "CONTROL",
+      "database_name": "nightwatch-control",
+      "database_id": "nightwatch-control-local",
+      "migrations_dir": "../../../migrations",
+    },
+  ],
+  // Admitted HTTP cron check-ins go on to MonitorDO in the monitors Worker.
+  "services": [{ "binding": "MONITORS", "service": "nightwatch-monitors" }],
   "vars": {
     // Picks the local stand-ins (LogDO for K2, R2 NDJSON for the archive).
     // Any other stage refuses every request until its real adapters exist.

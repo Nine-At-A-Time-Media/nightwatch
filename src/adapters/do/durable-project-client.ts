@@ -4,6 +4,11 @@
  * Project's object is the one named by its Project id, so every call goes to
  * idFromName(projectId) and names the Project again, which the object checks
  * against the Project it holds.
+ *
+ * `lastProject` names the Project the most recent call went to. A request
+ * that reaches one Project (filing a Report, a reporter's reply) uses it to
+ * name that Project beside the Issue Changes the call returned, which do not
+ * carry it (QueueEffectQueue).
  */
 
 import type { SearchContext } from '../../domain/search/match.js';
@@ -18,6 +23,7 @@ import type { IssueId, ProjectId, ReportId } from '../../domain/ids.js';
 import type { Assignment } from '../../domain/issue/assignment.js';
 import type { IssueChange, IssueState, Member } from '../../domain/issue/state.js';
 import type { Refusal } from '../../domain/refusal.js';
+import type { Expiry, RetentionPolicy } from '../../domain/retention/retention.js';
 import type { Environment, Session } from '../../domain/release/health.js';
 import type { Release, ReleaseFirstSeen } from '../../domain/release/ordering.js';
 import type { RecordedFiling } from '../../domain/report/filing.js';
@@ -41,7 +47,15 @@ export class DurableProjectClient implements ProjectClient {
     this.#namespace = namespace;
   }
 
+  #lastProject: ProjectId | null = null;
+
+  /** The Project the most recent call went to; null before any call. */
+  lastProject(): ProjectId | null {
+    return this.#lastProject;
+  }
+
   #project(projectId: ProjectId): ProjectClient {
+    this.#lastProject = projectId;
     return this.#namespace.get(this.#namespace.idFromName(projectId));
   }
 
@@ -221,5 +235,11 @@ export class DurableProjectClient implements ProjectClient {
 
   moveReport(projectId: ProjectId, move: { reportId: ReportId; to: IssueId; actor: Member }): Promise<Report | Refusal> {
     return this.#project(projectId).moveReport(projectId, move);
+  }
+
+  // --- task-034: retention from the scheduler ---
+
+  enforceRetention(projectId: ProjectId, retention: RetentionPolicy): Promise<Expiry> {
+    return this.#project(projectId).enforceRetention(projectId, retention);
   }
 }

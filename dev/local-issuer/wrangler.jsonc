@@ -1,0 +1,13 @@
+// The local issuer -- the development stand-in for Cloudflare Access
+// (architecture, Sign-in and Local development). Local stage only: it is
+// never deployed. The console reaches it over its LOCAL_ISSUER service
+// binding; ISSUER_URL is the issuer the local Organization trusts.
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "nightwatch-local-issuer",
+  "main": "worker.ts",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": false,
+  "kv_namespaces": [{ "binding": "ISSUER_KEYS", "id": "nightwatch-local-issuer-keys" }],
+  "vars": { "ISSUER_URL": "http://local-issuer.localhost" },
+}

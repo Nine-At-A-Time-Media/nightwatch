@@ -2,13 +2,13 @@
  * The ingest Worker's wiring: the one place that names the concrete adapter
  * behind each port admitArrival takes, and reads the ingest settings from the
  * Worker's vars. The local stage runs on the stand-ins (LogDO for K2, R2
- * NDJSON for Basin); no other stage has its adapters yet, so any other stage
+ * NDJSON for Basin, a direct D1 read for the KV copy of Project config); no other stage has its adapters yet, so any other stage
  * is refused rather than silently given a stand-in.
  */
 
 import type { AdmitArrivalDeps } from '../../application/admit-arrival.js';
 import { DurableQuotaGate } from '../../adapters/do/durable-quota-gate.js';
-import { KvProjectConfigSource } from '../../adapters/kv/kv-project-config-source.js';
+import { D1ProjectConfigSource } from '../../adapters/d1/d1-project-config-source.js';
 import { LogArrivalStream } from '../../adapters/logdo/log-arrival-stream.js';
 import { R2BlobStore } from '../../adapters/r2/r2-blob-store.js';
 import { R2NdjsonArchiveSink } from '../../adapters/r2-ndjson/r2-ndjson-archive-sink.js';
@@ -51,7 +51,8 @@ export function isLocalStage(env: IngestBindings): boolean {
 export function ingestDeps(env: IngestBindings): AdmitArrivalDeps {
   const clock = new SystemClock();
   const ids = new RandomIds();
-  const config = new KvProjectConfigSource(env.PROJECT_CONFIG);
+  // Local stage: Project config is read from D1 directly, its truth; the KV copy is for deployed stages.
+  const config = new D1ProjectConfigSource(env.CONTROL);
   return {
     config,
     quota: new DurableQuotaGate({ limits: config, counterFor: (projectId) => env.QUOTA.getByName(projectId), clock }),

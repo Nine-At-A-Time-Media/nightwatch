@@ -19,6 +19,9 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ProjectDO"] }],
   // Issue Changes leave ProjectDO on the effects queue.
   "queues": { "producers": [{ "binding": "EFFECTS", "queue": "nightwatch-effects" }] },
+  // Retention deletes the removed Events' and Reports' blobs from the bucket
+  // ingest and processing write (task-034).
+  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "nightwatch-blobs" }],
   "vars": {
     // Any other stage refuses to build a ProjectDO until its adapters exist.
     "STAGE": "local",
