@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fileReport } from '../../../../src/application/reports/file-report.js';
+import { replyAsReporter } from '../../../../src/application/reports/reply-as-reporter.js';
 import { openExternalIssue } from '../../../../src/application/tracker/open-external-issue.js';
 import { pushIssueChange } from '../../../../src/application/tracker/push-issue-change.js';
 import { archive, resolve, unresolve } from '../../../../src/domain/issue/commands.js';
@@ -132,6 +133,40 @@ describe('pushIssueChange', () => {
     expect(sent).not.toContain(ADA);
     expect(sent).not.toContain('blank page');
     for (const key of report.attachments) expect(sent).not.toContain(key);
+  });
+
+  it("posts nothing for a Member's Comment, and counts a refused reply post toward the link becoming Broken", async () => {
+    const w = world();
+    const receipt = await filed(w, ADA);
+    const issueId = (await w.projects.getReport(PROJECT, receipt.reportId))?.issueId ?? '';
+    await linked(w, issueId);
+    w.effects.enqueued.length = 0;
+    await w.projects.addComment(PROJECT, issueId, { text: 'looking', shared: true }, member);
+    await pushAll(w, w.effects.enqueued);
+    expect(w.tracker.calls.map((call) => call.kind)).toEqual(['openIssue']);
+
+    w.effects.enqueued.length = 0;
+    await replyAsReporter(receipt.reference, { text: 'still broken' }, assertionOf(ADA), w);
+    w.tracker.refusing = { refusal: 'tracker_refused' };
+    await pushAll(w, w.effects.enqueued);
+
+    expect(await w.projects.externalLinkOf(PROJECT, issueId)).toMatchObject({ state: 'linked', refusals: 1 });
+  });
+
+  it('posts a reply to a Broken link never, and breaks the link when its Repository is no longer connected', async () => {
+    const w = world();
+    const receipt = await filed(w, ADA);
+    const issueId = (await w.projects.getReport(PROJECT, receipt.reportId))?.issueId ?? '';
+    await linked(w, issueId);
+    await w.control.disconnectRepositories([REPOSITORY]);
+    w.effects.enqueued.length = 0;
+    await replyAsReporter(receipt.reference, { text: 'still broken' }, assertionOf(ADA), w);
+
+    await pushAll(w, w.effects.enqueued);
+    await pushAll(w, w.effects.enqueued);
+
+    expect(w.tracker.calls.map((call) => call.kind)).toEqual(['openIssue']);
+    expect(await w.projects.externalLinkOf(PROJECT, issueId)).toMatchObject({ state: 'broken' });
   });
 
   it('pushes nothing for a change that came from the tracker, or for an Issue with no External Link', async () => {
