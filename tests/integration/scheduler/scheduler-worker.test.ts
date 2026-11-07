@@ -1,9 +1,10 @@
 // The scheduler Worker in workerd: its Cron Trigger walks every Project in
 // D1 and runs retention in each Project's ProjectDO, then compares Platform
 // Usage (nothing is measured on the local stage).
-import { applyD1Migrations, createExecutionContext, createScheduledController, env, waitOnExecutionContext } from 'cloudflare:test';
+import { applyD1Migrations, createScheduledController, env } from 'cloudflare:test';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { DurableProjectClient } from '../../../src/adapters/do/durable-project-client.js';
+import type { EventSummary } from '../../../src/domain/event/event-summary.js';
 import type { Assignment } from '../../../src/domain/issue/assignment.js';
 import scheduler from '../../../src/workers/scheduler/index.js';
 
@@ -17,7 +18,16 @@ function issueIdOf(assignment: Assignment): string {
 }
 
 function assign(projectId: string, eventId: string, at: number): Promise<Assignment> {
-  const summary = { eventId, at, release: null, environment: 'production', level: 'error', userKey: null, title: eventId, culprit: null };
+  const summary: EventSummary = {
+    eventId,
+    at,
+    release: null,
+    environment: 'production',
+    level: 'error',
+    userKey: null,
+    title: eventId,
+    culprit: null,
+  };
   return projects().assignEvent(projectId, summary, [`fp-${eventId}`]);
 }
 
@@ -30,9 +40,7 @@ async function seedProject(): Promise<string> {
 }
 
 async function tick(): Promise<void> {
-  const ctx = createExecutionContext();
-  await scheduler.scheduled(createScheduledController({ scheduledTime: Date.now(), cron: '17 3 * * *' }), env, ctx);
-  await waitOnExecutionContext(ctx);
+  await scheduler.scheduled(createScheduledController({ scheduledTime: Date.now(), cron: '17 3 * * *' }), env);
 }
 
 beforeAll(async () => {
