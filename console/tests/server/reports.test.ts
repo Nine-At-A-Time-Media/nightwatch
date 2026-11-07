@@ -26,6 +26,15 @@ function reportRequest(fields: Record<string, string | Blob>, assertion: string 
   return new Request('https://console.example/api/report', { method: 'POST', body: form, headers });
 }
 
+/** A filing that carries its Assertion in the CF_Authorization cookie, as the dev sign-in leaves it. */
+function cookieRequest(): Request {
+  const form = new FormData();
+  form.set('project', PROJECT);
+  form.set('message', 'hello');
+  const headers = { cookie: `theme=dark; CF_Authorization=${assertionOf(ADA)}` };
+  return new Request('https://console.example/api/report', { method: 'POST', body: form, headers });
+}
+
 function get(path: string, assertion: string | null): Request {
   return new Request(`https://console.example${path}`, { headers: assertion === null ? {} : { [HEADER]: assertion } });
 }
@@ -112,19 +121,8 @@ describe('POST /api/report', () => {
   });
 
   it('reads the CF_Authorization cookie only where the stage allows it', async () => {
-    const request = () =>
-      new Request('https://console.example/api/report', {
-        method: 'POST',
-        body: (() => {
-          const form = new FormData();
-          form.set('project', PROJECT);
-          form.set('message', 'hello');
-          return form;
-        })(),
-        headers: { cookie: `theme=dark; CF_Authorization=${assertionOf(ADA)}` },
-      });
-    expect((await handleFileReport(request(), entry(world(), false))).status).toBe(401);
-    expect((await handleFileReport(request(), entry(world(), true))).status).toBe(201);
+    expect((await handleFileReport(cookieRequest(), entry(world(), false))).status).toBe(401);
+    expect((await handleFileReport(cookieRequest(), entry(world(), true))).status).toBe(201);
   });
 });
 

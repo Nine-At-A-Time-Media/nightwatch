@@ -46,6 +46,8 @@ describe('local issuer routes', () => {
     const restored = await LocalIssuer.restore(ISSUER, await original.privateJwk());
     const assertion = await restored.mint({ email: 'ada@example.com', aud: AUDIENCE, ttlSeconds: 600, issuedAt: NOW });
     expect(restored.jwks).toEqual(original.jwks);
-    expect(await verifierFor(original).verify(assertion, [{ issuer: ISSUER, audiences: [AUDIENCE] }])).toMatchObject({ email: 'ada@example.com' });
+    expect(await verifierFor(original).verify(assertion, [{ issuer: ISSUER, audiences: [AUDIENCE] }])).toMatchObject({
+      email: 'ada@example.com',
+    });
   });
 });

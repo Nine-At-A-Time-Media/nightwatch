@@ -1,12 +1,13 @@
 /**
  * Local issuer -- the development and test stand-in for Cloudflare Access
  * (architecture, Sign-in and Local development). It holds an RS256 key pair
- * generated on creation, publishes the public half as a JWKS, and mints
+ * generated on creation (or restored from a saved private key, so one checkout
+ * keeps one issuer), publishes the public half as a JWKS, and mints
  * assertions shaped like Access application tokens. Pure TypeScript; the
- * Worker that serves it in the dev session wraps this module.
+ * Worker that serves it in the dev session (worker.ts) wraps this module.
  */
 
-import { exportJWK, generateKeyPair, SignJWT, type CryptoKey, type JSONWebKeySet } from 'jose';
+import { exportJWK, generateKeyPair, importJWK, SignJWT, type CryptoKey, type JSONWebKeySet, type JWK } from 'jose';
 
 const ALGORITHM = 'RS256';
 const KEY_ID = 'local-issuer-1';
@@ -20,6 +21,13 @@ export type MintOptions = {
 };
 
 // --- helpers ---
+
+/** The public members of an RSA JWK; the private ones (d, p, q, dp, dq, qi) are left out. */
+function publicJwkOf(jwk: JWK): JWK {
+  const { kty, n, e } = jwk;
+  if (kty !== 'RSA' || n === undefined || e === undefined) throw new Error('the saved local issuer key is not an RSA key');
+  return { kty, n, e, kid: KEY_ID, alg: ALGORITHM, use: 'sig' };
+}
 
 function audienceList(aud: string | readonly string[]): string[] {
   return typeof aud === 'string' ? [aud] : [...aud];
@@ -45,6 +53,18 @@ export class LocalIssuer {
     const { publicKey, privateKey } = await generateKeyPair(ALGORITHM, { extractable: true });
     const jwk = { ...(await exportJWK(publicKey)), kid: KEY_ID, alg: ALGORITHM, use: 'sig' };
     return new LocalIssuer({ issuer, jwks: { keys: [jwk] }, privateKey });
+  }
+
+  /** The issuer at `issuer` signing with a private key saved earlier with `privateJwk()`. */
+  static async restore(issuer: string, privateJwk: JWK): Promise<LocalIssuer> {
+    const privateKey = await importJWK(privateJwk, ALGORITHM, { extractable: true });
+    if (privateKey instanceof Uint8Array) throw new Error('the saved local issuer key is not an RSA private key');
+    return new LocalIssuer({ issuer, jwks: { keys: [publicJwkOf(privateJwk)] }, privateKey });
+  }
+
+  /** The private key as a JWK, for saving and restoring this issuer. */
+  privateJwk(): Promise<JWK> {
+    return exportJWK(this.#privateKey);
   }
 
   /** Mints an Access-shaped assertion for `email`, valid for `ttlSeconds` from `issuedAt`. */
