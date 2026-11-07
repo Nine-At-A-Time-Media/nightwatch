@@ -9,6 +9,7 @@ import type { Durability } from '../../src/domain/ingest/arrival.js';
 import type { OrganizationId, ProjectId, ReportId } from '../../src/domain/ids.js';
 import type { Member } from '../../src/domain/issue/state.js';
 import type { TrustedIssuer } from '../../src/domain/signin/sign-in.js';
+import type { AccessTokenRecord } from '../../src/domain/tenancy/access-token.js';
 import type { ControlStore, Membership, ReferenceEntry } from '../../src/ports/control-store.js';
 
 export class FakeControlStore implements ControlStore {
@@ -19,6 +20,8 @@ export class FakeControlStore implements ControlStore {
   readonly #issuers = new Map<OrganizationId, TrustedIssuer[]>();
   readonly #projectMembers = new Map<ProjectId, Set<string>>();
   readonly #memberships = new Map<string, Membership>();
+  // --- task-022: Access Tokens by hash, exposed for assertions ---
+  readonly accessTokens = new Map<string, AccessTokenRecord>();
 
   /** Adds a Project to an Organization, creating the Organization if needed. */
   addProject(organizationId: OrganizationId, projectId: ProjectId): void {
@@ -86,5 +89,17 @@ export class FakeControlStore implements ControlStore {
     [...this.references].filter(([, entry]) => entry.reportId === reportId).forEach(([hash]) => this.references.delete(hash));
     this.unsubscribed.delete(reportId);
     return { ok: true };
+  }
+
+  // --- task-022: Access Tokens, kept only as hashes ---
+
+  async putAccessToken(hash: string, record: AccessTokenRecord): Promise<Durability> {
+    if (this.failure) return { ok: false, retryable: this.failure.retryable };
+    this.accessTokens.set(hash, record);
+    return { ok: true };
+  }
+
+  async findAccessToken(hash: string): Promise<AccessTokenRecord | null> {
+    return this.accessTokens.get(hash) ?? null;
   }
 }
