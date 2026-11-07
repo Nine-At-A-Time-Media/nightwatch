@@ -321,4 +321,57 @@ describe('admitArrival', () => {
     const retained = parseEnvelope(deps.stream.records[0]!.body!);
     expect(!isRefusal(retained) && retained.items.map((i) => i.header.type)).toEqual(['event']);
   });
+
+  it('Durable before acknowledged: Given storage is unavailable, When an SDK sends, Then Nightwatch refuses with retry advice and does not acknowledge', async () => {
+    const deps = makeDeps();
+    deps.stream.failure = { retryable: true };
+    const admission = await admitArrival(arrival(), deps);
+
+    expect(admission).toMatchObject({ decision: 'refused', status: 503 });
+    expect(admission.retryAdvice).toEqual([
+      { retryAfterSeconds: settings.unavailableRetrySeconds, categories: [], scope: 'project', reason: 'storage-unavailable' },
+    ]);
+    expect(admission.outcomes).toEqual([outcome('discarded', 'storage-unavailable', 'error')]);
+    expect(admission.outcomes.some((o) => o.kind === 'accepted')).toBe(false);
+    expect(deps.archive.archived).toEqual(admission.outcomes);
+  });
+
+  it('Durable before acknowledged: a failure retrying cannot fix is refused without retry advice', async () => {
+    const deps = makeDeps();
+    deps.stream.failure = { retryable: false };
+    const admission = await admitArrival(arrival(), deps);
+
+    expect(admission).toMatchObject({ decision: 'refused', status: 500, retryAdvice: [] });
+    expect(admission.outcomes).toEqual([outcome('discarded', 'storage-unavailable', 'error')]);
+  });
+
+  it('Durable before acknowledged: a body over the stream record limit is stored in the BlobStore first, and the record carries its key', async () => {
+    const deps = makeDeps();
+    const body = envelope([{ type: 'event', payload: { message: 'x'.repeat(settings.streamRecordLimit) } }]);
+    const admission = await admitArrival(arrival({ body }), deps);
+
+    expect(admission.decision).toBe('admitted');
+    const record = deps.stream.records[0]!;
+    expect(record.body).toBeNull();
+    expect(record.blobKey).toBe(`raw/${PROJECT}/${record.id}`);
+    expect(await deps.blobs.get(record.blobKey!)).toEqual(body);
+  });
+
+  it('Durable before acknowledged: an attachment always goes to the BlobStore', async () => {
+    const deps = makeDeps();
+    const admission = await admitArrival(arrival({ endpoint: 'attachment', body: enc('small') }), deps);
+
+    expect(admission.outcomes).toEqual([outcome('accepted', null, 'attachment')]);
+    expect(deps.stream.records[0]!.blobKey).toBe(`raw/${PROJECT}/${deps.stream.records[0]!.id}`);
+  });
+
+  it('Durable before acknowledged: when the BlobStore is unavailable nothing reaches the stream', async () => {
+    const deps = makeDeps();
+    deps.blobs.failure = { retryable: true };
+    const admission = await admitArrival(arrival({ endpoint: 'attachment', body: enc('small') }), deps);
+
+    expect(admission).toMatchObject({ decision: 'refused', status: 503 });
+    expect(admission.outcomes).toEqual([outcome('discarded', 'storage-unavailable', 'attachment')]);
+    expect(deps.stream.records).toHaveLength(0);
+  });
 });
