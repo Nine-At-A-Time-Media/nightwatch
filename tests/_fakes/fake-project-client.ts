@@ -7,6 +7,7 @@
  */
 
 import { openReportIssue } from '../../src/application/reports/open-report-issue.js';
+import { eraseReports } from '../../src/application/reports/erase-reports.js';
 import { markSpam } from '../../src/application/reports/mark-spam.js';
 import { recordReply } from '../../src/application/reports/record-reply.js';
 import { assignEvent } from '../../src/application/issues/assign-event.js';
@@ -68,6 +69,10 @@ export class FakeProjectClient implements ProjectClient {
 
   async recordReply(projectId: ProjectId, comment: ReporterComment): Promise<IssueChange[] | Refusal> {
     return recordReply(comment, { issues: this.store(projectId) });
+  }
+
+  async eraseReports(projectId: ProjectId, reporter: Reporter): Promise<readonly Report[]> {
+    return eraseReports(reporter, { issues: this.store(projectId) });
   }
 
   async recordShownStatus(projectId: ProjectId, reportId: ReportId, change: ReportStatusChange): Promise<void> {

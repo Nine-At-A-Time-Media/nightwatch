@@ -31,6 +31,8 @@ export interface ProjectClient {
   markSpam(projectId: ProjectId, reportId: ReportId, actor: Member | SpamVerdict): Promise<IssueChange[]>;
   /** Saves a Reporter's reply on the Issue its Report is attached to. */
   recordReply(projectId: ProjectId, comment: ReporterComment): Promise<IssueChange[] | Refusal>;
+  /** Removes the Reporter's Reports with their replies and shown statuses; returns the Reports removed. */
+  eraseReports(projectId: ProjectId, reporter: Reporter): Promise<readonly Report[]>;
   /** Records a change of the Report Status the Reporter is shown. */
   recordShownStatus(projectId: ProjectId, reportId: ReportId, change: ReportStatusChange): Promise<void>;
 
