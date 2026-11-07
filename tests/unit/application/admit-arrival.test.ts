@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { admitArrival } from '../../../src/application/admit-arrival.js';
 import type { Arrival, IngestSettings, ProjectConfig } from '../../../src/domain/ingest/arrival.js';
-import { serializeEnvelope } from '../../../src/domain/protocol/envelope.js';
+import { parseEnvelope, serializeEnvelope } from '../../../src/domain/protocol/envelope.js';
+import { isRefusal } from '../../../src/domain/refusal.js';
 import { FakeArchiveSink } from '../../_fakes/fake-archive-sink.js';
 import { FakeArrivalStream } from '../../_fakes/fake-arrival-stream.js';
 import { FakeBlobStore } from '../../_fakes/fake-blob-store.js';
@@ -170,5 +171,39 @@ describe('admitArrival', () => {
 
     const allowed = await admitArrival(arrival({ origin: 'https://app.example' }), deps);
     expect(allowed.decision).toBe('admitted');
+  });
+
+  it('An oversized arrival is refused: Given an arrival over a size limit, When it is sent, Then Nightwatch refuses it and records an invalid Outcome', async () => {
+    const deps = makeDeps({
+      configs: { [PROJECT]: projectConfig({ sizeLimits: { event: 200_000, attachment: 1_000_000, arrival: 50 } }) },
+    });
+    const admission = await admitArrival(arrival(), deps);
+
+    expect(admission).toMatchObject({ decision: 'refused', status: 413 });
+    expect(admission.outcomes).toEqual([outcome('invalid', 'too-large', 'default')]);
+    expect(deps.stream.records).toHaveLength(0);
+    expect(deps.archive.archived).toEqual(admission.outcomes);
+  });
+
+  it('An oversized arrival is refused: an event over the Event size limit is refused', async () => {
+    const deps = makeDeps({
+      configs: { [PROJECT]: projectConfig({ sizeLimits: { event: 10, attachment: 1_000_000, arrival: 2_000_000 } }) },
+    });
+    const admission = await admitArrival(arrival({ endpoint: 'store', body: enc('{"message":"far too long"}') }), deps);
+
+    expect(admission).toMatchObject({ decision: 'refused', status: 413 });
+    expect(admission.outcomes).toEqual([outcome('invalid', 'too-large', 'error')]);
+    expect(deps.stream.records).toHaveLength(0);
+  });
+
+  it('An oversized arrival is refused: an oversize item is dropped and the rest of the envelope is retained', async () => {
+    const deps = makeDeps({ configs: { [PROJECT]: projectConfig({ sizeLimits: { event: 200_000, attachment: 5, arrival: 2_000_000 } }) } });
+    const body = envelope([errorItem, { type: 'attachment', payload: 'far too long' }]);
+    const admission = await admitArrival(arrival({ body }), deps);
+
+    expect(admission.decision).toBe('admitted');
+    expect(admission.outcomes).toEqual([outcome('accepted', null, 'error'), outcome('invalid', 'too-large', 'attachment')]);
+    const retained = parseEnvelope(deps.stream.records[0]!.body!);
+    expect(!isRefusal(retained) && retained.items.map((i) => i.header.type)).toEqual(['event']);
   });
 });

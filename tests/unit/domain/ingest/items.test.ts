@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import type { Arrival, EndpointKind } from '../../../../src/domain/ingest/arrival.js';
-import { arrivalEnvelope, classifyItem } from '../../../../src/domain/ingest/items.js';
+import { arrivalEnvelope, classifyItem, isOversizeArrival, keptBody, triageItems } from '../../../../src/domain/ingest/items.js';
+import { parseEnvelope, type Envelope } from '../../../../src/domain/protocol/envelope.js';
 import { isRefusal } from '../../../../src/domain/refusal.js';
 
 const enc = (s: string) => new TextEncoder().encode(s);
@@ -69,5 +70,51 @@ describe('classifyItem', () => {
         expect(['in', 'out', 'unknown']).toContain(classifyItem(type).scope);
       }),
     );
+  });
+});
+
+const limits = { event: 10, attachment: 20, arrival: 30 };
+
+const envelopeOf = (text: string): Envelope => {
+  const env = parseEnvelope(enc(text));
+  if (isRefusal(env)) throw new Error(env.refusal);
+  return env;
+};
+
+describe('size limits', () => {
+  it('an Arrival is oversize only when its body exceeds the Arrival size limit', () => {
+    expect(isOversizeArrival({ arrival: arrival('envelope', 'x'.repeat(30)), limits })).toBe(false);
+    expect(isOversizeArrival({ arrival: arrival('envelope', 'x'.repeat(31)), limits })).toBe(true);
+  });
+
+  it('an item over its limit is invalid as too-large; attachments use the Attachment size limit', () => {
+    const env = envelopeOf(
+      ['{}', '{"type":"event"}', '1234567890', '{"type":"event"}', '12345678901', '{"type":"attachment"}', '12345678901'].join('\n'),
+    );
+    const fates = triageItems({ envelope: env, limits });
+    expect(fates.map((f) => [f.category, f.verdict])).toEqual([
+      ['error', null],
+      ['error', { kind: 'invalid', reason: 'too-large' }],
+      ['attachment', null],
+    ]);
+  });
+});
+
+describe('keptBody', () => {
+  it('is the body as received when every item is kept', () => {
+    const text = '{"event_id":"e"}\n{"type":"event"}\n{}\n';
+    const a = arrival('envelope', text);
+    const env = envelopeOf(text);
+    expect(keptBody({ arrival: a, envelope: env, fates: triageItems({ envelope: env, limits }) })).toBe(a.body);
+  });
+
+  it('is the envelope header and only the kept items when some item was dropped', () => {
+    const text = '{"event_id":"e"}\n{"type":"event"}\n12345678901\n{"type":"session"}\n{}\n';
+    const env = envelopeOf(text);
+    const fates = triageItems({ envelope: env, limits });
+    const kept = parseEnvelope(keptBody({ arrival: arrival('envelope', text), envelope: env, fates }));
+    if (isRefusal(kept)) throw new Error(kept.refusal);
+    expect(kept.header).toEqual({ event_id: 'e' });
+    expect(kept.items.map((i) => i.header.type)).toEqual(['session']);
   });
 });
