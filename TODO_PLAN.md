@@ -20,21 +20,21 @@
 
 ## Where Things Stand
 
-The domain core is in place and tested: protocol, sign-in, grouping,
-issue lifecycle, ingest admission, event processing, reports, tracker,
-alerts, monitors and search (`src/domain/`). Use cases exist for
-admission and the issue lifecycle (`src/application/`). The ingest
-Worker runs on local Wrangler with the `LogDO` stand-in for K2, R2, KV
-and Durable Object adapters (`src/workers/ingest`, `pnpm dev`). Report
-use cases and the report widget are in flight.
+Nightwatch runs end to end on local Wrangler with no Cloudflare account:
+`pnpm dev` starts every Worker (ingest, core, processor, notifier, github,
+inbound-mail, monitors, scheduler, the console, and the local issuer and
+fake GitHub stand-ins), and `pnpm test:e2e` drives an SDK envelope through
+ingest, the `LogDO` arrival log, the pump and processing into `ProjectDO`.
+The domain, use cases and adapters cover every design Behaviors row; the
+remaining tasks are gaps the agents reported while building them.
 
 ## Now
 
-- task-009 -- report use cases; defines `ProjectClient` and `ControlStore`.
-- task-020 -- the report widget.
-- task-008 -- processArrival over the processing domain; needs task-009's ports.
-- task-012 -- the core Worker (`ProjectDO`, `LogDO`, `QuotaDO`) and the pump.
-- task-011 -- GitHub sync use cases over the tracker domain.
+- task-038 -- triage actions end to end (in flight).
+- task-026, task-036 -- processing gaps and the Outcome double count (in flight).
+- task-039 -- alert signals per Event and the GitHub alert action.
+- task-040 -- Issue Changes name their Project.
+- task-037 -- reprocessing past the dedup window (needs replace-derived-state).
 
 ## Blockers
 
