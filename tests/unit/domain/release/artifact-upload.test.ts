@@ -15,6 +15,10 @@ describe('parseArtifactUpload', () => {
     expect(parseArtifactUpload(upload({ release: null, debugId: 'abc' }))).toEqual(upload({ release: null, debugId: 'abc' }));
   });
 
+  it('keeps a debug id in normalized form, so the index finds it however it was written', () => {
+    expect(parseArtifactUpload(upload({ debugId: 'C0FFEE00-1111-2222' }))).toEqual(upload({ debugId: 'c0ffee0011112222' }));
+  });
+
   it('refuses an upload with no release and no debug id, no file name, or no content', () => {
     expect(parseArtifactUpload(upload({ release: null }))).toEqual({ refusal: 'artifact-unplaced' });
     expect(parseArtifactUpload(upload({ release: '' }))).toEqual({ refusal: 'artifact-unplaced' });

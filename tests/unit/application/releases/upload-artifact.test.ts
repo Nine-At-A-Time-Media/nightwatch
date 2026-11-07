@@ -3,7 +3,7 @@ import { uploadArtifact } from '../../../../src/application/releases/upload-arti
 import type { Frame } from '../../../../src/domain/normalize/normalized-event.js';
 import { isRefusal } from '../../../../src/domain/refusal.js';
 import { artifactKey, type ArtifactUpload } from '../../../../src/domain/release/artifact-upload.js';
-import { matchArtifact } from '../../../../src/domain/sourcemap/artifact.js';
+import { matchArtifact, normalizedDebugId } from '../../../../src/domain/sourcemap/artifact.js';
 import { CI_TOKEN_SCOPES } from '../../../../src/domain/tenancy/access-token.js';
 import { issueToken, ORG, OTHER_ORG, world } from './world.js';
 
@@ -37,7 +37,7 @@ describe('uploadArtifact', () => {
     const artifact = await uploadArtifact(sourceMap({ release: null, debugId }), ci, w);
     if (isRefusal(artifact)) throw new Error(artifact.refusal);
 
-    const indexed = await w.control.findArtifacts({ organizationId: ORG, debugIds: [debugId.toLowerCase()], release: null });
+    const indexed = await w.control.findArtifacts({ organizationId: ORG, debugIds: [normalizedDebugId(debugId)], release: null });
     const debugImages = [{ type: 'sourcemap', debugId: debugId.toLowerCase(), codeFile: BUNDLE_URL }];
     expect(matchArtifact(frame, { debugImages, release: null }, indexed)).toEqual(artifact);
   });
