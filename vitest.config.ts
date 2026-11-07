@@ -96,6 +96,22 @@ export default defineConfig({
           testTimeout: 10_000,
         },
       },
+      {
+        plugins: [
+          cloudflareTest(async () => ({
+            remoteBindings: false,
+            main: './tests/integration/scheduler/worker.ts',
+            wrangler: { configPath: './src/workers/scheduler/wrangler.jsonc' },
+            additionalExports: { ProjectDO: 'DurableObject' },
+            miniflare: { ...HOSTED_PROJECT_DO, bindings: { ...CORE_VARS, TEST_MIGRATIONS: await readD1Migrations('./migrations') } },
+          })),
+        ],
+        test: {
+          name: 'integration-scheduler',
+          include: ['tests/integration/scheduler/**/*.test.ts'],
+          testTimeout: 10_000,
+        },
+      },
       'widget/vitest.config.ts',
     ],
   },
