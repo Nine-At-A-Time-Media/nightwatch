@@ -13,6 +13,7 @@ set -euo pipefail
 
 readonly WORKER_CONFIGS=(
   "src/workers/ingest/wrangler.jsonc"
+  "src/workers/core/wrangler.jsonc"
 )
 
 # --- helpers ---

@@ -9,9 +9,9 @@
   "compatibility_date": "2026-11-01",
   "workers_dev": false,
   "observability": { "enabled": true },
-  // LogDO (the K2 stand-in) and QuotaDO are hosted here until the core Worker
-  // lands (task-012); a cross-script binding needs a bundled auxiliary Worker
-  // under the Vitest plugin.
+  // LogDO (the K2 stand-in) and QuotaDO are hosted here, not in the core
+  // Worker: a cross-script binding needs a bundled auxiliary Worker under the
+  // Vitest plugin (task-028 kept them here).
   "durable_objects": {
     "bindings": [
       { "name": "LOG", "class_name": "LogDO" },

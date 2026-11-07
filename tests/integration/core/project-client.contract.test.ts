@@ -62,6 +62,16 @@ function issueIdOf(assignment: object): string {
   return assignment.issueId;
 }
 
+/** The message a call over RPC failed with; awaited inside try so the RPC promise is consumed once. */
+async function failureOf(call: () => Promise<unknown>): Promise<string> {
+  try {
+    await call();
+    return 'no failure';
+  } catch (error) {
+    return String(error);
+  }
+}
+
 const project = () => `project-${crypto.randomUUID()}`;
 
 // --- subjects ---
@@ -173,11 +183,11 @@ describe('ProjectDO', () => {
   it('an object answers for the Project it was first named for, and refuses another', async () => {
     const projectId = project();
     await client().getIssue(projectId, 'issue-1');
-    await expect(stubOf(projectId).getIssue(project(), 'issue-1')).rejects.toThrow(/project/);
+    expect(await failureOf(() => stubOf(projectId).getIssue(project(), 'issue-1'))).toMatch(/holds project/);
   });
 
   it('reaches no step past the RPC surface: a module function is not a method', async () => {
     const stub = stubOf(project()) as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
-    await expect(stub['assignEventStep']!('p', summary('event-1'), ['fp-1'])).rejects.toThrow(/does not implement/);
+    expect(await failureOf(() => stub['assignEventStep']!('p', summary('event-1'), ['fp-1']))).toMatch(/does not implement/);
   });
 });
