@@ -52,7 +52,13 @@ function eventOf(facts: OwnershipFacts = FACTS): OwnedEventSummary {
 }
 
 function hostPay(w: World, commit: BlamedCommit): void {
-  w.codeHost.putFile({ repository: REPOSITORY, path: 'web/src/checkout/pay.ts', ref: 'main', text: '', blame: [{ startingLine: 1, endingLine: 99, commit }] });
+  w.codeHost.putFile({
+    repository: REPOSITORY,
+    path: 'web/src/checkout/pay.ts',
+    ref: 'main',
+    text: '',
+    blame: [{ startingLine: 1, endingLine: 99, commit }],
+  });
 }
 
 describe('suggestOwners', () => {
@@ -81,9 +87,17 @@ describe('suggestOwners', () => {
 
     const suggested = await suggestOwners(PROJECT, issueId, eventOf(), deps(w));
 
-    expect(suggested.suspectCommit).toEqual({ repository: REPOSITORY, path: 'web/src/checkout/pay.ts', line: 42, commit: blamed(T0 - DAY) });
+    expect(suggested.suspectCommit).toEqual({
+      repository: REPOSITORY,
+      path: 'web/src/checkout/pay.ts',
+      line: 42,
+      commit: blamed(T0 - DAY),
+    });
     expect(suggested.owners).toEqual([{ owner: BOB, source: 'suspect_commit' }]);
-    expect(w.codeHost.calls).toContainEqual({ kind: 'blame', at: { repository: REPOSITORY, path: 'web/src/checkout/pay.ts', ref: 'main', line: 42 } });
+    expect(w.codeHost.calls).toContainEqual({
+      kind: 'blame',
+      at: { repository: REPOSITORY, path: 'web/src/checkout/pay.ts', ref: 'main', line: 42 },
+    });
   });
 
   it("names the suspect commit's author by address when their login maps to no Member", async () => {
@@ -109,7 +123,13 @@ describe('suggestOwners', () => {
     const w = world({ ownershipRules: 'path:src/checkout/* #payments', autoAssign: true });
     w.control.mapTrackerAccount(ORG, 'bob-gh', BOB);
     w.control.mapTrackerTeam(ORG, 'acme/web-team', 'web');
-    w.codeHost.putFile({ repository: REPOSITORY, path: '.github/CODEOWNERS', ref: 'main', text: '/web/ @acme/web-team @bob-gh\n', blame: [] });
+    w.codeHost.putFile({
+      repository: REPOSITORY,
+      path: '.github/CODEOWNERS',
+      ref: 'main',
+      text: '/web/ @acme/web-team @bob-gh\n',
+      blame: [],
+    });
     hostPay(w, blamed(T0 - DAY));
     const issueId = await crashIssue(w);
 
@@ -164,6 +184,11 @@ describe('suggestOwners', () => {
 
     expect((await suggestOwners(PROJECT, issueId, eventOf(), deps(w))).owners).toEqual([]);
     expect(await suggestOwners(PROJECT, issueId, eventOf(unmapped), deps(w))).toMatchObject({ owners: [], suspectCommit: null });
-    expect(await suggestOwners(PROJECT, 'issue-404', eventOf(), deps(w))).toEqual({ issueId: 'issue-404', owners: [], suspectCommit: null, assigned: null });
+    expect(await suggestOwners(PROJECT, 'issue-404', eventOf(), deps(w))).toEqual({
+      issueId: 'issue-404',
+      owners: [],
+      suspectCommit: null,
+      assigned: null,
+    });
   });
 });

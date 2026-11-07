@@ -8,6 +8,7 @@
  * else its absolute path.
  */
 
+import type { EventSummary } from '../event/event-summary.js';
 import type { Frame, NormalizedEvent } from '../normalize/normalized-event.js';
 
 export type OwnershipFrame = {
@@ -22,6 +23,9 @@ export type OwnershipFacts = {
   readonly url: string | null;
   readonly tags: Readonly<Record<string, string>>;
 };
+
+/** An Event Summary with the ownership facts of its Event, which the Summary alone does not carry. */
+export type OwnedEventSummary = EventSummary & { readonly ownership: OwnershipFacts };
 
 // --- helpers ---
 
