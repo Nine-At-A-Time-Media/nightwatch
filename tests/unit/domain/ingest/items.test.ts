@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import type { Arrival, EndpointKind } from '../../../../src/domain/ingest/arrival.js';
-import { arrivalEnvelope, classifyItem, isOversizeArrival, keptBody, triageItems } from '../../../../src/domain/ingest/items.js';
+import {
+  applyInboundFilters,
+  arrivalEnvelope,
+  classifyItem,
+  isOversizeArrival,
+  keptBody,
+  triageItems,
+} from '../../../../src/domain/ingest/items.js';
 import { parseEnvelope, type Envelope } from '../../../../src/domain/protocol/envelope.js';
 import { isRefusal } from '../../../../src/domain/refusal.js';
 
@@ -116,5 +123,35 @@ describe('keptBody', () => {
     if (isRefusal(kept)) throw new Error(kept.refusal);
     expect(kept.header).toEqual({ event_id: 'e' });
     expect(kept.items.map((i) => i.header.type)).toEqual(['session']);
+  });
+});
+
+describe('applyInboundFilters', () => {
+  const filters = { browserExtensions: false, localhost: false, webCrawlers: true, releases: ['old'], messages: [], addresses: [] };
+
+  it('filters an open event an Inbound Filter matches, naming the filter', () => {
+    const env = envelopeOf('{}\n{"type":"event"}\n{"release":"old"}\n{"type":"event"}\n{"release":"new"}\n');
+    const fates = applyInboundFilters({
+      fates: triageItems({ envelope: env, limits: { ...limits, event: 100 } }),
+      filters,
+      userAgent: null,
+    });
+    expect(fates.map((f) => f.verdict)).toEqual([{ kind: 'filtered', reason: 'releases' }, null]);
+  });
+
+  it('passes the arrival user agent to the filters', () => {
+    const env = envelopeOf('{}\n{"type":"event"}\n{}\n');
+    const fates = applyInboundFilters({ fates: triageItems({ envelope: env, limits }), filters, userAgent: 'Googlebot/2.1' });
+    expect(fates[0]!.verdict).toEqual({ kind: 'filtered', reason: 'web-crawlers' });
+  });
+
+  it('leaves items that are not events, and events it cannot parse, open', () => {
+    const env = envelopeOf('{}\n{"type":"session"}\n{"release":"old"}\n{"type":"event"}\nnot json\n');
+    const fates = applyInboundFilters({
+      fates: triageItems({ envelope: env, limits: { ...limits, event: 100 } }),
+      filters,
+      userAgent: null,
+    });
+    expect(fates.map((f) => f.verdict)).toEqual([null, null]);
   });
 });

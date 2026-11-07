@@ -257,4 +257,33 @@ describe('admitArrival', () => {
     expect(other.decision).toBe('admitted');
     expect(other.outcomes).toEqual([{ ...outcome('accepted', null, 'error'), projectId: quiet }]);
   });
+
+  it('Noise is filtered: Given an Inbound Filter matches an event, When it arrives, Then it is not processed and a filtered Outcome records the filter', async () => {
+    const filters = { ...projectConfig().inboundFilters, releases: ['web@0.*'] };
+    const deps = makeDeps({ configs: { [PROJECT]: projectConfig({ inboundFilters: filters }) } });
+    const admission = await admitArrival(
+      arrival({ body: envelope([{ type: 'event', payload: { release: 'web@0.9', message: 'x' } }]) }),
+      deps,
+    );
+
+    expect(admission).toMatchObject({ decision: 'admitted', status: 200, recordId: null });
+    expect(admission.outcomes).toEqual([outcome('filtered', 'releases', 'error')]);
+    expect(deps.stream.records).toHaveLength(0);
+    expect(deps.quota.requests).toHaveLength(0);
+    expect(deps.archive.archived).toEqual(admission.outcomes);
+  });
+
+  it('Noise is filtered: a crawler arrival is filtered while other events in the Project are retained', async () => {
+    const filters = { ...projectConfig().inboundFilters, webCrawlers: true };
+    const deps = makeDeps({ configs: { [PROJECT]: projectConfig({ inboundFilters: filters }) } });
+    const crawler = await admitArrival(
+      arrival({ headers: { ...arrival().headers, 'user-agent': 'Mozilla/5.0 (compatible; bingbot/2.0)' } }),
+      deps,
+    );
+    const person = await admitArrival(arrival({ headers: { ...arrival().headers, 'user-agent': 'Mozilla/5.0 Firefox/130.0' } }), deps);
+
+    expect(crawler.outcomes).toEqual([outcome('filtered', 'web-crawlers', 'error')]);
+    expect(person.outcomes).toEqual([outcome('accepted', null, 'error')]);
+    expect(deps.stream.records).toHaveLength(1);
+  });
 });
