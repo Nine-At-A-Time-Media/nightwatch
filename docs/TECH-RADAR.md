@@ -15,6 +15,8 @@ with the first code that uses them.
 | Validation | zod (v4) | fleet | Event normalization at the ingest boundary. |
 | Format, lint | Prettier, ESLint (typescript-eslint) | fleet | printWidth 140, singleQuote, semi. |
 | CI | GitHub Actions | fleet | Actions pinned by commit SHA. |
+| Web framework | Vue 3 | fleet | The report widget is a Vue custom element; vue-tsc typechecks it. |
+| Unit DOM | happy-dom, @vue/test-utils | fleet (testing-nuxt) | Widget component tests. |
 
 ## Trial
 
