@@ -73,4 +73,22 @@ describe('<nightwatch-report> form', () => {
 
     expect(sender.calls[0]?.submission.screenshot).toBe(screenshot);
   });
+  it('Empty message refused: Given a message that is empty, When the reporter submits, Then the Report is not filed and the form says why', async () => {
+    const { wrapper, sender } = mountForm([receipt]);
+    await openWith(wrapper, '   ');
+    await submit(wrapper);
+
+    expect(sender.calls).toEqual([]);
+    expect(wrapper.get('[role="alert"]').text()).toBe('Write a message before sending.');
+    expect(wrapper.get('[data-testid="report-message"]').attributes('aria-invalid')).toBe('true');
+  });
+
+  it('says in plain words why Nightwatch refused a submission', async () => {
+    const { wrapper } = mountForm([{ refusal: 'too-many-reports' }]);
+    await openWith(wrapper, 'Again');
+    await submit(wrapper);
+
+    expect(wrapper.get('[role="alert"]').text()).toBe('Too many reports right now, try again later.');
+    expect(wrapper.find('[data-testid="report-sent"]').exists()).toBe(false);
+  });
 });
