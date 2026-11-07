@@ -43,9 +43,26 @@ import { recordSession } from '../../src/application/releases/record-session.js'
 import { openMonitorIssue } from '../../src/application/monitors/open-monitor-issue.js';
 import { resolveMonitorIssue } from '../../src/application/monitors/resolve-monitor-issue.js';
 import type { Environment, Session } from '../../src/domain/release/health.js';
+import type { Level } from '../../src/domain/issue/priority.js';
+import { formatShortId } from '../../src/domain/issue/short-id.js';
+import type { AssigneeFacts, IssueFacts, SearchContext } from '../../src/domain/search/match.js';
+import { issuePage, type IssuePage, type SearchPlan } from '../../src/domain/search/page.js';
 import { FakeIssueStore } from './issue-store.js';
 
-export type ProjectSide = { clock: Clock; ids: Ids; effects: EffectQueue; policies: IssuePolicies; dedupWindow: number };
+/** The values of an Event Summary field, once each, leaving out absent ones. */
+function distinctOf(values: readonly (string | null)[]): readonly string[] {
+  return [...new Set(values.filter((value): value is string => value !== null))];
+}
+
+/** `memberEmails` names each Member's address, as ProjectDO keeps an Assignee's address for search; a Member it lacks is searched by id. */
+export type ProjectSide = {
+  clock: Clock;
+  ids: Ids;
+  effects: EffectQueue;
+  policies: IssuePolicies;
+  dedupWindow: number;
+  memberEmails?: ReadonlyMap<string, string>;
+};
 
 export class FakeProjectClient implements ProjectClient {
   readonly #side: ProjectSide;
@@ -253,5 +270,40 @@ export class FakeProjectClient implements ProjectClient {
   async recordFiling(projectId: ProjectId, filingKey: string, filing: RecordedFiling): Promise<void> {
     const store = this.store(projectId);
     await store.transact(() => store.recordFiling(filingKey, filing));
+  }
+
+  // --- task-031: search ---
+
+  /** Runs the plan over the Issue facts the Project's store holds; tags are not kept by the fake store, so none match. */
+  async searchPage(projectId: ProjectId, plan: SearchPlan, context: SearchContext): Promise<IssuePage> {
+    const states = await this.store(projectId).listIssues();
+    const facts = await Promise.all(states.map((state) => this.#issueFacts(projectId, state)));
+    return issuePage(facts, plan, context);
+  }
+
+  async #issueFacts(projectId: ProjectId, state: IssueState): Promise<IssueFacts> {
+    const store = this.store(projectId);
+    const events = (await store.eventsOf(state.issueId)).map((event) => event.summary);
+    const latest = events.reduce<EventSummary | null>((last, event) => (last && last.at > event.at ? last : event), null);
+    const level: Level = latest?.level ?? 'error';
+    return {
+      state,
+      shortId: formatShortId({ slug: projectId.replace(/[^A-Za-z0-9]/g, ''), counter: (await store.shortIdOf(state.issueId)) ?? 0 }),
+      title: latest?.title ?? '',
+      culprit: latest?.culprit ?? '',
+      level,
+      assignee: this.#assigneeFacts(await store.assigneeOf(state.issueId)),
+      releases: distinctOf(events.map((event) => event.release)),
+      environments: distinctOf(events.map((event) => event.environment)),
+      tags: new Map(),
+      reportCount: (await store.reportsOn(state.issueId)).length,
+      linked: (await store.externalLinkOf(state.issueId)) !== null,
+    };
+  }
+
+  #assigneeFacts(assignee: Assignee | null): AssigneeFacts | null {
+    if (assignee === null) return null;
+    if ('team' in assignee) return { team: assignee.team };
+    return { memberEmail: this.#side.memberEmails?.get(assignee.member) ?? assignee.member };
   }
 }
