@@ -54,6 +54,28 @@ See `LICENSE.md`, Acknowledgements.
 - Tests: Vitest with `@cloudflare/vitest-plugin` (the renamed
   `@cloudflare/vitest-pool-workers`).
 
+## Commands
+
+- `pnpm check` -- typecheck (root, widget, console), lint, every Vitest
+  project (unit, the `integration*` workerd projects, widget, console).
+- `pnpm test:e2e` -- the local pipeline smoke on `wrangler dev --local`
+  (`scripts/e2e-local.sh`); not part of `pnpm check`.
+- `pnpm dev` runs every Worker in one local session; `pnpm dev:tick`
+  fires the processor and scheduler crons, which never fire locally.
+- `wrangler dev` leaves `src/workers/*/.wrangler/` behind; it is ignored
+  by git and eslint.
+
+## Parallel work on shared ports
+
+- `IssueStore`, `ControlStore`, `ProjectClient` and their fakes are
+  extended by many tasks. Append new members at the end under
+  `// --- task-NNN: purpose ---`; never reorder or rename existing ones.
+- Every port method needs its real adapter too (SQLite store, D1 store,
+  `ProjectDO` step, `DurableProjectClient`) with a contract case run over
+  the fake and the real one.
+- After a union merge of two appended sections, check for a closing brace
+  dropped before a banner and for duplicate import lines.
+
 ## Git
 
 - Never commit or push to `main`. Use a feature branch and a PR.

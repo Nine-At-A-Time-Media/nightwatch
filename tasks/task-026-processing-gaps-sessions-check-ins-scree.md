@@ -6,4 +6,9 @@ created: 2026-11-07
 implements: docs/design/DESIGN.NIGHTWATCH.md
 ---
 
-processArrival defers session and check-in items (Outcome discarded/deferred), ignores feedback screenshots in the same envelope, and applies only one Grouping Version. recordSession and advanceMonitor now exist (task-022); wire them in. Design rows: Crash-free rate, Missed check-in, versioning.
+Remaining: feedback screenshots sent as an attachment in the same envelope
+are not filed with their Report, and only one Grouping Version is applied
+(the transition window, design Grouping > Versioning, is not). Sessions
+(Crash-free rate) and envelope check-ins (through `MonitorClient`) landed
+2026-11-07; HTTP check-ins are forwarded at ingest and must not also be
+advanced by processing.

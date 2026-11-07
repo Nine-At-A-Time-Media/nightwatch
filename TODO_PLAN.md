@@ -30,16 +30,22 @@ remaining tasks are gaps the agents reported while building them.
 
 ## Now
 
-- task-038 -- triage actions end to end (in flight).
-- task-026, task-036 -- processing gaps and the Outcome double count (in flight).
-- task-039 -- alert signals per Event and the GitHub alert action.
-- task-040 -- Issue Changes name their Project.
-- task-037 -- reprocessing past the dedup window (needs replace-derived-state).
+- task-026 -- the rest of the processing gaps: screenshots in the envelope, the grouping transition window.
+- task-037 -- reprocessing past the dedup window must replace an Event's derived state, not recount it.
+- task-039 -- alert signals per Event (frequency triggers) and the GitHub alert action.
+- task-040 -- Issue Changes name their Project; remove the console `lastProject()` workaround.
 
 ## Blockers
 
-- Design and architecture approval is the owner's merge. The owner
-  directed implementation to proceed on the branch meanwhile
-  (2026-11-07).
+- Design and architecture approval is the owner's merge; implementation
+  proceeds on branch `agent/trusting-ptolemy-vipzsk` by owner direction
+  (2026-11-07). No PR is open yet.
+- Architecture A-Q3: whether this public repository can call the fleet
+  adherence workflow in CI. Until ruled, `bin/adhere` runs locally only.
+- Architecture A-Q4: the fleet's hooks and ci.magic install from GitHub
+  Packages; this repository uses public-registry tooling until ruled.
+- The fleet radar still names the deprecated `@cloudflare/vitest-pool-workers`;
+  `docs/TECH-RADAR.md` proposes `@cloudflare/vitest-plugin`.
+- CI's `e2e` job joins `gate`'s needs after its first green run.
 
 ## Lessons Learned
