@@ -44,3 +44,14 @@ export function computeForecast(hourlyCounts: readonly number[], policy: Forecas
 export function exceedsForecast(forecast: Forecast, hourlyCount: number): boolean {
   return hourlyCount > forecast.ceiling;
 }
+
+/** A Forecast is due when none was computed or the last is at least the refresh interval old. */
+export function isForecastDue(computedAt: number | null, now: number, policy: ForecastPolicy): boolean {
+  return computedAt === null || now - computedAt >= policy.refreshInterval;
+}
+
+/** The whole clock hours a Forecast computed at `now` reads: the window ending at the start of the current hour. */
+export function forecastHours(now: number, policy: ForecastPolicy): { since: number; until: number } {
+  const until = Math.floor(now / HOUR) * HOUR;
+  return { since: until - Math.floor(policy.window / HOUR) * HOUR, until };
+}
