@@ -7,8 +7,9 @@
  *
  * A record's offset is its rowid, which only grows. A subscription remembers
  * the offset it starts after. A delivery row tracks one record for one
- * subscription: which worker holds its lease, until when, and whether it was
- * acked. Every function runs synchronously, so each is atomic in the object.
+ * subscription: which worker holds its lease, until when, whether it was
+ * acked, and how many times it was leased. Every function runs
+ * synchronously, so each is atomic in the object.
  */
 
 import type { ArrivalRecord, EndpointKind } from '../../domain/ingest/arrival.js';
@@ -32,11 +33,13 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS deliveries (
      subscription TEXT NOT NULL, seq INTEGER NOT NULL, worker_id TEXT,
      lease_expires_at INTEGER NOT NULL, acked INTEGER NOT NULL DEFAULT 0,
+     deliveries INTEGER NOT NULL DEFAULT 0,
      PRIMARY KEY (subscription, seq))`,
 ];
 
 const DELIVERABLE = `
-  SELECT r.seq, r.id, r.project_id, r.received_at, r.endpoint, r.body, r.blob_key, r.assertion
+  SELECT r.seq, r.id, r.project_id, r.received_at, r.endpoint, r.body, r.blob_key, r.assertion,
+    COALESCE(d.deliveries, 0) + 1 AS deliveries
   FROM records r
   JOIN subscriptions s ON s.name = ?1
   LEFT JOIN deliveries d ON d.subscription = s.name AND d.seq = r.seq
@@ -45,12 +48,17 @@ const DELIVERABLE = `
   LIMIT ?3`;
 
 const LEASE = `
-  INSERT INTO deliveries (subscription, seq, worker_id, lease_expires_at, acked) VALUES (?1, ?2, ?3, ?4, 0)
-  ON CONFLICT (subscription, seq) DO UPDATE SET worker_id = excluded.worker_id, lease_expires_at = excluded.lease_expires_at`;
+  INSERT INTO deliveries (subscription, seq, worker_id, lease_expires_at, acked, deliveries) VALUES (?1, ?2, ?3, ?4, 0, 1)
+  ON CONFLICT (subscription, seq) DO UPDATE SET
+    worker_id = excluded.worker_id, lease_expires_at = excluded.lease_expires_at, deliveries = deliveries.deliveries + 1`;
 
 /** A log created before records kept their Assertion gains the column; the check makes it safe to repeat. */
 const HAS_ASSERTION = `SELECT COUNT(*) AS present FROM pragma_table_info('records') WHERE name = 'assertion'`;
 const ADD_ASSERTION = `ALTER TABLE records ADD COLUMN assertion TEXT`;
+
+/** Likewise for a log created before deliveries were counted; its earlier leases count as none. */
+const HAS_DELIVERIES = `SELECT COUNT(*) AS present FROM pragma_table_info('deliveries') WHERE name = 'deliveries'`;
+const ADD_DELIVERIES = `ALTER TABLE deliveries ADD COLUMN deliveries INTEGER NOT NULL DEFAULT 0`;
 
 const HELD = `subscription = ?1 AND seq = ?2 AND worker_id = ?3 AND acked = 0`;
 
@@ -101,6 +109,7 @@ function blobOf(body: Uint8Array): ArrayBuffer {
 export function ensureLogSchema(sql: SqlStorage): void {
   for (const statement of SCHEMA) sql.exec(statement);
   if (integer(sql.exec(HAS_ASSERTION).one(), 'present') === 0) sql.exec(ADD_ASSERTION);
+  if (integer(sql.exec(HAS_DELIVERIES).one(), 'present') === 0) sql.exec(ADD_DELIVERIES);
 }
 
 /** Append one Arrival Record; its offset is returned. */
@@ -129,7 +138,7 @@ export function subscribe(sql: SqlStorage, { subscription, start }: { subscripti
 export function pullRecords(sql: SqlStorage, { subscription, workerId, max, now, leaseMs }: PullRequest): LeasedRecord[] {
   const rows = sql.exec(DELIVERABLE, subscription, now, max).toArray();
   for (const row of rows) sql.exec(LEASE, subscription, integer(row, 'seq'), workerId, now + leaseMs);
-  return rows.map((row) => ({ offset: integer(row, 'seq'), record: recordOf(row) }));
+  return rows.map((row) => ({ offset: integer(row, 'seq'), record: recordOf(row), deliveries: integer(row, 'deliveries') }));
 }
 
 export function ackRecords(sql: SqlStorage, { subscription, workerId, offsets }: HeldRequest): void {
