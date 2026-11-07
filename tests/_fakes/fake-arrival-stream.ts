@@ -7,7 +7,7 @@ import type { ArrivalSubscription } from '../../src/ports/arrival-subscription.j
 import type { Clock } from '../../src/ports/clock.js';
 import { FakeClock } from './fake-clock.js';
 
-type Delivery = { workerId: string | null; leaseExpiresAt: number; acked: boolean };
+type Delivery = { workerId: string | null; leaseExpiresAt: number; acked: boolean; deliveries: number };
 type Subscription = { after: number; deliveries: Map<number, Delivery> };
 type Held = { subscription: string; workerId: string; offsets: readonly number[] };
 
@@ -42,8 +42,9 @@ export class FakeArrivalStream implements ArrivalStream, ArrivalSubscription {
     for (let offset = sub.after + 1; offset <= this.records.length && leased.length < max; offset += 1) {
       const delivery = sub.deliveries.get(offset);
       if (delivery && (delivery.acked || delivery.leaseExpiresAt > now)) continue;
-      sub.deliveries.set(offset, { workerId, leaseExpiresAt: now + this.#leaseMs, acked: false });
-      leased.push({ offset, record: this.records[offset - 1]! });
+      const deliveries = (delivery?.deliveries ?? 0) + 1;
+      sub.deliveries.set(offset, { workerId, leaseExpiresAt: now + this.#leaseMs, acked: false, deliveries });
+      leased.push({ offset, record: this.records[offset - 1]!, deliveries });
     }
     return leased;
   }
