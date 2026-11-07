@@ -18,6 +18,7 @@
     "test:integration": "vitest run --project 'integration*'",
     "mutate": "stryker run",
     "dev": "./scripts/dev.sh",
+    "dev:tick": "./scripts/dev-tick.sh",
     "cf-types": "./scripts/wrangler.sh types -c src/workers/ingest/wrangler.jsonc --env-interface IngestEnv --strict-vars=false src/workers/ingest/worker-configuration.d.ts",
     "check": "pnpm typecheck && pnpm --filter @nightwatch/widget typecheck && pnpm lint && pnpm test"
   },
