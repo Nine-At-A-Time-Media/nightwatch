@@ -33,6 +33,20 @@ const IN_SCOPE = new Map<string, DataCategory>([
   ['security', 'security'],
 ]);
 
+/** Item kinds of products the design's Non-Goals defer: counted and dropped. */
+const OUT_OF_SCOPE = new Map<string, OutOfScopeCategory>([
+  ['transaction', 'transaction'],
+  ['span', 'span'],
+  ['replay_event', 'replay'],
+  ['replay_recording', 'replay'],
+  ['replay_video', 'replay'],
+  ['profile', 'profile'],
+  ['profile_chunk', 'profile'],
+  ['statsd', 'metric'],
+  ['metric_buckets', 'metric'],
+  ['client_report', 'client_report'],
+]);
+
 const decoder = new TextDecoder();
 
 const ENDPOINT_ITEM: Readonly<Record<Exclude<EndpointKind, 'envelope'>, string>> = {
@@ -73,6 +87,8 @@ function parsedPayload(item: EnvelopeItem): unknown {
 export function classifyItem(type: string): ItemClass {
   const inScope = IN_SCOPE.get(type);
   if (inScope) return { scope: 'in', category: inScope };
+  const outOfScope = OUT_OF_SCOPE.get(type);
+  if (outOfScope) return { scope: 'out', category: outOfScope };
   return { scope: 'unknown' };
 }
 
