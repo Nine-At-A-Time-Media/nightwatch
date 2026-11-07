@@ -24,12 +24,16 @@ describe.each<{ name: string; make: () => SpamJudge }>([
 ])('SpamJudge contract -- $name', ({ make }) => {
   it('answers a well-formed verdict for any message', async () => {
     const judge = make();
-    await fc.assert(fc.asyncProperty(fc.string({ maxLength: 500 }), async (message) => expect(isWellFormed(await judge.judge(message))).toBe(true)));
+    await fc.assert(fc.asyncProperty(fc.string({ maxLength: 500 }), async (message) => isWellFormed(await judge.judge(message))));
   });
 
   it('answers the same message the same way', async () => {
     const judge = make();
-    await fc.assert(fc.asyncProperty(fc.string({ maxLength: 200 }), async (message) => expect(await judge.judge(message)).toEqual(await judge.judge(message))));
+    await fc.assert(
+      fc.asyncProperty(fc.string({ maxLength: 200 }), async (message) => {
+        expect(await judge.judge(message)).toEqual(await judge.judge(message));
+      }),
+    );
   });
 });
 
