@@ -17,7 +17,13 @@ const RANGES: BlameRange[] = [
   { startingLine: 1, endingLine: 10, commit: { hash: 'a'.repeat(40), author: { email: 'ada@acme.example', login: 'ada-gh' }, at: T0 } },
   { startingLine: 11, endingLine: 40, commit: { hash: 'b'.repeat(40), author: { email: 'bob@acme.example', login: null }, at: T0 + 1000 } },
 ];
-const FILE: HostedFile = { repository: REPOSITORY, path: 'src/pay.ts', ref: 'main', text: 'export const total = 1; // café\n', blame: RANGES };
+const FILE: HostedFile = {
+  repository: REPOSITORY,
+  path: 'src/pay.ts',
+  ref: 'main',
+  text: 'export const total = 1; // café\n',
+  blame: RANGES,
+};
 
 // One key pair for the file: generating RSA keys is slow, and the key is never mutated.
 let key: AppKey;
@@ -35,7 +41,13 @@ function fakeHarness(): Harness {
 function gitHubHarness(): Harness {
   const clock = new FakeClock(Date.parse('2026-11-07T12:00:00Z'));
   const github = new FakeGitHub({ appId: '12345', publicKey: key.publicKey, clock, installations: { acme: 77 } });
-  const host = new GitHubCodeHost({ appId: '12345', privateKey: key.privateKeyPem, fetch: github.fetch, tokens: new MemoryTokenCache(), clock });
+  const host = new GitHubCodeHost({
+    appId: '12345',
+    privateKey: key.privateKeyPem,
+    fetch: github.fetch,
+    tokens: new MemoryTokenCache(),
+    clock,
+  });
   return { host, put: (file) => github.putFile(file), refuse: () => (github.refusing = 403) };
 }
 
@@ -55,9 +67,15 @@ describe.each([
   });
 
   it('blame of a line, file or ref that is not there is not found', async () => {
-    expect(await harness.host.blame({ repository: REPOSITORY, path: 'src/pay.ts', ref: 'main', line: 41 })).toEqual({ refusal: 'code_not_found' });
-    expect(await harness.host.blame({ repository: REPOSITORY, path: 'src/gone.ts', ref: 'main', line: 1 })).toEqual({ refusal: 'code_not_found' });
-    expect(await harness.host.blame({ repository: REPOSITORY, path: 'src/pay.ts', ref: 'dev', line: 1 })).toEqual({ refusal: 'code_not_found' });
+    expect(await harness.host.blame({ repository: REPOSITORY, path: 'src/pay.ts', ref: 'main', line: 41 })).toEqual({
+      refusal: 'code_not_found',
+    });
+    expect(await harness.host.blame({ repository: REPOSITORY, path: 'src/gone.ts', ref: 'main', line: 1 })).toEqual({
+      refusal: 'code_not_found',
+    });
+    expect(await harness.host.blame({ repository: REPOSITORY, path: 'src/pay.ts', ref: 'dev', line: 1 })).toEqual({
+      refusal: 'code_not_found',
+    });
   });
 
   it("reads a file's text at the ref, and a file that is not there is not found", async () => {
@@ -68,7 +86,9 @@ describe.each([
   it('a host that refuses refuses every call', async () => {
     harness.refuse();
     expect(await harness.host.fileText({ repository: REPOSITORY, path: 'src/pay.ts', ref: 'main' })).toEqual({ refusal: 'code_refused' });
-    expect(await harness.host.blame({ repository: REPOSITORY, path: 'src/pay.ts', ref: 'main', line: 1 })).toEqual({ refusal: 'code_refused' });
+    expect(await harness.host.blame({ repository: REPOSITORY, path: 'src/pay.ts', ref: 'main', line: 1 })).toEqual({
+      refusal: 'code_refused',
+    });
   });
 });
 
@@ -77,7 +97,13 @@ describe('GitHubCodeHost requests', () => {
     const clock = new FakeClock(Date.parse('2026-11-07T12:00:00Z'));
     const github = new FakeGitHub({ appId: '12345', publicKey: key.publicKey, clock, installations: { acme: 77 } });
     github.putFile(FILE);
-    const host = new GitHubCodeHost({ appId: '12345', privateKey: key.privateKeyPem, fetch: github.fetch, tokens: new MemoryTokenCache(), clock });
+    const host = new GitHubCodeHost({
+      appId: '12345',
+      privateKey: key.privateKeyPem,
+      fetch: github.fetch,
+      tokens: new MemoryTokenCache(),
+      clock,
+    });
 
     await host.blame({ repository: REPOSITORY, path: 'src/pay.ts', ref: 'main', line: 1 });
     await host.fileText({ repository: REPOSITORY, path: 'src/pay.ts', ref: 'main' });
