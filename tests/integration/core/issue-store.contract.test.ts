@@ -504,6 +504,18 @@ describe.each<Subject>([fake, sqlite])('IssueStore contract -- $name', ({ run })
         expect(await store.externalLinkOf('issue-2')).toEqual(link('issue-2', 8));
       }));
   });
+
+  describe('filings under a filing key', () => {
+    it('recalls what was filed under a key; a later record under it replaces it', () =>
+      run(async ({ store }) => {
+        expect(await store.recallFiling('key-1')).toBeNull();
+        await store.recordFiling('key-1', { reportId: 'report-1', noticeSent: false });
+        await store.recordFiling('key-2', { reportId: 'report-2', noticeSent: false });
+        await store.recordFiling('key-1', { reportId: 'report-1', noticeSent: true });
+        expect(await store.recallFiling('key-1')).toEqual({ reportId: 'report-1', noticeSent: true });
+        expect(await store.recallFiling('key-2')).toEqual({ reportId: 'report-2', noticeSent: false });
+      }));
+  });
 });
 
 describe('SqliteIssueStore', () => {
