@@ -158,6 +158,23 @@ describe.each<{ name: string; make: () => ProjectClient }>([
     await client.recordFiling(projectId, 'key-1', { reportId: 'report-1', noticeSent: true });
     expect(await client.recallFiling(projectId, 'key-1')).toEqual({ reportId: 'report-1', noticeSent: true });
   });
+
+  it('assigns an Issue, making an assigned Member follow it, and moves a Report onto another Issue', async () => {
+    const client = make();
+    const projectId = project();
+    const member = { member: 'member-1' };
+    const crash = issueIdOf(await client.assignEvent(projectId, summary('event-1'), ['fp-1']));
+    const changes = await client.assignIssue(projectId, crash, member, member);
+    expect(Array.isArray(changes) && changes.map((change) => change.kind)).toEqual(['assignee', 'for_review']);
+    expect(await client.assigneeOf(projectId, crash)).toEqual(member);
+    expect(await client.participationsOf(projectId, crash)).toEqual([{ member: 'member-1', reason: 'assigned' }]);
+    expect(await client.assignIssue(projectId, 'issue-404', member, 'system')).toEqual({ refusal: 'issue_not_found' });
+
+    await client.openReportIssue(projectId, report(projectId, 'report-1', 'report-issue-1'));
+    const moved = await client.moveReport(projectId, { reportId: 'report-1', to: crash, actor: member });
+    expect(moved).toMatchObject({ id: 'report-1', issueId: crash });
+    expect((await client.reportsOn(projectId, crash)).map((held) => held.id)).toEqual(['report-1']);
+  });
 });
 
 describe('ProjectDO', () => {
