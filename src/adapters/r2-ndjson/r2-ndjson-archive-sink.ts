@@ -1,36 +1,42 @@
 /**
  * R2NdjsonArchiveSink -- the ArchiveSink the local stage runs on, standing in
  * for Basin Pipelines (architecture A14). Each batch becomes one NDJSON object
- * per UTC day of `recordedAt`, at `archive/outcomes/dt=YYYY-MM-DD/<id>.ndjson`,
- * one Outcome per line. A failed write throws: archived Outcomes are exact.
+ * per UTC day, at `archive/<table>/dt=YYYY-MM-DD/<id>.ndjson`, one row per
+ * line: Outcomes under `outcomes` by `recordedAt`, Event Summaries under
+ * `events` by their time, each row naming its Project. A failed write throws:
+ * archived Outcomes are exact.
  */
 
+import type { EventSummary } from '../../domain/event/event-summary.js';
+import type { ProjectId } from '../../domain/ids.js';
 import type { Outcome } from '../../domain/outcome/outcome.js';
 import type { ArchiveSink } from '../../ports/archive-sink.js';
 import type { Ids } from '../../ports/ids.js';
 
+type Table = 'outcomes' | 'events';
+
 // --- helpers ---
 
-function dayOf(recordedAt: number): string {
-  return new Date(recordedAt).toISOString().slice(0, 10);
+function dayOf(at: number): string {
+  return new Date(at).toISOString().slice(0, 10);
 }
 
-/** Outcomes grouped by UTC day, days in first-seen order. */
-function byDay(outcomes: readonly Outcome[]): Map<string, Outcome[]> {
-  const days = new Map<string, Outcome[]>();
-  for (const outcome of outcomes) {
-    const day = dayOf(outcome.recordedAt);
-    days.set(day, [...(days.get(day) ?? []), outcome]);
+/** Rows grouped by the UTC day of their time, days in first-seen order. */
+function byDay<T>(rows: readonly T[], timeOf: (row: T) => number): Map<string, T[]> {
+  const days = new Map<string, T[]>();
+  for (const row of rows) {
+    const day = dayOf(timeOf(row));
+    days.set(day, [...(days.get(day) ?? []), row]);
   }
   return days;
 }
 
-function ndjson(outcomes: readonly Outcome[]): string {
-  return outcomes.map((outcome) => `${JSON.stringify(outcome)}\n`).join('');
+function ndjson(rows: readonly unknown[]): string {
+  return rows.map((row) => `${JSON.stringify(row)}\n`).join('');
 }
 
-export function archiveKey({ day, id }: { day: string; id: string }): string {
-  return `archive/outcomes/dt=${day}/${id}.ndjson`;
+export function archiveKey({ table, day, id }: { table: Table; day: string; id: string }): string {
+  return `archive/${table}/dt=${day}/${id}.ndjson`;
 }
 
 // --- exports ---
@@ -45,8 +51,23 @@ export class R2NdjsonArchiveSink implements ArchiveSink {
   }
 
   async outcomes(outcomes: readonly Outcome[]): Promise<void> {
-    for (const [day, batch] of byDay(outcomes)) {
-      await this.#bucket.put(archiveKey({ day, id: this.#ids.newId() }), ndjson(batch), {
+    await this.#write(
+      'outcomes',
+      byDay(outcomes, (outcome) => outcome.recordedAt),
+    );
+  }
+
+  async events(projectId: ProjectId, summaries: readonly EventSummary[]): Promise<void> {
+    const rows = summaries.map((summary) => ({ projectId, ...summary }));
+    await this.#write(
+      'events',
+      byDay(rows, (row) => row.at),
+    );
+  }
+
+  async #write(table: Table, days: ReadonlyMap<string, readonly unknown[]>): Promise<void> {
+    for (const [day, batch] of days) {
+      await this.#bucket.put(archiveKey({ table, day, id: this.#ids.newId() }), ndjson(batch), {
         httpMetadata: { contentType: 'application/x-ndjson' },
       });
     }

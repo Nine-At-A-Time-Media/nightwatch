@@ -8,7 +8,9 @@
 import type { Durability } from '../../src/domain/ingest/arrival.js';
 import type { OrganizationId, ProjectId, ReportId } from '../../src/domain/ids.js';
 import type { Member } from '../../src/domain/issue/state.js';
+import type { ProcessingConfig } from '../../src/domain/processing/processing.js';
 import type { TrustedIssuer } from '../../src/domain/signin/sign-in.js';
+import type { Artifact, ArtifactQuery } from '../../src/domain/sourcemap/artifact.js';
 import type { ControlStore, Membership, ReferenceEntry } from '../../src/ports/control-store.js';
 
 export class FakeControlStore implements ControlStore {
@@ -86,5 +88,32 @@ export class FakeControlStore implements ControlStore {
     [...this.references].filter(([, entry]) => entry.reportId === reportId).forEach(([hash]) => this.references.delete(hash));
     this.unsubscribed.delete(reportId);
     return { ok: true };
+  }
+
+  // --- task-008: processing config and the Artifact index ---
+
+  readonly #processing = new Map<ProjectId, ProcessingConfig>();
+  readonly #artifacts = new Map<ProjectId, Artifact[]>();
+
+  setProcessingConfig(projectId: ProjectId, config: ProcessingConfig): void {
+    this.#processing.set(projectId, config);
+  }
+
+  addArtifact(projectId: ProjectId, artifact: Artifact): void {
+    this.#artifacts.set(projectId, [...(this.#artifacts.get(projectId) ?? []), artifact]);
+  }
+
+  async processingConfig(projectId: ProjectId): Promise<ProcessingConfig | null> {
+    return this.#processing.get(projectId) ?? null;
+  }
+
+  async artifactsFor(projectId: ProjectId, query: ArtifactQuery): Promise<readonly Artifact[]> {
+    const plain = (id: string) => id.replaceAll('-', '').toLowerCase();
+    const debugIds = new Set(query.debugIds.map(plain));
+    return (this.#artifacts.get(projectId) ?? []).filter(
+      (artifact) =>
+        (query.release !== null && artifact.release === query.release) ||
+        (artifact.debugId !== null && debugIds.has(plain(artifact.debugId))),
+    );
   }
 }
