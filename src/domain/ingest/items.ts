@@ -113,6 +113,11 @@ export function triageItems({ envelope, limits }: { envelope: Envelope; limits: 
   return envelope.items.map((item) => triageItem({ item, limits }));
 }
 
+/** The user agent the Arrival was sent with, which the web-crawlers filter also reads. */
+export function arrivalUserAgent(arrival: Arrival): string | null {
+  return arrival.headers['user-agent'] ?? null;
+}
+
 /** Filter every open event an Inbound Filter matches; an event that does not parse is left to processing. */
 export function applyInboundFilters({
   fates,
