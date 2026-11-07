@@ -210,4 +210,21 @@ describe('processArrival', () => {
     await processArrival(record([errorEvent()]), p.deps);
     expect((await storedEvent(p)).event['errors']).toEqual([]);
   });
+
+  it('Duplicate arrival: Given an arrival was already processed, When it is processed again, Then no count changes and no new issue appears', async () => {
+    const w = world();
+    const arrival = record([errorEvent({ user: { id: 'u-7' } })]);
+    const first = await processArrival(arrival, w.deps);
+    const effects = [...w.effects.enqueued];
+    const again = await processArrival(arrival, w.deps);
+
+    const issues = await w.projects.store(PROJECT).listIssues();
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({ count: 1, userCount: 1 });
+    expect(again.assignments).toEqual([{ issueId: issues[0]?.issueId, changes: [], duplicate: true }]);
+    expect(first.assignments[0]).toMatchObject({ issueId: issues[0]?.issueId, duplicate: false });
+    expect(w.effects.enqueued).toEqual(effects);
+    expect(w.archive.archivedEvents).toHaveLength(1);
+    expect(again.outcomes).toEqual([]);
+  });
 });
