@@ -1,0 +1,12 @@
+# Clean-room backstop: reference checkouts never live in this tree (AGENTS.md).
+sentry/
+sentry-*/
+getsentry*/
+relay/
+snuba/
+self-hosted/
+reference/
+
+node_modules/
+.wrangler/
+.dev.vars
