@@ -15,7 +15,10 @@ describe('locateCredentials', () => {
   });
 
   it('reads the key from Basic authorization', () => {
-    expect(locateCredentials({ ...none, headers: { authorization: 'Basic ' + btoa('k3:ignored') } })).toEqual({ publicKey: 'k3', client: null });
+    expect(locateCredentials({ ...none, headers: { authorization: 'Basic ' + btoa('k3:ignored') } })).toEqual({
+      publicKey: 'k3',
+      client: null,
+    });
   });
 
   it('reads the key from the query string, which browsers use to avoid preflight', () => {

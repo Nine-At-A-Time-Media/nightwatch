@@ -11,7 +11,12 @@ describe('Retry Advice rendering', () => {
   });
 
   it('tells the sender to wait for the longest entry', () => {
-    expect(retryAfterSeconds([{ retryAfterSeconds: 5, categories: [], scope: 'key', reason: null }, { retryAfterSeconds: 30, categories: ['attachment'], scope: 'project', reason: null }])).toBe(30);
+    expect(
+      retryAfterSeconds([
+        { retryAfterSeconds: 5, categories: [], scope: 'key', reason: null },
+        { retryAfterSeconds: 30, categories: ['attachment'], scope: 'project', reason: null },
+      ]),
+    ).toBe(30);
     expect(retryAfterSeconds([])).toBe(0);
   });
 });

@@ -24,11 +24,18 @@ describe('parseDsn', () => {
   it('round-trips every well-formed DSN', () => {
     const part = fc.stringMatching(/^[a-z0-9]{1,12}$/);
     fc.assert(
-      fc.property(fc.constantFrom('http', 'https'), part, part, fc.array(part, { maxLength: 3 }), fc.nat(), (scheme, key, host, segs, project) => {
-        const path = segs.length ? '/' + segs.join('/') : '';
-        const dsn = { scheme, publicKey: key, host, path, projectId: String(project) };
-        expect(parseDsn(formatDsn(dsn))).toEqual(dsn);
-      }),
+      fc.property(
+        fc.constantFrom('http', 'https'),
+        part,
+        part,
+        fc.array(part, { maxLength: 3 }),
+        fc.nat(),
+        (scheme, key, host, segs, project) => {
+          const path = segs.length ? '/' + segs.join('/') : '';
+          const dsn = { scheme, publicKey: key, host, path, projectId: String(project) };
+          expect(parseDsn(formatDsn(dsn))).toEqual(dsn);
+        },
+      ),
     );
   });
 });
