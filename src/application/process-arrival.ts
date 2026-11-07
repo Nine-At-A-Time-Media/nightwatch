@@ -51,7 +51,9 @@ import {
   type ProcessingResult,
   type ProcessingSettings,
 } from '../domain/processing/processing.js';
+import { sessionReports, type SessionReport } from '../domain/processing/sessions.js';
 import type { EnvelopeItem } from '../domain/protocol/envelope.js';
+import type { Session } from '../domain/release/health.js';
 import { isRefusal } from '../domain/refusal.js';
 import type { FilingReceipt, FilingRefusal, ReportSettings } from '../domain/report/filing.js';
 import { feedbackSubmission } from '../domain/processing/feedback.js';
@@ -209,10 +211,29 @@ async function fileFeedback(placed: Placed, processing: Processing, deps: Proces
   return filed(filing, { record, index: placed.index });
 }
 
+// --- flow: sessions ---
+
+async function hashedSession(report: SessionReport, ids: Ids): Promise<Session> {
+  const { userText, ...session } = report;
+  return { ...session, userKey: userText === null ? null : await ids.hash(userText) };
+}
+
+/** Counts each Session a session item reports through ProjectClient; an item that cannot be read is refused. */
+async function recordSessions(placed: Placed, processing: Processing, deps: ProcessArrivalDeps): Promise<ProcessingResult> {
+  const reports = sessionReports(placed.item, processing.record.receivedAt);
+  if (isRefusal(reports))
+    return processingResult({ outcomes: [itemFate(placed, processing, { kind: 'invalid', reason: reports.refusal })] });
+  for (const report of reports) await deps.projects.recordSession(processing.record.projectId, await hashedSession(report, deps.ids));
+  return processingResult({});
+}
+
+// --- flow: routing ---
+
 async function processItem(placed: Placed, processing: Processing, deps: ProcessArrivalDeps): Promise<ProcessingResult> {
   const route = processingRoute(placed.item.header.type);
   if (route === 'event') return processEvent(placed, processing, deps);
   if (route === 'feedback') return fileFeedback(placed, processing, deps);
+  if (route === 'session') return recordSessions(placed, processing, deps);
 
   // Milestone: check-ins, sessions, attachments and security reports wait for their own use cases.
   const outcome = itemFate(placed, processing, { kind: 'discarded', reason: 'deferred' });

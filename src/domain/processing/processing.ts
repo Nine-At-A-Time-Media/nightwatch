@@ -43,12 +43,14 @@ export type ProcessingResult = {
 };
 
 /** Where an item goes: event processing, Report filing, or left for a use case that does not exist yet. */
-export type ProcessingRoute = 'event' | 'feedback' | 'deferred';
+export type ProcessingRoute = 'event' | 'feedback' | 'session' | 'deferred';
 
 const ROUTES = new Map<string, ProcessingRoute>([
   ['event', 'event'],
   ['feedback', 'feedback'],
   ['user_report', 'feedback'],
+  ['session', 'session'],
+  ['sessions', 'session'],
 ]);
 
 /** The user fields that key an Event's user, most specific first, with the prefix that keeps their keys apart. */
