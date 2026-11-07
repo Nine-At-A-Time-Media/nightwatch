@@ -286,4 +286,39 @@ describe('admitArrival', () => {
     expect(person.outcomes).toEqual([outcome('accepted', null, 'error')]);
     expect(deps.stream.records).toHaveLength(1);
   });
+
+  it('Out-of-scope data is counted: Given an arrival of a kind in Non-Goals, When it arrives, Then it is dropped with an Outcome and no error reaches the SDK', async () => {
+    const deps = makeDeps();
+    const body = envelope([
+      { type: 'transaction', payload: {} },
+      { type: 'replay_event', payload: {} },
+      { type: 'client_report', payload: {} },
+    ]);
+    const admission = await admitArrival(arrival({ body }), deps);
+
+    expect(admission).toMatchObject({ decision: 'admitted', status: 200, recordId: null, retryAdvice: [] });
+    expect(admission.outcomes).toEqual([
+      outcome('discarded', 'out-of-scope', 'transaction'),
+      outcome('discarded', 'out-of-scope', 'replay'),
+      outcome('discarded', 'out-of-scope', 'client_report'),
+    ]);
+    expect(deps.stream.records).toHaveLength(0);
+    expect(deps.quota.requests).toHaveLength(0);
+    expect(deps.archive.archived).toEqual(admission.outcomes);
+  });
+
+  it('Out-of-scope data is counted: the rest of the envelope is still admitted, and unknown kinds are counted too', async () => {
+    const deps = makeDeps();
+    const body = envelope([{ type: 'profile', payload: {} }, errorItem, { type: 'no_such_kind', payload: {} }]);
+    const admission = await admitArrival(arrival({ body }), deps);
+
+    expect(admission.decision).toBe('admitted');
+    expect(admission.outcomes).toEqual([
+      outcome('discarded', 'out-of-scope', 'profile'),
+      outcome('accepted', null, 'error'),
+      outcome('discarded', 'unknown-item-kind', 'default'),
+    ]);
+    const retained = parseEnvelope(deps.stream.records[0]!.body!);
+    expect(!isRefusal(retained) && retained.items.map((i) => i.header.type)).toEqual(['event']);
+  });
 });

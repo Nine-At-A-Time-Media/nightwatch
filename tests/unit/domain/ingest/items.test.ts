@@ -67,6 +67,22 @@ describe('classifyItem', () => {
     for (const [type, category] of Object.entries(expected)) expect(classifyItem(type)).toEqual({ scope: 'in', category });
   });
 
+  it('maps each item kind the Non-Goals defer to its out-of-scope category', () => {
+    const expected = {
+      transaction: 'transaction',
+      span: 'span',
+      replay_event: 'replay',
+      replay_recording: 'replay',
+      replay_video: 'replay',
+      profile: 'profile',
+      profile_chunk: 'profile',
+      statsd: 'metric',
+      metric_buckets: 'metric',
+      client_report: 'client_report',
+    };
+    for (const [type, category] of Object.entries(expected)) expect(classifyItem(type)).toEqual({ scope: 'out', category });
+  });
+
   it('calls any other kind unknown', () => {
     expect(classifyItem('no_such_kind')).toEqual({ scope: 'unknown' });
   });
