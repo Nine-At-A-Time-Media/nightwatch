@@ -376,4 +376,14 @@ describe('admitArrival', () => {
     expect(admission.outcomes).toEqual([outcome('discarded', 'storage-unavailable', 'attachment')]);
     expect(deps.stream.records).toHaveLength(0);
   });
+  it('retains the Assertion the tunnel forwarded only with a feedback item, so processing can file the Report', async () => {
+    const deps = makeDeps();
+    const headers = { 'x-sentry-auth': 'Sentry sentry_key=k1, sentry_version=7', 'cf-access-jwt-assertion': 'jwt-1' };
+    const feedback: ItemSpec = { type: 'feedback', payload: { contexts: { feedback: { message: 'the button does nothing' } } } };
+    await admitArrival(arrival({ headers, body: envelope([errorItem, feedback]) }), deps);
+    await admitArrival(arrival({ headers }), deps);
+    await admitArrival(arrival({ body: envelope([feedback]) }), deps);
+
+    expect(deps.stream.records.map((record) => record.assertion)).toEqual(['jwt-1', null, null]);
+  });
 });
