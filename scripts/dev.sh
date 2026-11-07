@@ -10,8 +10,9 @@
 # persists under .wrangler/state at the repository root; wrangler's own
 # config and logs live under .state/ (see scripts/wrangler.sh). Each Worker's
 # config is passed with its own -c, so bindings between them resolve locally.
-# Crons do not fire in a local session: run `pnpm dev:tick` once to kick the
-# processor's pumps; each then re-arms its own alarm.
+# Crons do not fire in a local session: `pnpm dev:tick` fires the
+# processor's cron (kicks the pumps; each then re-arms its own alarm) and the
+# scheduler's (retention and usage).
 
 set -euo pipefail
 
@@ -20,6 +21,8 @@ readonly WORKER_CONFIGS=(
   "src/workers/core/wrangler.jsonc"
   "src/workers/processor/wrangler.jsonc"
   "dev/local-issuer/wrangler.jsonc"
+  "src/workers/monitors/wrangler.jsonc"
+  "src/workers/scheduler/wrangler.jsonc"
 )
 
 # Every Worker's local state in one place, so D1, R2 and Durable Objects are

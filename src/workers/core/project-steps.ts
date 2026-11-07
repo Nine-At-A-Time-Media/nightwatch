@@ -11,7 +11,8 @@
 import { searchProjectPage } from '../../application/issues/search-project-page.js';
 import type { SearchContext } from '../../domain/search/match.js';
 import type { IssuePage, SearchPlan } from '../../domain/search/page.js';
-import { claimedProject, claimProject, scheduleSweep } from '../../adapters/do-sqlite/project-identity.js';
+import { claimedProject, claimProject, scheduleSweep, scheduleSweepIfNone } from '../../adapters/do-sqlite/project-identity.js';
+import { enforceRetention } from '../../application/operating/enforce-retention.js';
 import { assignEvent } from '../../application/issues/assign-event.js';
 import { assignIssue } from '../../application/issues/assign-issue.js';
 import { recordReleaseSeen } from '../../application/issues/record-release-seen.js';
@@ -40,6 +41,7 @@ import type { Assignment } from '../../domain/issue/assignment.js';
 import type { IssueChange, IssueState, Member } from '../../domain/issue/state.js';
 import type { GroupedEvent } from '../../domain/issue/tally.js';
 import type { Refusal } from '../../domain/refusal.js';
+import type { Expiry, RetentionPolicy } from '../../domain/retention/retention.js';
 import type { Environment, Session } from '../../domain/release/health.js';
 import type { Release, ReleaseFirstSeen } from '../../domain/release/ordering.js';
 import type { RecordedFiling } from '../../domain/report/filing.js';
@@ -368,4 +370,12 @@ export async function moveReportStep(
 ): Promise<Report | Refusal> {
   await claim(r, projectId);
   return moveReport(move.reportId, move.to, move.actor, { issues: r.issues });
+}
+// --- task-034: retention from the scheduler ---
+/** Removes what is past retention, then sets the sweep alarm if the Project has none (the scheduler's kick). */
+export async function enforceRetentionStep(r: ProjectRuntime, projectId: ProjectId, retention: RetentionPolicy): Promise<Expiry> {
+  await claim(r, projectId);
+  const expiry = await enforceRetention(projectId, { issues: r.issues, blobs: r.blobs, clock: r.clock, retention });
+  await scheduleSweepIfNone(r.storage, r.clock.now() + r.sweepInterval);
+  return expiry;
 }
