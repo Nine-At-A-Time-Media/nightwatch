@@ -23,11 +23,14 @@ function isAllowedOrigin({ config, origin }: { config: ProjectConfig; origin: st
 
 // --- exports ---
 
-/** The Arrival's credentials when it may proceed; otherwise why not. An unknown Project reads as a disabled key. */
-export function checkAccess({ arrival, config }: { arrival: Arrival; config: ProjectConfig | null }): Credentials | Refusal {
+/** An Arrival allowed to proceed: the credentials it presented and its Project's config. */
+export type Access = { readonly credentials: Credentials; readonly config: ProjectConfig };
+
+/** Whether the Arrival may proceed, and if not why. An unknown Project reads as a disabled key. */
+export function checkAccess({ arrival, config }: { arrival: Arrival; config: ProjectConfig | null }): Access | Refusal {
   const credentials = locateCredentials(arrival);
   if (isRefusal(credentials)) return credentials;
   if (config === null || !isActiveKey({ config, publicKey: credentials.publicKey })) return refusal('disabled-key');
   if (!isAllowedOrigin({ config, origin: arrival.origin })) return refusal('origin-not-allowed');
-  return credentials;
+  return { credentials, config };
 }

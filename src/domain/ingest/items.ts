@@ -5,10 +5,10 @@
  */
 
 import type { Outcome, OutcomeCategory, OutcomeKind, OutOfScopeCategory } from '../outcome/outcome.js';
-import { parseEnvelope, type Envelope, type EnvelopeItem } from '../protocol/envelope.js';
+import { parseEnvelope, serializeEnvelope, type Envelope, type EnvelopeItem } from '../protocol/envelope.js';
 import type { DataCategory } from '../protocol/retry-advice.js';
 import type { Refusal } from '../refusal.js';
-import type { Arrival, EndpointKind } from './arrival.js';
+import type { Arrival, EndpointKind, SizeLimits } from './arrival.js';
 
 export type ItemClass =
   | { readonly scope: 'in'; readonly category: DataCategory }
@@ -45,6 +45,14 @@ export function isOpen(fate: ItemFate): fate is OpenItem {
   return fate.verdict === null;
 }
 
+export function isOversizeArrival({ arrival, limits }: { arrival: Arrival; limits: SizeLimits }): boolean {
+  return arrival.body.length > limits.arrival;
+}
+
+function isOversizeItem({ item, limits }: { item: EnvelopeItem; limits: SizeLimits }): boolean {
+  return item.payload.length > (item.header.type === 'attachment' ? limits.attachment : limits.event);
+}
+
 // --- helpers ---
 
 export function classifyItem(type: string): ItemClass {
@@ -59,16 +67,25 @@ export function arrivalEnvelope(arrival: Arrival): Envelope | Refusal {
   return { header: {}, items: [{ header: { type: ENDPOINT_ITEM[arrival.endpoint] }, payload: arrival.body }] };
 }
 
-function triageItem(item: EnvelopeItem): ItemFate {
+function triageItem({ item, limits }: { item: EnvelopeItem; limits: SizeLimits }): ItemFate {
   const kind = classifyItem(item.header.type);
+  if (kind.scope === 'in' && isOversizeItem({ item, limits })) {
+    return { item, category: kind.category, verdict: { kind: 'invalid', reason: 'too-large' } };
+  }
   if (kind.scope === 'in') return { item, category: kind.category, verdict: null };
   if (kind.scope === 'out') return { item, category: kind.category, verdict: { kind: 'discarded', reason: 'out-of-scope' } };
   return { item, category: 'default', verdict: { kind: 'discarded', reason: 'unknown-item-kind' } };
 }
 
 /** Each item's fate before quotas and durability. */
-export function triageItems(envelope: Envelope): ItemFate[] {
-  return envelope.items.map(triageItem);
+export function triageItems({ envelope, limits }: { envelope: Envelope; limits: SizeLimits }): ItemFate[] {
+  return envelope.items.map((item) => triageItem({ item, limits }));
+}
+
+/** The body to retain: as received when every item is kept, else the envelope header and the kept items. */
+export function keptBody({ arrival, envelope, fates }: { arrival: Arrival; envelope: Envelope; fates: readonly ItemFate[] }): Uint8Array {
+  if (arrival.endpoint !== 'envelope' || fates.every(isOpen)) return arrival.body;
+  return serializeEnvelope({ header: envelope.header, items: fates.filter(isOpen).map((fate) => fate.item) });
 }
 
 /** Close every open item with the given verdict. */

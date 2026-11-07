@@ -41,6 +41,7 @@ const REFUSAL_STATUS = new Map<string, Exclude<AdmissionStatus, 200>>([
   ['malformed-credentials', 401],
   ['disabled-key', 401],
   ['origin-not-allowed', 403],
+  ['too-large', 413],
 ]);
 
 const HEX = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, '0'));
@@ -88,7 +89,10 @@ export function decideAdmission({
   outcomes: readonly Outcome[];
   recordId: string | null;
 }): Admission {
-  return { decision: 'admitted', status: 200, recordId: hasVerdict(fates, 'accepted') ? recordId : null, outcomes, retryAdvice: [] };
+  if (hasVerdict(fates, 'accepted')) return { decision: 'admitted', status: 200, recordId, outcomes, retryAdvice: [] };
+  const invalid = fates.find((fate) => fate.verdict.kind === 'invalid');
+  if (invalid) return { decision: 'refused', status: refusalStatus(invalid.verdict.reason), outcomes, retryAdvice: [] };
+  return { decision: 'admitted', status: 200, recordId: null, outcomes, retryAdvice: [] };
 }
 
 /** A stable id for an Arrival Record, derived from its Project, receipt time and body. */
@@ -110,6 +114,16 @@ export async function arrivalRecordId({
   return `${receivedAt.toString(36)}-${hex}`;
 }
 
-export function arrivalRecord({ id, arrival, receivedAt }: { id: string; arrival: Arrival; receivedAt: number }): ArrivalRecord {
-  return { id, projectId: arrival.projectId, receivedAt, endpoint: arrival.endpoint, body: arrival.body, blobKey: null };
+export function arrivalRecord({
+  id,
+  arrival,
+  receivedAt,
+  body,
+}: {
+  id: string;
+  arrival: Arrival;
+  receivedAt: number;
+  body: Uint8Array;
+}): ArrivalRecord {
+  return { id, projectId: arrival.projectId, receivedAt, endpoint: arrival.endpoint, body, blobKey: null };
 }
