@@ -10,3 +10,8 @@ reference/
 node_modules/
 .wrangler/
 .dev.vars
+
+# Provisioned agent skills (clai); generated each session, not source.
+.claude/skills/
+.agents/
+.codex/
