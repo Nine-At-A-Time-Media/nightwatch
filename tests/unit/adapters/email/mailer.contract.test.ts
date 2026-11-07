@@ -75,7 +75,7 @@ describe('SendEmailMailer', () => {
 
   it('a text-only message is sent without an html part', async () => {
     const binding = new FakeSendEmailBinding();
-    const { html: _html, ...textOnly } = MESSAGE;
+    const textOnly: MailMessage = { to: MESSAGE.to, subject: MESSAGE.subject, text: MESSAGE.text, headers: MESSAGE.headers };
     await new SendEmailMailer({ binding, from: 'nightwatch@acme.example' }).send(textOnly);
     expect(binding.sent[0]).not.toHaveProperty('html');
   });
