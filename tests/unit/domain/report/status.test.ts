@@ -71,21 +71,27 @@ describe('Report Status', () => {
 
   it('Fixed: Resolved, and its Resolution names no release that has been seen', () => {
     expect(statusFor({ status: 'resolved', resolution: { kind: 'plain' } }, null, { releasesSeen: SEEN })).toBe('fixed');
-    expect(statusFor({ status: 'resolved', resolution: { kind: 'in_next_release', release: null } }, null, { releasesSeen: SEEN })).toBe('fixed');
-    expect(statusFor({ status: 'resolved', resolution: { kind: 'in_commit', commit: 'abc', release: null } }, null, { releasesSeen: SEEN })).toBe(
+    expect(statusFor({ status: 'resolved', resolution: { kind: 'in_next_release', release: null } }, null, { releasesSeen: SEEN })).toBe(
       'fixed',
     );
-    expect(statusFor({ status: 'resolved', resolution: { kind: 'in_release', release: '1.3.0' } }, null, { releasesSeen: SEEN })).toBe('fixed');
+    expect(
+      statusFor({ status: 'resolved', resolution: { kind: 'in_commit', commit: 'abc', release: null } }, null, { releasesSeen: SEEN }),
+    ).toBe('fixed');
+    expect(statusFor({ status: 'resolved', resolution: { kind: 'in_release', release: '1.3.0' } }, null, { releasesSeen: SEEN })).toBe(
+      'fixed',
+    );
   });
 
   it('Released: Resolved, and its Resolution release has been seen', () => {
-    expect(statusFor({ status: 'resolved', resolution: { kind: 'in_release', release: '1.2.0' } }, null, { releasesSeen: SEEN })).toBe('released');
+    expect(statusFor({ status: 'resolved', resolution: { kind: 'in_release', release: '1.2.0' } }, null, { releasesSeen: SEEN })).toBe(
+      'released',
+    );
     expect(statusFor({ status: 'resolved', resolution: { kind: 'in_next_release', release: '1.2.0' } }, null, { releasesSeen: SEEN })).toBe(
       'released',
     );
-    expect(statusFor({ status: 'resolved', resolution: { kind: 'in_commit', commit: 'abc', release: '1.2.0' } }, null, { releasesSeen: SEEN })).toBe(
-      'released',
-    );
+    expect(
+      statusFor({ status: 'resolved', resolution: { kind: 'in_commit', commit: 'abc', release: '1.2.0' } }, null, { releasesSeen: SEEN }),
+    ).toBe('released');
   });
 
   it('Fix ships: Given a Fixed Report, When the resolving release is seen, Then the Report Status becomes Released', () => {
@@ -126,7 +132,8 @@ describe('Report Status', () => {
     fc.assert(
       fc.property(anyStatus, anyTriage, anyLink, (status, triage, link) => {
         fc.pre(!(status.status === 'archived' && status.substatus === 'forever' && status.spam));
-        const untriagedNew = status.status === 'unresolved' && status.substatus === 'new' && !triage.assigned && !triage.commentedByMember && link === null;
+        const untriagedNew =
+          status.status === 'unresolved' && status.substatus === 'new' && !triage.assigned && !triage.commentedByMember && link === null;
         expect(statusFor(status, link, { triage, lastShown: 'closed' }) === 'received').toBe(untriagedNew);
       }),
     );
