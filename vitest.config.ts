@@ -1,8 +1,10 @@
 // Test projects: `unit` runs domain and application code in Node with fakes;
 // `integration` runs Workers code inside workerd through the Cloudflare plugin,
-// against the ingest Worker's local-stage config (no remote bindings);
+// against the ingest Worker's local-stage config (no remote bindings), plus
+// a local D1 `CONTROL` database and the control-plane migrations as
+// `TEST_MIGRATIONS`, which suites apply with applyD1Migrations;
 // `widget` is the report widget package's own project (widget/vitest.config.ts).
-import { cloudflareTest } from '@cloudflare/vitest-plugin';
+import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-plugin';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
@@ -18,7 +20,16 @@ export default defineConfig({
         },
       },
       {
-        plugins: [cloudflareTest({ remoteBindings: false, wrangler: { configPath: './src/workers/ingest/wrangler.jsonc' } })],
+        plugins: [
+          cloudflareTest(async () => ({
+            remoteBindings: false,
+            wrangler: { configPath: './src/workers/ingest/wrangler.jsonc' },
+            miniflare: {
+              d1Databases: ['CONTROL'],
+              bindings: { TEST_MIGRATIONS: await readD1Migrations('./migrations') },
+            },
+          })),
+        ],
         test: {
           name: 'integration',
           include: ['tests/integration/**/*.test.ts'],
