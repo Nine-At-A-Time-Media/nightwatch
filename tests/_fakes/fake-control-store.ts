@@ -10,7 +10,12 @@ import type { OrganizationId, ProjectId, ReportId } from '../../src/domain/ids.j
 import type { Member } from '../../src/domain/issue/state.js';
 import type { TrustedIssuer } from '../../src/domain/signin/sign-in.js';
 import type { AccessTokenRecord } from '../../src/domain/tenancy/access-token.js';
+import type { Release } from '../../src/domain/release/ordering.js';
+import { normalizedDebugId, type Artifact } from '../../src/domain/sourcemap/artifact.js';
 import type { ControlStore, Membership, ReferenceEntry } from '../../src/ports/control-store.js';
+
+/** An Artifact index entry with the Organization it belongs to. */
+export type IndexedArtifact = { readonly organizationId: OrganizationId; readonly artifact: Artifact };
 
 export class FakeControlStore implements ControlStore {
   readonly references = new Map<string, ReferenceEntry>();
@@ -22,6 +27,8 @@ export class FakeControlStore implements ControlStore {
   readonly #memberships = new Map<string, Membership>();
   // --- task-022: Access Tokens by hash, exposed for assertions ---
   readonly accessTokens = new Map<string, AccessTokenRecord>();
+  // --- task-022: the Artifact index, exposed for assertions ---
+  readonly artifacts: IndexedArtifact[] = [];
 
   /** Adds a Project to an Organization, creating the Organization if needed. */
   addProject(organizationId: OrganizationId, projectId: ProjectId): void {
@@ -101,5 +108,35 @@ export class FakeControlStore implements ControlStore {
 
   async findAccessToken(hash: string): Promise<AccessTokenRecord | null> {
     return this.accessTokens.get(hash) ?? null;
+  }
+
+  // --- task-022: the Artifact index ---
+
+  async putArtifact(organizationId: OrganizationId, artifact: Artifact): Promise<Durability> {
+    if (this.failure) return { ok: false, retryable: this.failure.retryable };
+    const same = (entry: IndexedArtifact) =>
+      entry.organizationId === organizationId &&
+      entry.artifact.id === artifact.id &&
+      entry.artifact.debugId === artifact.debugId &&
+      entry.artifact.release === artifact.release &&
+      entry.artifact.fileName === artifact.fileName;
+    if (!this.artifacts.some(same)) this.artifacts.push({ organizationId, artifact });
+    return { ok: true };
+  }
+
+  async findArtifacts(lookup: {
+    organizationId: OrganizationId;
+    debugIds: readonly string[];
+    release: Release | null;
+  }): Promise<readonly Artifact[]> {
+    return this.artifacts
+      .filter(({ organizationId }) => organizationId === lookup.organizationId)
+      .map(({ artifact }) => artifact)
+      .filter(
+        (artifact) =>
+          (artifact.debugId !== null &&
+            lookup.debugIds.some((id) => normalizedDebugId(id) === normalizedDebugId(artifact.debugId ?? ''))) ||
+          (lookup.release !== null && artifact.release === lookup.release),
+      );
   }
 }

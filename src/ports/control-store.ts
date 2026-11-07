@@ -3,7 +3,7 @@
  * records). D1 in production, an in-memory fake in tests. Holds which
  * Organization a Project belongs to, the issuers each Organization trusts,
  * Membership, the Report Reference index, reporter subscriptions, and
- * Access Tokens (by hash).
+ * Access Tokens (by hash), and the Artifact index.
  *
  * The Report Reference index keeps only the hash of each reference, with the
  * Organization, Project and Report it names, and no reporter address. A
@@ -15,6 +15,8 @@ import type { OrganizationId, ProjectId, ReportId } from '../domain/ids.js';
 import type { Member } from '../domain/issue/state.js';
 import type { TrustedIssuer } from '../domain/signin/sign-in.js';
 import type { AccessTokenRecord } from '../domain/tenancy/access-token.js';
+import type { Release } from '../domain/release/ordering.js';
+import type { Artifact } from '../domain/sourcemap/artifact.js';
 
 /** What a Report Reference's hash names. */
 export type ReferenceEntry = {
@@ -62,4 +64,19 @@ export interface ControlStore {
   putAccessToken(hash: string, record: AccessTokenRecord): Promise<Durability>;
   /** The record of the token with this hash, or null when none was kept. */
   findAccessToken(hash: string): Promise<AccessTokenRecord | null>;
+
+  // --- task-022: the Artifact index ---
+
+  /** Indexes an Artifact within its Organization; indexing an identical entry again changes nothing. */
+  putArtifact(organizationId: OrganizationId, artifact: Artifact): Promise<Durability>;
+  /**
+   * The Organization's Artifacts whose debug id is one of `debugIds` (compared
+   * in normalizedDebugId form) or whose release is `release`: the candidates
+   * matchArtifact chooses from for one Event.
+   */
+  findArtifacts(lookup: {
+    organizationId: OrganizationId;
+    debugIds: readonly string[];
+    release: Release | null;
+  }): Promise<readonly Artifact[]>;
 }
