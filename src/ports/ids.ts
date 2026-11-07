@@ -14,4 +14,9 @@ export interface Ids {
   randomBytes(count: number): Uint8Array;
   /** The hash a Report Reference is kept under at rest; the same reference always hashes the same. */
   hashReference(reference: ReportReference): Promise<string>;
+
+  // --- task-022: content hashing (Artifact keys, Access Token hashes) ---
+
+  /** A hash of the bytes in lowercase hex; equal bytes always hash the same, different bytes apart. */
+  hashContent(bytes: Uint8Array): Promise<string>;
 }
