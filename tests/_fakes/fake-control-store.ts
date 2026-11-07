@@ -149,7 +149,10 @@ export class FakeControlStore implements ControlStore {
     this.#addresses.set(member.member, options.email);
     this.#members.set(projectId, [...(this.#members.get(projectId) ?? []), member.member]);
     if (options.owner) this.#owners.set(projectId, [...(this.#owners.get(projectId) ?? []), member.member]);
-    for (const team of options.teams ?? []) this.#teams.set(team, [...(this.#teams.get(team) ?? []), member.member]);
+    for (const team of options.teams ?? []) {
+      const key = this.#teamKey(projectId, team);
+      this.#teams.set(key, [...(this.#teams.get(key) ?? []), member.member]);
+    }
     this.addProjectMember(projectId, options.email);
   }
 
@@ -163,9 +166,17 @@ export class FakeControlStore implements ControlStore {
 
   async recipientsOf(recipient: { projectId: ProjectId; to: EmailRecipient }): Promise<readonly Member[]> {
     const { to } = recipient;
-    if (to.kind === 'member') return this.#addresses.has(to.member) ? [{ member: to.member }] : [];
-    const ids = to.kind === 'team' ? (this.#teams.get(to.team) ?? []) : (this.#owners.get(recipient.projectId) ?? []);
+    if (to.kind === 'member') return (this.#members.get(recipient.projectId) ?? []).includes(to.member) ? [{ member: to.member }] : [];
+    const ids =
+      to.kind === 'team'
+        ? (this.#teams.get(this.#teamKey(recipient.projectId, to.team)) ?? [])
+        : (this.#owners.get(recipient.projectId) ?? []);
     return ids.map((member) => ({ member }));
+  }
+
+  /** Teams belong to an Organization: the key of a team name within the Project's Organization. */
+  #teamKey(projectId: ProjectId, team: string): string {
+    return `${this.#projects.get(projectId) ?? ''}/${team}`;
   }
 
   async addressOf(member: Member): Promise<string | null> {
