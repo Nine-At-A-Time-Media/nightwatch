@@ -200,6 +200,11 @@ export function scrubEvent(event: NormalizedEvent, rules: ScrubbingRules, hash: 
   return { event: walked.value as NormalizedEvent, removals: walked.removals };
 }
 
+/** The Hash that answers from hashes computed ahead; a text without one is filtered rather than kept. */
+export function hashedFrom(table: ReadonlyMap<string, string>): Hash {
+  return (text) => table.get(text) ?? FILTERED;
+}
+
 /**
  * Every text the `hash` method would hash in this Event, once each, so a
  * caller whose hash is asynchronous can hash them ahead and scrub with a
