@@ -73,17 +73,21 @@ describe('compareReleases', () => {
       )
       .map(([a, b, c, pre, build, pkg]) => `${pkg ?? ''}${a}.${b}.${c}${pre.length ? '-' + pre.join('.') : ''}${build ? '+' + build : ''}`);
     fc.assert(
-      fc.property(fc.array(semver, { minLength: 3, maxLength: 3 }), fc.array(fc.nat({ max: 3 }), { minLength: 3, maxLength: 3 }), (vs, times) => {
-        const seen = new Map(vs.map((v, i) => [v, times[i] ?? 0]));
-        const [a, b, c] = vs as [string, string, string];
-        // Antisymmetric, and equal only for the same string.
-        expect(Math.sign(compareReleases(a, b, seen))).toBe(-Math.sign(compareReleases(b, a, seen)));
-        expect(compareReleases(a, b, seen) === 0).toBe(a === b);
-        // Transitive.
-        if (compareReleases(a, b, seen) <= 0 && compareReleases(b, c, seen) <= 0) {
-          expect(compareReleases(a, c, seen)).toBeLessThanOrEqual(0);
-        }
-      }),
+      fc.property(
+        fc.array(semver, { minLength: 3, maxLength: 3 }),
+        fc.array(fc.nat({ max: 3 }), { minLength: 3, maxLength: 3 }),
+        (vs, times) => {
+          const seen = new Map(vs.map((v, i) => [v, times[i] ?? 0]));
+          const [a, b, c] = vs as [string, string, string];
+          // Antisymmetric, and equal only for the same string.
+          expect(Math.sign(compareReleases(a, b, seen))).toBe(-Math.sign(compareReleases(b, a, seen)));
+          expect(compareReleases(a, b, seen) === 0).toBe(a === b);
+          // Transitive.
+          if (compareReleases(a, b, seen) <= 0 && compareReleases(b, c, seen) <= 0) {
+            expect(compareReleases(a, c, seen)).toBeLessThanOrEqual(0);
+          }
+        },
+      ),
     );
   });
 });
