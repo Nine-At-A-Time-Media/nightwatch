@@ -10,7 +10,7 @@ import type { ArrivalRecord } from '../../../src/domain/ingest/arrival.js';
 import type { ProcessingConfig } from '../../../src/domain/processing/processing.js';
 import { serializeEnvelope } from '../../../src/domain/protocol/envelope.js';
 import { FakeArchiveSink } from '../../_fakes/fake-archive-sink.js';
-import { PROJECT, T0, world as reportsWorld } from './reports/world.js';
+import { ADA, PROJECT, T0, assertionOf, world as reportsWorld } from './reports/world.js';
 
 // --- builders ---
 
@@ -226,5 +226,84 @@ describe('processArrival', () => {
     expect(w.effects.enqueued).toEqual(effects);
     expect(w.archive.archivedEvents).toHaveLength(1);
     expect(again.outcomes).toEqual([]);
+  });
+
+  it('files the Report a signed-in feedback item carries, as the Reporter the forwarded sign-in names', async () => {
+    const w = world();
+    const feedback = {
+      type: 'feedback',
+      payload: { contexts: { feedback: { message: 'the save button does nothing', name: 'Mallory', contact_email: 'm@x' } } },
+    };
+    const result = await processArrival(record([feedback], { assertion: assertionOf(ADA) }), w.deps);
+
+    expect(result.filingReceipts).toHaveLength(1);
+    const reportId = result.filingReceipts[0]?.reportId ?? '';
+    expect(await w.projects.getReport(PROJECT, reportId)).toMatchObject({
+      reporter: { email: ADA },
+      message: 'the save button does nothing',
+    });
+    expect(w.mailer.sentTo(ADA)).toHaveLength(1);
+    expect(result.outcomes).toEqual([]);
+  });
+
+  it('refuses feedback without a sign-in, with the filing Outcome archived', async () => {
+    const w = world();
+    const report = { type: 'user_report', payload: { event_id: EVENT_ID, comments: 'it crashed' } };
+    const result = await processArrival(record([report]), w.deps);
+
+    expect(result.filingReceipts).toEqual([]);
+    expect(result.outcomes).toEqual([expect.objectContaining({ kind: 'invalid', reason: 'unsigned', category: 'feedback' })]);
+    expect(w.archive.archived).toEqual(result.outcomes);
+  });
+
+  it('throws when filing could not be stored, so the record is retried', async () => {
+    const w = world();
+    w.control.failure = { retryable: true };
+    const feedback = { type: 'feedback', payload: { contexts: { feedback: { message: 'hello' } } } };
+    await expect(processArrival(record([feedback], { assertion: assertionOf(ADA) }), w.deps)).rejects.toThrow(/unavailable/);
+  });
+
+  it('leaves check-ins, sessions and other kinds to their own use cases, each with a deferred Outcome', async () => {
+    const w = world();
+    const result = await processArrival(
+      record([errorEvent(), { type: 'check_in', payload: {} }, { type: 'session', payload: {} }]),
+      w.deps,
+    );
+
+    expect(result.assignments).toHaveLength(1);
+    expect(result.outcomes).toEqual([
+      { projectId: PROJECT, recordedAt: T0, kind: 'discarded', reason: 'deferred', category: 'monitor', quantity: 1 },
+      { projectId: PROJECT, recordedAt: T0, kind: 'discarded', reason: 'deferred', category: 'session', quantity: 1 },
+    ]);
+    expect(w.archive.archived).toEqual(result.outcomes);
+  });
+
+  it('refuses an event that does not normalize, and drops an Event a Tombstone holds, deleting its stored copy', async () => {
+    const w = world();
+    const invalid = await processArrival(record([{ type: 'event', payload: 'not an object' }]), w.deps);
+    expect(invalid.outcomes).toEqual([expect.objectContaining({ kind: 'invalid', reason: 'malformed-event', category: 'error' })]);
+
+    const first = await processArrival(record([errorEvent()]), w.deps);
+    const issueId = first.assignments[0] && 'issueId' in first.assignments[0] ? first.assignments[0].issueId : '';
+    const store = w.projects.store(PROJECT);
+    await store.putTombstone({ issueId, fingerprints: await store.fingerprintsOf(issueId), at: T0, actor: { member: 'm' } });
+    const dropped = await processArrival(record([errorEvent({ event_id: 'b'.repeat(32) })]), w.deps);
+
+    expect(dropped.assignments).toEqual([{ tombstone: issueId, changes: [], duplicate: false }]);
+    expect(dropped.outcomes).toEqual([expect.objectContaining({ kind: 'discarded', reason: 'tombstone', category: 'error' })]);
+    expect(await w.blobs.get(eventBlobKey('b'.repeat(32)))).toBeNull();
+  });
+
+  it('reads a body kept in the BlobStore, and refuses a record whose body is gone or whose Project is unknown', async () => {
+    const w = world();
+    const inline = record([errorEvent()]);
+    await w.blobs.put('raw/p/big', inline.body ?? new Uint8Array());
+    const fromBlob = await processArrival({ ...inline, body: null, blobKey: 'raw/p/big' }, w.deps);
+    expect(fromBlob.assignments).toHaveLength(1);
+
+    const gone = await processArrival({ ...inline, body: null, blobKey: 'raw/p/expired' }, w.deps);
+    expect(gone.outcomes).toEqual([expect.objectContaining({ kind: 'invalid', reason: 'raw-expired' })]);
+    const unknown = await processArrival({ ...inline, projectId: 'nobody' }, w.deps);
+    expect(unknown.outcomes).toEqual([expect.objectContaining({ projectId: 'nobody', kind: 'invalid', reason: 'unknown-project' })]);
   });
 });
