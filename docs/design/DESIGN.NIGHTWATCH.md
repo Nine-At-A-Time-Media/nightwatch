@@ -82,8 +82,8 @@ provide, on Cloudflare, plus a reporter loop none of them has.
 | G5 | Personal data matching a project's scrubbing rules is removed before any person or store other than the raw retention sees it, and each removal is recorded without the value. |
 | G6 | Issues follow the lifecycle in State Machine: Issue, including regression, escalation and archive conditions. |
 | G7 | A team member can search, assign, comment on, merge, split, delete and discard issues. |
-| G8 | Alert rules notify the right people about new, regressed, escalating and frequent issues, and about metric thresholds, within a bounded delay and without duplicate alerts inside a quiet period. |
-| G9 | A reporter can file a Report from inside a product, receives a Report Reference at once, and can follow the Report to its outcome without a GitHub account. |
+| G8 | Alert rules notify the right people about new, regressed, escalating and frequent issues, and about metric thresholds, within the Alert Evaluation Delay and without duplicate alerts inside the Alert Quiet Period. |
+| G9 | A reporter can file a Report from inside a product and receives a Report Reference at filing: shown at once in Nightwatch's report form, and always sent to their address. They can follow the Report to its outcome without a GitHub account. |
 | G10 | A reporter is notified when the Report Status changes, and sees only replies a team member marked as shared. |
 | G11 | A team member can open a GitHub issue from a Nightwatch issue or Report. State changes on either side reach the other. |
 | G12 | A commit or pull request that names an issue resolves it when that commit ships in a release. |
@@ -94,7 +94,7 @@ provide, on Cloudflare, plus a reporter loop none of them has.
 | G17 | Every arrival ends in exactly one recorded Outcome (accepted, filtered, rate limited, invalid, or discarded), and an operator can see the totals. |
 | G18 | All stored data expires at the end of its retention window, per kind of data. |
 | G19 | Nightwatch runs entirely on Cloudflare. |
-| G20 | Nightwatch runs within the Platform Soft Limits. Crossing one alerts the operator; it does not by itself refuse data. |
+| G20 | Nightwatch runs within the Platform Soft Limits. Crossing one alerts the operator within the Platform Usage Interval; it does not by itself refuse data. |
 | G21 | Every behavior in this record can be exercised on a workstation with no Cloudflare account and no network access to Cloudflare. |
 | G22 | Every Reporter and every Member is identified by the email address their sign-in asserts. Nightwatch accepts no Report from a person who is not signed in. |
 
@@ -132,7 +132,7 @@ provide, on Cloudflare, plus a reporter loop none of them has.
 | Trusted sign-in | Only an Organization owner names the sign-in issuers the Organization trusts. A trusted issuer is trusted for every address it asserts. An assertion from any other issuer identifies nobody. |
 | Machine access | An Access Token belongs to one Organization and acts only within it. It carries a fixed set of scopes. A CI token can upload release artifacts and do nothing else. |
 | Ingest keys | A Client Key admits data to one Project. It grants no read access. It never identifies a reporter. |
-| Operator | An Operator runs a deployment. An Operator can reprocess raw arrivals, view Outcome totals and receive Platform Soft Limit alerts. Each Operator action is confined to one Organization, except Platform Usage, which spans the deployment. Reprocessing never shows a raw arrival to the Operator. |
+| Operator | An Operator runs a deployment. An Operator can reprocess raw arrivals, view Outcome totals and receive Platform Soft Limit alerts. Each Operator action is confined to one Organization, except Platform Usage, which spans the deployment. Reprocessing never shows a raw arrival to the Operator. Being an Operator alone grants no read of a Report, Thread, Attachment or reporter address. |
 | Isolation | Every read, search, notification and outbound link is confined to one Organization. |
 
 ### Ingest
@@ -298,6 +298,7 @@ A Report is a bug report a person filed. It is not an event.
 | Missing source map | Given no matching Artifact, When a minified error is processed, Then frames stay minified and the event records why. |
 | Scrubbing removes data | Given a Scrubbing Rule matches a field, When the event is processed, Then the stored event shows the field as removed with the rule and length, and no store other than raw retention holds the value. |
 | Reprocess a range | Given raw arrivals in a time range, When an operator reprocesses it, Then the derived events are rebuilt once, and counts equal a single processing. |
+| Interrupted reprocess | Given an operator's reprocess of a range, When it stops before finishing, Then the range holds either its prior derived state or its fully rebuilt state, never a mix, and the operator is told it did not finish. |
 | Reprocessing is silent | Given a range whose events already caused alerts, Reporter Notifications and GitHub issues, When an operator reprocesses it, Then none of them is sent, fired or opened again. |
 | Raw retention expired | Given an arrival older than Raw Retention, When an operator asks to reprocess it, Then Nightwatch refuses and says it has expired. |
 
@@ -307,7 +308,7 @@ A Report is a bug report a person filed. It is not an event.
 |---|---|
 | New becomes ongoing | Given a New issue, When it is older than the New Issue Age, Then it becomes Ongoing. |
 | Early escalation | Given a young issue that is frequent and well above its project's normal rate, When another event arrives, Then it becomes Escalating and its Priority rises. |
-| Archived until escalating | Given an issue archived until escalating, When its hourly rate exceeds its Forecast, Then it becomes Escalating and enters For Review. |
+| Archived until escalating | Given an issue archived until escalating, When its rate over the Forecast Window exceeds its Forecast, Then it becomes Escalating and enters For Review. |
 | Archived until condition | Given an issue archived until a count, user count or date, When the condition is met, Then it becomes Ongoing. |
 | Archived forever stays | Given an issue archived forever, When events arrive, Then it stays archived and counts rise. |
 | Regression in newer release | Given an issue resolved in release R, When an event from a release newer than R arrives, Then it becomes Regressed. |
@@ -356,6 +357,7 @@ A Report is a bug report a person filed. It is not an event.
 | Frequency alert | Given a rule triggering on more than N events in a window, When the Nth plus one event arrives, Then the actions run within the Alert Evaluation Delay. |
 | Filter blocks | Given a rule filtered to environment production, When a staging event meets the trigger, Then the actions do not run. |
 | Digest gathers | Given several alerts for one recipient and rule in a burst, When the Digest is due, Then one email lists them all. |
+| Undelivered alert is visible | Given an Issue Alert Rule whose email or webhook action cannot be delivered, When Nightwatch stops trying, Then Members see on the rule that the action was not delivered. |
 | Metric incident opens and closes | Given a metric rule, When its aggregate breaches for the required consecutive windows, Then an Incident opens; When it recovers for the required windows, Then the Incident closes, and each change notifies. |
 | Reply by email | Given an issue notification email, When a Member replies, Then the reply becomes their comment on the issue. |
 | Unknown replier | Given an issue notification email, When an address that is not a Member replies, Then nothing is posted. |
@@ -377,6 +379,7 @@ A Report is a bug report a person filed. It is not an event.
 | Resolve by commit | Given an issue with short id S, When a commit saying it fixes S is pushed, Then the issue is resolved pending that commit; When the commit ships in a release, Then the Resolution names that release. |
 | Suspect commit | Given a code mapping and an in-app top frame, When an issue is created, Then the Suspect Commit and its author are shown. |
 | Uninstalled app | Given a GitHub installation is removed, When a linked issue changes, Then Nightwatch records that the link is broken and does not retry forever. |
+| Broken link relinked | Given a Broken External Link, When the installation is restored and a member relinks, Then the External Link is Linked again and later changes on either side reach the other. |
 
 ### Releases and monitors
 
@@ -397,6 +400,7 @@ A Report is a bug report a person filed. It is not an event.
 | Outcome totals | Given arrivals of every Outcome kind, When an operator views Outcomes for a Project, Then totals per kind and reason are shown. |
 | Retention expiry | Given an event older than Event Retention, When anyone asks for it, Then it is not found. |
 | Erasure | Given a reporter's erasure request, When an owner erases it, Then that reporter's Reports and contact details are gone and their Follow-up Pages say not found. |
+| Erasure reaches every store | Given a reporter whose address and Reports are held in raw retention, History, the archive and pending Reporter Notifications, When an owner erases them, Then none of those holds the address or the Reports; if any cannot be erased, the owner is told the erasure is incomplete. |
 | Noisy tenant | Given one Project floods ingest, When its Quota is exhausted, Then other Projects' arrivals are still accepted. |
 | Soft limit crossed | Given Platform Usage above its Platform Soft Limit, When usage is compared, Then the operator is alerted and no Arrival is refused for that reason. |
 
@@ -429,7 +433,8 @@ A Report is a bug report a person filed. It is not an event.
     +--(Regression Policy)--> REGRESSED       ARCHIVED/FOREVER
     +--(member, GitHub reopen)--> ONGOING
 
-   ARCHIVED/UNTIL_ESCALATING --(hourly rate over Forecast)--> ESCALATING
+   ARCHIVED/UNTIL_ESCALATING --(rate over Forecast Window
+                                exceeds Forecast)----------> ESCALATING
    ARCHIVED/UNTIL_CONDITION  --(condition met)--------------> ONGOING
    ARCHIVED/*                --(member, GitHub reopen)------> ONGOING
 
@@ -449,7 +454,7 @@ A Report is a bug report a person filed. It is not an event.
 | Unresolved/* | Archived/Until escalating | member | none |
 | Unresolved/* | Archived/Until condition | member | a count, user count or date is given |
 | Unresolved/* | Archived/Forever | member, spam, GitHub close as not planned | none |
-| Archived/Until escalating | Unresolved/Escalating | event | hourly rate exceeds Forecast |
+| Archived/Until escalating | Unresolved/Escalating | event | rate over the Forecast Window exceeds Forecast |
 | Archived/Until condition | Unresolved/Ongoing | event or sweep | condition met |
 | Archived/* | Unresolved/Ongoing | member, GitHub reopen | none |
 | Resolved | Unresolved/Regressed | event | Regression Policy holds |
@@ -459,22 +464,27 @@ A Report is a bug report a person filed. It is not an event.
 
 ### Report Status
 
-A Report Status is derived; nothing sets it directly.
+A Report Status is derived; nothing sets it directly. Each arrow below is
+a change in the attached issue that moves the derived status.
 
 ```
-  RECEIVED --(triage)--> ACKNOWLEDGED --(issue resolved)--> FIXED
-     |                        ^   |                           |
-     |                        |   +--(archived forever)--+    | (release seen)
-     |                        |                          v    v
-     |                        +--(regressed / reopened)-- RELEASED
-     |                                                  CLOSED
-     +--(spam)--> (no visible change)
+  RECEIVED --+--(issue acknowledged)------------> ACKNOWLEDGED
+             +--(issue resolved)----------------> FIXED
+             +--(issue archived forever)--------> CLOSED
+
+  ACKNOWLEDGED --(issue resolved)---------------> FIXED
+  ACKNOWLEDGED --(issue archived forever)-------> CLOSED
+  FIXED        --(Resolution's release seen)----> RELEASED
+  FIXED, RELEASED --(issue regressed, reopened)--> ACKNOWLEDGED
+  CLOSED       --(issue reopened)---------------> ACKNOWLEDGED
+
+  any --(issue archived forever as spam)--> (no visible change)
 ```
 
 | Report Status | Holds when the attached issue is... |
 |---|---|
-| Received | Unresolved/New, and no member has triaged it. |
-| Acknowledged | Unresolved and triaged (assigned, commented, linked externally, or past New, including Unresolved/Regressed), or Archived until escalating or until condition. |
+| Received | Unresolved/New, with no Assignee, no member comment and no External Link. |
+| Acknowledged | Unresolved and either past New or holding an Assignee, a member comment or an External Link; or Archived until escalating or until condition. |
 | Fixed | Resolved, and its Resolution names no release that has been seen. |
 | Released | Resolved, and its Resolution's release has been seen. |
 | Closed | Archived forever and not spam. |
@@ -523,13 +533,15 @@ the reporter unsubscribed or the Report is spam.
 | Project | One product's error and report space. | Belongs to one Organization and one or more Teams. |
 | Member | A person in an Organization. | Has one Organization Role. |
 | Organization Role, Team Role | A named set of scopes. | Permission is the union of a Member's roles. |
-| Operator | The person who runs a Nightwatch deployment. | Acts within one Organization at a time, except on Platform Usage; never reads a raw arrival. |
+| Operator | The person who runs a Nightwatch deployment. | Acts within one Organization at a time, except on Platform Usage; as Operator alone, never reads a raw arrival, Report, Thread, Attachment or reporter address. |
 | Access Token | A credential for the Nightwatch API with fixed scopes. | Belongs to one Organization; never admits ingest. |
 | Client Key | A credential that admits ingest to one Project. | Grants no read access; never identifies a Reporter. |
 | Arrival | One ingest request as received. | Has exactly one Outcome. |
 | Outcome | The recorded fate of an Arrival or one of its items: accepted, filtered, rate limited, invalid, or discarded, with a reason. | Every Arrival yields Outcomes that sum to what it carried. |
 | Quota | A bound on Arrivals per category per scope per window. | Exhausting one Project's Quota never refuses another Project. |
 | Inbound Filter | A Project rule that drops matching Arrivals before processing. | A filtered Arrival is never processed. |
+| Raw Retention | The window an accepted Arrival is kept as received. | Never longer than Event Retention. |
+| Event Retention | The window an Event is kept after it occurs. | Set per Organization; the archive obeys it. |
 | Event | One error or message occurrence after processing. | Belongs to exactly one issue. |
 | Attachment | A file sent with an Event or Report. | Lives and expires with its parent. |
 | Scrubbing Rule | A Project rule that removes matching personal data. | The removed value is never stored outside raw retention. |
@@ -541,16 +553,21 @@ the reporter unsubscribed or the Report is spam.
 | Report issue | An Issue created to hold a new Report. | Holds no Fingerprint until merged with a crash Issue. |
 | Short Id | The human-readable id of an Issue. | Unique within its Project, never reused. |
 | Status, Substatus | An Issue's place in State Machine: Issue. | Changes only by the listed transitions. |
+| New Issue Age | The age after which a New Issue becomes Ongoing. | Applies only to New Issues. |
+| Settle Age | The time an Issue stays Escalating or Regressed before it returns to Ongoing. | Applies only to those two substatuses. |
 | Resolution | The record of how an Issue was resolved: plain, in a release, in the next release, or in a commit. | Decides regression. |
 | Regression Policy | The rule deciding whether an Event regresses a resolved Issue. | An Event from a release not newer than the Resolution's never regresses it. |
-| Forecast | The expected ceiling on an Issue's hourly event rate. | Recomputed on a schedule from recent history. |
+| Forecast | The expected ceiling on an Issue's event rate over the Forecast Window. | Recomputed on a schedule from recent history. |
+| Forecast Window | The span over which an Issue's event rate is compared with its Forecast. | The same span for the rate and the Forecast it is compared with. |
 | Early Escalation Policy | The rule escalating a young, frequent Issue. | Applies only within the New state. |
 | Priority | Low, medium or high. | A hand-set Priority is never changed automatically. |
 | For Review | The list of Issues awaiting triage. | An Issue leaves it on any triage action or at Inbox Expiry. |
+| Inbox Expiry | The time after which an untriaged Issue leaves For Review. | Leaving by expiry changes no Status. |
+| Auto-Resolve Age | The time unseen after which a Project resolves an Issue. | Unset means never. |
 | Assignee | The one Member or Team responsible for an Issue. | At most one. |
 | Ownership Rule | A Project rule mapping a match to owners. | The last match wins and outranks CODEOWNERS. |
 | Tombstone | The kept Fingerprints of a discarded Issue. | Events matching it are dropped. |
-| History | The append-only record of an Issue's changes. | Never edited. |
+| History | The append-only record of an Issue's changes. | Never edited, except by Erasure. |
 | Report | A bug report a person filed. | Attached to exactly one Issue. |
 | Reporter | The person who filed a Report. | Always identified by the email address a trusted sign-in asserts; need not be a Member. |
 | Sign-in | A verified assertion of a person's email address by an issuer the Organization trusts. | Without one, a request identifies nobody. |
@@ -561,25 +578,28 @@ the reporter unsubscribed or the Report is spam.
 | Reporter Notification | A message to a Reporter about their Report. | Never sent to an unsubscribed Reporter or for spam. |
 | Spam Judge | The judgement of whether a Report is spam. | Its verdict can be overturned by a Member; archiving is its only effect. |
 | Issue Alert Rule | Triggers, filters and actions over Issues. | Fires at most once per Issue per Alert Quiet Period. |
+| Alert Quiet Period | The span after an Issue Alert Rule fires for an Issue in which it does not fire again for that Issue. | Set per rule; bounded below. |
+| Alert Evaluation Delay | The longest time between the event that satisfies a counting trigger and the rule firing. | Bounded. |
 | Metric Alert Rule | Thresholds over an aggregate. | Opens and closes Incidents only on consecutive windows. |
 | Incident | A period during which a Metric Alert Rule is breached. | Has one current level. |
 | Digest | A gathered set of alert emails for one recipient and rule. | Sent within the Digest Minimum and Maximum Delay. |
+| Digest Minimum Delay, Digest Maximum Delay | The earliest and latest a Digest is sent after its first item. | The Minimum is below the Maximum. |
 | Workflow Notification | A message to an Issue's followers about a change. | Respects the follower's settings. |
 | External Link | The tie between an Issue and a GitHub issue. | A change that came from one side is not echoed back to it. |
 | Code Mapping | The tie between a stack path prefix and a repository path. | Belongs to one Project and one repository. |
 | Suspect Commit | The commit most likely to have caused an Issue. | Chosen within the Suspect Commit Window. |
+| Suspect Commit Window | The span of history searched for a Suspect Commit. | No commit outside it is named. |
 | Release | A version of a product within an Organization. | Versions order semantically when they parse, else by first sight. |
 | Deploy | A Release reaching an Environment. | Has a time. |
 | Environment | A named place a product runs, such as production. | Belongs to one Organization. |
 | Repository | A code repository an Organization connected for Nightwatch to use. | Reached only through the Organization's installed GitHub app. |
 | Session | One use of a product, as reported by an SDK. | Ends in one of ok, exited, errored, crashed or abnormal. |
 | Cron Monitor, Uptime Monitor | Watchers that record successes and Failures. | Open and resolve monitor issues only on consecutive runs. |
+| Uptime Failure Count | The number of consecutive failed checks that make an Uptime Monitor Failure. | Set per monitor; at least one. |
 | Failure | A missed, late, failed, overlong or down result. | Recorded once per expected run. |
 | Platform Usage | Use of one Cloudflare product against its Platform Soft Limit. | Compared within the Platform Usage Interval. |
-
-### Values the behaviors exchange
-
-These values are defined, under the same names, in [ARCHITECTURE.NIGHTWATCH.md](ARCHITECTURE.NIGHTWATCH.md).
+| Platform Soft Limit | The usage of one Cloudflare product above which the operator is alerted. | Crossing it never by itself refuses an Arrival. |
+| Platform Usage Interval | How often Platform Usage is compared with its Platform Soft Limit. | Bounds how late a crossing is reported. |
 
 ---
 
@@ -616,7 +636,6 @@ These values are defined, under the same names, in [ARCHITECTURE.NIGHTWATCH.md](
 | Monitor failure and recovery thresholds | Per monitor; at least one. |
 | Platform Soft Limits | One per Cloudflare product used. Each equals that product's free-plan allocation, or its beta allocation where the product has no free plan. |
 | Platform Usage Interval | Bounded. |
-| Reply-by-email address lifetime | Bounded. |
 
 ---
 
@@ -629,16 +648,18 @@ These values are defined, under the same names, in [ARCHITECTURE.NIGHTWATCH.md](
 | Secrets and personal data in events | Scrubbing runs before any person or store sees an event. Raw retention is bounded and readable only by reprocessing. |
 | A leaked Report Reference | A reference is seen by anyone who reads the reporter's email or the linked GitHub issue. Possession is not authorization: the Follow-up Page also requires the reporter's or a Member's sign-in. References cannot be guessed and can be revoked. |
 | A forged sign-in | Identity is taken only from a verified assertion by an issuer the Organization trusts. Only an Organization owner names trusted issuers. Anything else identifies nobody. |
+| A trusted issuer asserting another person's address | Not prevented: a trusted issuer is trusted for every address it asserts, including a Member's, so it can act as that person. Only the owner's choice of issuers bounds this. See Q6. |
+| An Operator reading reporter data | Being an Operator grants no read of a Report, Thread, Attachment or reporter address. Reprocessing never shows a raw arrival to the Operator. |
 | Reporter addresses reaching a public GitHub repository | Reporter addresses and Attachments never leave Nightwatch. GitHub receives a link that anyone who can read the repository can see; it opens only for the reporter or a Member of the Project. |
 | A screenshot showing private data | Report Attachments are visible to Members of the Project only. |
-| Forged GitHub webhooks | A webhook is applied only after its signature is verified. |
+| Forged GitHub webhooks | A webhook is applied only after it is proven to come from GitHub. |
 | A GitHub commenter speaking to a reporter as Nightwatch | A GitHub comment's mark for the reporter is honored only when its author maps to a Member. |
-| Forged reply-by-email | A reply is posted only when its sender is authenticated as a known Member address, sent to an address Nightwatch issued for that issue. |
+| Forged reply-by-email | A reply is posted only when its sender is authenticated as a known Member address. A claimed sender alone is not authentication; a reply whose sender cannot be authenticated is dropped. |
 | A webhook aimed at an internal or another tenant's target | A webhook never reaches the deployment's own endpoints, its internal network, or another Organization's resources. |
 | Cross-tenant leakage | Every query, notification and link is scoped to one Organization. Tests prove it for search, Follow-up Pages and notifications. |
 | Spam Reports used to harass a team | Report Quota, the Spam Judge, and silent archiving. |
 | Spam Judge hides a real Report | Its verdict is visible to Members and can be overturned. |
-| Stolen Access Token | Tokens are scoped to one Organization, revocable, stored only as hashes, and expire when set to. |
+| Stolen Access Token | Tokens are scoped to one Organization, revocable, and expire when set to. |
 | Source maps disclosing source code | Artifacts are readable by Members of the Project only. |
 
 ---
