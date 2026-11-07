@@ -5,7 +5,7 @@
 
 import { DurableObject } from 'cloudflare:workers';
 
-export class LogDO extends DurableObject<IngestEnv> {}
+export { LogDO } from './log-do.js';
 
 export class QuotaDO extends DurableObject<IngestEnv> {}
 
