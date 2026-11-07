@@ -8,9 +8,11 @@
 
 import { SqliteIssueStore } from '../../adapters/do-sqlite/sqlite-issue-store.js';
 import { QueueEffectQueue } from '../../adapters/queues/queue-effect-queue.js';
+import { R2BlobStore } from '../../adapters/r2/r2-blob-store.js';
 import { RandomIds } from '../../adapters/runtime/random-ids.js';
 import { SystemClock } from '../../adapters/runtime/system-clock.js';
 import type { IssuePolicies } from '../../domain/issue/policies.js';
+import type { BlobStore } from '../../ports/blob-store.js';
 import type { Clock } from '../../ports/clock.js';
 import type { EffectQueue } from '../../ports/effect-queue.js';
 import type { Ids } from '../../ports/ids.js';
@@ -20,6 +22,7 @@ import type { IssueStore } from '../../ports/issue-store.js';
 export type ProjectRuntime = {
   readonly issues: IssueStore;
   readonly effects: EffectQueue;
+  readonly blobs: BlobStore;
   readonly clock: Clock;
   readonly ids: Ids;
   readonly policies: IssuePolicies;
@@ -71,6 +74,7 @@ export function projectRuntime({ storage, env }: { storage: DurableObjectStorage
   return {
     issues: new SqliteIssueStore({ storage, dedupWindow: positive({ name: 'DEDUP_WINDOW_MS', value: env.DEDUP_WINDOW_MS }) }),
     effects: new QueueEffectQueue(env.EFFECTS),
+    blobs: new R2BlobStore(env.BLOBS),
     clock: new SystemClock(),
     ids: new RandomIds(),
     policies: issuePolicies(env),
