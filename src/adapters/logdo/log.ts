@@ -27,7 +27,7 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS records (
      seq INTEGER PRIMARY KEY AUTOINCREMENT,
      id TEXT NOT NULL, project_id TEXT NOT NULL, received_at INTEGER NOT NULL, endpoint TEXT NOT NULL,
-     body BLOB, blob_key TEXT)`,
+     body BLOB, blob_key TEXT, assertion TEXT)`,
   `CREATE TABLE IF NOT EXISTS subscriptions (name TEXT PRIMARY KEY, after_seq INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS deliveries (
      subscription TEXT NOT NULL, seq INTEGER NOT NULL, worker_id TEXT,
@@ -36,7 +36,7 @@ const SCHEMA = [
 ];
 
 const DELIVERABLE = `
-  SELECT r.seq, r.id, r.project_id, r.received_at, r.endpoint, r.body, r.blob_key
+  SELECT r.seq, r.id, r.project_id, r.received_at, r.endpoint, r.body, r.blob_key, r.assertion
   FROM records r
   JOIN subscriptions s ON s.name = ?1
   LEFT JOIN deliveries d ON d.subscription = s.name AND d.seq = r.seq
@@ -47,6 +47,10 @@ const DELIVERABLE = `
 const LEASE = `
   INSERT INTO deliveries (subscription, seq, worker_id, lease_expires_at, acked) VALUES (?1, ?2, ?3, ?4, 0)
   ON CONFLICT (subscription, seq) DO UPDATE SET worker_id = excluded.worker_id, lease_expires_at = excluded.lease_expires_at`;
+
+/** A log created before records kept their Assertion gains the column; the check makes it safe to repeat. */
+const HAS_ASSERTION = `SELECT COUNT(*) AS present FROM pragma_table_info('records') WHERE name = 'assertion'`;
+const ADD_ASSERTION = `ALTER TABLE records ADD COLUMN assertion TEXT`;
 
 const HELD = `subscription = ?1 AND seq = ?2 AND worker_id = ?3 AND acked = 0`;
 
@@ -64,6 +68,11 @@ function integer(row: Row, column: string): number {
   return value;
 }
 
+function optionalText(row: Row, column: string): string | null {
+  const value = row[column];
+  return value === null || value === undefined ? null : text(row, column);
+}
+
 function endpointOf(row: Row): EndpointKind {
   const value = text(row, 'endpoint');
   if (!ENDPOINTS.has(value)) throw new Error(`log row endpoint ${value} is unknown`);
@@ -76,6 +85,7 @@ function recordOf(row: Row): ArrivalRecord {
     projectId: text(row, 'project_id'),
     receivedAt: integer(row, 'received_at'),
     endpoint: endpointOf(row),
+    assertion: optionalText(row, 'assertion'),
   };
   const body = row['body'];
   if (body instanceof ArrayBuffer) return { ...base, body: new Uint8Array(body), blobKey: null };
@@ -90,6 +100,7 @@ function blobOf(body: Uint8Array): ArrayBuffer {
 
 export function ensureLogSchema(sql: SqlStorage): void {
   for (const statement of SCHEMA) sql.exec(statement);
+  if (integer(sql.exec(HAS_ASSERTION).one(), 'present') === 0) sql.exec(ADD_ASSERTION);
 }
 
 /** Append one Arrival Record; its offset is returned. */
@@ -97,13 +108,14 @@ export function appendRecord(sql: SqlStorage, record: ArrivalRecord): { offset: 
   const body = record.body === null ? null : blobOf(record.body);
   const row = sql
     .exec(
-      'INSERT INTO records (id, project_id, received_at, endpoint, body, blob_key) VALUES (?, ?, ?, ?, ?, ?) RETURNING seq',
+      'INSERT INTO records (id, project_id, received_at, endpoint, body, blob_key, assertion) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING seq',
       record.id,
       record.projectId,
       record.receivedAt,
       record.endpoint,
       body,
       record.blobKey,
+      record.assertion,
     )
     .one();
   return { offset: integer(row, 'seq') };

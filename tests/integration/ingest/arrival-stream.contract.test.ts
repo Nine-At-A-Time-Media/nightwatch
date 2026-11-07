@@ -24,6 +24,7 @@ function record(id: string): ArrivalRecord {
     endpoint: 'envelope',
     body: new TextEncoder().encode(`{"n":"${id}"}\n`),
     blobKey: null,
+    assertion: null,
   };
 }
 
@@ -34,6 +35,7 @@ const blobRecord: ArrivalRecord = {
   endpoint: 'attachment',
   body: null,
   blobKey: 'raw/42/big',
+  assertion: 'jwt-of-the-reporter',
 };
 
 const ids = (leased: readonly { record: ArrivalRecord }[]) => leased.map((l) => l.record.id);
@@ -57,7 +59,7 @@ describe.each<{ name: string; make: (clock: FakeClock) => Log }>([
     log = make(clock);
   });
 
-  it('an appended record is pulled back whole, inline body or BlobStore key', async () => {
+  it('an appended record is pulled back whole, inline body or BlobStore key, with its Assertion', async () => {
     await log.subscribe({ subscription: SUBSCRIPTION, start: 'earliest' });
     await log.append(record('a'));
     await log.append(blobRecord);

@@ -17,6 +17,7 @@ import {
   needsBlob,
   rawBlobKey,
   refuseArrival,
+  retainedAssertion,
   storageAdvice,
   storageVerdict,
   type Admission,
@@ -132,7 +133,9 @@ async function retain({
     const stored = await deps.blobs.put(blobKey, body);
     if (!stored.ok) return { recordId, storage: stored };
   }
-  const storage = await deps.stream.append(arrivalRecord({ id: recordId, arrival, receivedAt, body, blobKey }));
+  const storage = await deps.stream.append(
+    arrivalRecord({ id: recordId, arrival, receivedAt, body, blobKey, assertion: retainedAssertion({ arrival, fates }) }),
+  );
   return { recordId, storage };
 }
 

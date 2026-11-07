@@ -7,6 +7,7 @@
 
 import type { Outcome, OutcomeCategory, OutcomeKind } from '../outcome/outcome.js';
 import type { RetryAdvice, RetryAdviceEntry } from '../protocol/retry-advice.js';
+import type { Assertion } from '../signin/sign-in.js';
 import type { Arrival, ArrivalRecord, Durability, EndpointKind, IngestSettings } from './arrival.js';
 import { isOpen, type DecidedItem, type ItemFate, type Verdict } from './items.js';
 
@@ -47,10 +48,17 @@ const REFUSAL_STATUS = new Map<string, Exclude<AdmissionStatus, 200>>([
 
 const STORAGE_UNAVAILABLE = 'storage-unavailable';
 
+/** The header the tunnel route forwards the Cloudflare Access assertion in. */
+const ASSERTION_HEADER = 'cf-access-jwt-assertion';
+
 // --- predicates ---
 
 function hasVerdict(fates: readonly DecidedItem[], kind: OutcomeKind): boolean {
   return fates.some((fate) => fate.verdict.kind === kind);
+}
+
+function isKeptFeedback(fate: ItemFate): boolean {
+  return isOpen(fate) && fate.category === 'feedback';
 }
 
 function isStorageFailure(storage: Durability | null): storage is { ok: false; retryable: boolean } {
@@ -80,6 +88,11 @@ export function needsBlob({
 
 export function rawBlobKey({ projectId, recordId }: { projectId: string; recordId: string }): string {
   return `raw/${projectId}/${recordId}`;
+}
+
+/** The Assertion to retain with the record: the forwarded one, only when a kept item is feedback that will need it. */
+export function retainedAssertion({ arrival, fates }: { arrival: Arrival; fates: readonly ItemFate[] }): Assertion | null {
+  return fates.some(isKeptFeedback) ? (arrival.headers[ASSERTION_HEADER] ?? null) : null;
 }
 
 /** The verdict for items still open once storage has answered: accepted only if durable. */
@@ -156,13 +169,15 @@ export function arrivalRecord({
   receivedAt,
   body,
   blobKey,
+  assertion,
 }: {
   id: string;
   arrival: Arrival;
   receivedAt: number;
   body: Uint8Array;
   blobKey: string | null;
+  assertion: Assertion | null;
 }): ArrivalRecord {
-  const base = { id, projectId: arrival.projectId, receivedAt, endpoint: arrival.endpoint };
+  const base = { id, projectId: arrival.projectId, receivedAt, endpoint: arrival.endpoint, assertion };
   return blobKey === null ? { ...base, body, blobKey } : { ...base, body: null, blobKey };
 }
