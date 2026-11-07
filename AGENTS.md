@@ -21,11 +21,23 @@ See `LICENSE.md`, Acknowledgements.
   observable behavior, so that unmodified Sentry SDKs can send to
   Nightwatch.
 
-## Hosting
+## Hosting and development
 
-Cloudflare only (Workers, Durable Objects, D1, R2, K2, Queues, Workflows,
-and peers). A component that cannot run on Cloudflare is a design
-problem, not a reason to add another host.
+- Cloudflare only (Workers, Durable Objects, D1, R2, K2, Queues,
+  Workflows, and peers). A component that cannot run on Cloudflare is a
+  design problem, not a reason to add another host.
+- Open source with no guaranteed hosting. The local Wrangler runtime is
+  the reference environment: every use case must run and be tested with
+  no Cloudflare account. Run `wrangler dev --local`; never `wrangler
+  login`.
+- A remote-only binding (K2, Workers AI, Analytics SQL, Vectorize) in a
+  config's top level stops `wrangler dev` from starting. Keep them in
+  adopter environment blocks; locally the stand-in adapters in
+  `docs/design/ARCHITECTURE.NIGHTWATCH.md`, Local development, carry them.
+- Keep tool state in the checkout: `XDG_CONFIG_HOME` and
+  `WRANGLER_LOG_PATH` point inside it.
+- Our own deployment, if any, keeps its Access objects and stage config
+  in the private infra repo (tds-internal), never here.
 
 ## Records
 
@@ -33,6 +45,14 @@ problem, not a reason to add another host.
 - Design and architecture records: `docs/design/`. Body frozen once
   merged; Key Decisions is append-only.
 - As-built: `docs/arch/`. Facts only, never intentions.
+
+## Packages
+
+- pnpm only (fleet radar); never npm or yarn. Pin `packageManager` to an
+  exact version. `pnpm-workspace.yaml` allows install scripts for
+  `esbuild` and `workerd` only.
+- Tests: Vitest with `@cloudflare/vitest-plugin` (the renamed
+  `@cloudflare/vitest-pool-workers`).
 
 ## Git
 

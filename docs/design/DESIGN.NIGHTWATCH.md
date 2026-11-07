@@ -15,6 +15,12 @@ a bug: a reporter with no GitHub access gets a reference and can follow
 the report to its outcome. It runs only on Cloudflare, and unmodified
 Sentry SDKs can send to it.
 
+Nightwatch is an open-source project and our own code base. It follows
+the trail Sentry blazed, as an homage; it borrows no code. It assumes no
+hosted deployment: anyone can run it on their own Cloudflare account, and
+every behavior in this record can be exercised on a workstation without
+one.
+
 ---
 
 ## Problem and approach
@@ -48,6 +54,10 @@ provide, on Cloudflare, plus a reporter loop none of them has.
   triage action in Nightwatch, and reaches the reporter.
 - **Partition all state by tenant.** One deployment serves several
   products, and no tenant can read another.
+- **Know every reporter.** Every reporter arrives signed in, so a Report
+  always has a person and an address to answer.
+- **Develop without a host.** Everything runs and is tested locally, so a
+  contributor needs no Cloudflare account.
 
 ### Tradeoffs
 
@@ -85,6 +95,8 @@ provide, on Cloudflare, plus a reporter loop none of them has.
 | G18 | All stored data expires at the end of its retention window, per kind of data. |
 | G19 | Nightwatch runs entirely on Cloudflare. |
 | G20 | Nightwatch runs within the Platform Soft Limits. Crossing one alerts the operator; it does not by itself refuse data. |
+| G21 | Every behavior in this record can be exercised on a workstation with no Cloudflare account and no network access to Cloudflare. |
+| G22 | Every Reporter and every Member is identified by the email address their sign-in asserts. Nightwatch accepts no Report from a person who is not signed in. |
 
 ---
 
@@ -116,7 +128,8 @@ provide, on Cloudflare, plus a reporter loop none of them has.
 | Hierarchy | An Organization holds Teams and Projects. A Project belongs to one or more Teams. |
 | Membership | A Member belongs to an Organization with an Organization Role, and to Teams with a Team Role. |
 | Permission | A Member's permission on a Project is the union of their Organization Role and their Team Roles on that Project's Teams. |
-| Sign-in | Members sign in with the Organization's existing identity provider. Nightwatch stores no passwords. |
+| Sign-in | Members and Reporters sign in with the Organization's existing identity provider, which asserts their email address. Nightwatch stores no passwords. |
+| Trusted sign-in | An Organization names the sign-in issuers it trusts. An assertion from any other issuer identifies nobody. |
 | Machine access | An Access Token carries a fixed set of scopes. A CI token can upload release artifacts and do nothing else. |
 | Ingest keys | A Client Key admits data to one Project. It grants no read access. |
 | Isolation | Every read, search, notification and outbound link is confined to one Organization. |
@@ -184,16 +197,16 @@ A Report is a bug report a person filed. It is not an event.
 
 | Rule | Statement |
 |---|---|
-| Filing | A reporter files a Report with a message, which is the only required field. Name, contact address, screenshot and associated event are optional. |
-| Identity | When the product already knows the reporter, Nightwatch takes the reporter's identity from the product and does not ask again. |
-| Reference | Every Report gets a Report Reference at filing. The reference is shown to the reporter at once when Nightwatch's own report form is used, and sent to the contact address when one was given. |
+| Filing | A signed-in reporter files a Report with a message, which is the only field they must provide. A screenshot and an associated event are optional. |
+| Identity | The reporter's identity and address come from their sign-in. Nightwatch never asks for them. |
+| Reference | Every Report gets a Report Reference at filing. The reference is shown to the reporter at once when Nightwatch's own report form is used, and is always sent to the reporter's address. |
 | Attachment | Every Report is attached to exactly one issue. A new Report starts on its own Report issue. When the Report names an associated event, its issue is linked as related evidence. |
 | Duplicates | A team member can move a Report to another issue. All Reports on an issue share that issue's outcome. |
 | Status | A Report's Report Status is derived from the state of the issue it is attached to and that issue's External Link, as in State Machine: Report. |
-| Follow-up Page | A reporter holding a Report Reference can see the Report Status, the shared Thread and the dates of each change. Nothing else about the issue is shown. |
-| My reports | A reporter whose identity the product supplies can list all of their own Reports. |
+| Follow-up Page | The Follow-up Page for a Report Reference shows the Report Status, the shared Thread and the dates of each change, and nothing else about the issue. Only the Report's reporter and Members of its Project can open it. |
+| My reports | A reporter can list all of their own Reports in an Organization. |
 | Thread | Each Report has a Thread. A team member's comment enters the Thread only when it is marked shared. A reporter's reply always enters the Thread and is shown to the team. |
-| Notification | A Reporter Notification is sent on each Report Status change and each shared comment, to a reporter who gave a contact address and has not unsubscribed. |
+| Notification | A Reporter Notification is sent on each Report Status change and each shared comment, to a reporter who has not unsubscribed. |
 | Spam | A Report judged spam, by a team member or by the Spam Judge, is archived. Its reporter is told nothing and its Follow-up Page does not change. |
 | Evidence | A team member sees the Report's message, screenshot, associated event, product context, and any session the SDK linked. |
 | Quota | Report filing has its own Quota per Project. |
@@ -311,14 +324,15 @@ A Report is a bug report a person filed. It is not an event.
 | Behavior | Given / When / Then |
 |---|---|
 | Report filed in Nightwatch's form | Given a reporter in a product using Nightwatch's report form, When they submit a message, Then they see a Report Reference at once. |
-| Report filed through an SDK widget | Given a reporter using a Sentry SDK feedback widget who gave a contact address, When they submit, Then a Reporter Notification with the Report Reference is sent to that address. |
-| Anonymous report with no address | Given a reporter who gave no contact address and is not known to the product, When they submit through an SDK widget, Then the Report is filed and the reporter is told nothing further. |
-| Known reporter not asked | Given the product supplies the reporter's identity, When the form opens, Then name and contact are filled and not asked for. |
+| Report filed through an SDK widget | Given a signed-in reporter using a Sentry SDK feedback widget, When they submit, Then a Reporter Notification with the Report Reference is sent to their address. |
+| Reporter not asked who they are | Given a signed-in reporter, When the form opens, Then it asks for no name and no address. |
+| Unsigned report refused | Given a submission that carries no sign-in from a trusted issuer, When it is submitted, Then no Report is filed and an invalid Outcome is recorded. |
 | Empty message refused | Given a message that is empty, When the reporter submits, Then the Report is not filed and the form says why. |
 | Failed send is visible | Given Nightwatch is unreachable, When the reporter submits in Nightwatch's form, Then the form says the Report was not sent. |
-| Follow-up Page shows status | Given a Report Reference, When anyone opens its Follow-up Page, Then they see the Report Status, the shared Thread and change dates, and nothing else about the issue. |
+| Follow-up Page shows status | Given a Report Reference, When its reporter opens its Follow-up Page, Then they see the Report Status, the shared Thread and change dates, and nothing else about the issue. |
+| Follow-up Page refuses others | Given a Report Reference, When a signed-in person who is neither its reporter nor a Member of its Project opens it, Then the page says it was not found. |
 | Unknown reference | Given a reference that does not exist or was revoked, When its Follow-up Page is opened, Then the page says it was not found and reveals nothing else. |
-| Status change notifies | Given a Report with a subscribed contact, When its issue is resolved, Then the reporter is notified that the Report is Fixed. |
+| Status change notifies | Given a Report whose reporter is subscribed, When its issue is resolved, Then the reporter is notified that the Report is Fixed. |
 | Fix ships | Given a Fixed Report, When the resolving release is seen, Then the Report Status becomes Released and the reporter is notified. |
 | Shared reply reaches reporter | Given a team member comments and marks it shared, When the comment is saved, Then it appears in the Thread and the reporter is notified. |
 | Private comment stays private | Given a team member comments without marking it shared, When the comment is saved, Then the reporter is told nothing and the Thread does not change. |
@@ -326,7 +340,7 @@ A Report is a bug report a person filed. It is not an event.
 | Duplicate reports share outcome | Given two Reports moved onto one issue, When that issue is resolved, Then both Reports become Fixed and both reporters are notified. |
 | Spam is silent | Given a Report, When it is marked spam, Then it is archived, its reporter is told nothing, and its Follow-up Page does not change. |
 | Unsubscribe | Given a reporter who unsubscribed from a Report, When its status changes, Then no Reporter Notification is sent. |
-| My reports | Given a reporter known to the product, When they open their report list, Then they see all and only their own Reports in that Organization. |
+| My reports | Given a signed-in reporter, When they open their report list, Then they see all and only their own Reports in that Organization. |
 | Report quota | Given the Report Quota for a Project is exhausted, When a Report is submitted, Then it is refused with retry advice and an Outcome. |
 
 ### Alerts and notifications
@@ -354,7 +368,7 @@ A Report is a bug report a person filed. It is not an event.
 | Nightwatch resolve closes GitHub | Given a linked issue, When a member resolves it in Nightwatch, Then the GitHub issue is closed. |
 | No echo | Given a state change that came from GitHub, When Nightwatch applies it, Then Nightwatch does not send the same change back to GitHub. |
 | Shared GitHub comment | Given a linked issue with Reports, When a GitHub comment is marked for the reporter, Then it enters each Report's Thread as shared. |
-| Contact never leaves | Given a Report with a contact address, When anything is posted to GitHub, Then the address is absent. |
+| Contact never leaves | Given a Report, When anything is posted to GitHub, Then the reporter's address is absent. |
 | Resolve by commit | Given an issue with short id S, When a commit saying it fixes S is pushed, Then the issue is resolved pending that commit; When the commit ships in a release, Then the Resolution names that release. |
 | Suspect commit | Given a code mapping and an in-app top frame, When an issue is created, Then the Suspect Commit and its author are shown. |
 | Uninstalled app | Given a GitHub installation is removed, When a linked issue changes, Then Nightwatch records that the link is broken and does not retry forever. |
@@ -379,6 +393,7 @@ A Report is a bug report a person filed. It is not an event.
 | Retention expiry | Given an event older than Event Retention, When anyone asks for it, Then it is not found. |
 | Erasure | Given a reporter's erasure request, When an owner erases it, Then that reporter's Reports and contact details are gone and their Follow-up Pages say not found. |
 | Noisy tenant | Given one Project floods ingest, When its Quota is exhausted, Then other Projects' arrivals are still accepted. |
+| Soft limit crossed | Given Platform Usage above its Platform Soft Limit, When usage is compared, Then the operator is alerted and no Arrival is refused for that reason. |
 
 ---
 
@@ -526,8 +541,9 @@ the reporter unsubscribed or the Report is spam.
 | Tombstone | The kept Fingerprints of a discarded Issue. | Events matching it are dropped. |
 | History | The append-only record of an Issue's changes. | Never edited. |
 | Report | A bug report a person filed. | Attached to exactly one Issue. |
-| Reporter | The person who filed a Report. | Known by contact address, by product identity, or not at all. |
-| Report Reference | The handle a Reporter uses to follow a Report. | Cannot be guessed; revocable. |
+| Reporter | The person who filed a Report. | Always identified by the email address a trusted sign-in asserts. |
+| Sign-in | A verified assertion of a person's email address by an issuer the Organization trusts. | Without one, a request identifies nobody. |
+| Report Reference | The handle a Reporter uses to follow a Report. | Cannot be guessed; revocable; grants nothing without a sign-in. |
 | Report Status | Received, Acknowledged, Fixed, Released, or Closed. | Derived from the attached Issue; never set directly. |
 | Follow-up Page | The Reporter's view of one Report. | Shows Report Status, shared Thread and dates only. |
 | Thread | The conversation on one Report. | A team comment enters it only when marked shared. |
@@ -542,10 +558,57 @@ the reporter unsubscribed or the Report is spam.
 | Code Mapping | The tie between a stack path prefix and a repository path. | Belongs to one Project and one repository. |
 | Suspect Commit | The commit most likely to have caused an Issue. | Chosen within the Suspect Commit Window. |
 | Release | A version of a product within an Organization. | Versions order semantically when they parse, else by first sight. |
-| Deploy | A Release reaching an environment. | Has a time. |
+| Deploy | A Release reaching an Environment. | Has a time. |
+| Environment | A named place a product runs, such as production. | Belongs to one Organization. |
+| Repository | A code repository an Organization connected for Nightwatch to use. | Reached only through the Organization's installed GitHub app. |
 | Session | One use of a product, as reported by an SDK. | Ends in one of ok, exited, errored, crashed or abnormal. |
 | Cron Monitor, Uptime Monitor | Watchers that record successes and Failures. | Open and resolve monitor issues only on consecutive runs. |
 | Failure | A missed, late, failed, overlong or down result. | Recorded once per expected run. |
+
+### Values the behaviors exchange
+
+Every behavior takes and returns values named here or above. The
+architecture record's use-case signatures use these names and no others.
+
+| Term | Meaning | Invariant |
+|---|---|---|
+| Admission | The decision on one Arrival: admitted, or refused with its Outcomes and Retry Advice. | An admitted Arrival is durable before the Admission is returned. |
+| Retry Advice | When a sender may send again, per data category. | Never later than the end of the Quota window that caused it. |
+| Arrival Record | An admitted Arrival as retained, unprocessed. | Expires at Raw Retention. |
+| Processing Result | What processing one Arrival Record produced: Assignments, Filing Receipts and Outcomes. | Processing the same Arrival Record twice yields an equal Processing Result. |
+| Event Summary | The facts about one Event that grouping, counting and alerting need. | Holds no value a Scrubbing Rule removed. |
+| Assignment | The Issue an Event joined, or the Tombstone that dropped it, with the Issue Changes it caused. | Exactly one per Event. |
+| Issue Change | One entry of an Issue's History: what changed, who or what changed it, and when. | Records its origin, so a change is never echoed back to where it came from. |
+| Refusal | The named reason a request was not carried out. | Reveals nothing the requester may not see. |
+| Time Range | A start and an end time. | The start is not after the end. |
+| Project Id, Issue Id, Report Id, Monitor Id | The stable identifier of a Project, Issue, Report or monitor. | Never reused. |
+| Reprocessing | An operator's run over a Time Range of Arrival Records. | Names the Arrivals rebuilt and those refused as expired. |
+| Owner Suggestion | The suggested owners of an Issue, each with the rule or commit behind it. | Ordered by the precedence in Ownership. |
+| Issue Query | A search in the issue query language. | Scoped to the asking Member's Organization. |
+| Cursor | A position in a sequence of search results. | Valid only for the query that issued it. |
+| Issue Page | One page of Issues matching an Issue Query, with a Cursor for the next. | Holds only Issues the asking Member may see. |
+| Report Submission | What a reporter sends: message, optional screenshot, optional associated event. | The message is not empty. |
+| Filing Receipt | The Report Reference and initial Report Status given back at filing. | Issued once per Report. |
+| Report Form | What Nightwatch's report form shows to a signed-in reporter. | Asks for no name and no address. |
+| Follow-up View | What the Follow-up Page shows. | Holds Report Status, shared Thread and dates only. |
+| Report List | A reporter's own Reports in one Organization. | Holds only Reports that reporter filed. |
+| Comment | A Member's or reporter's text on an Issue or Report. | A Member's Comment is shared or private; a reporter's is always shared. |
+| Inbound Reply | An email reply to a Nightwatch notification. | Names the Issue and the Member it was sent to. |
+| Alert Firing | One Issue Alert Rule's actions run for one Issue. | At most one per rule per Issue per Alert Quiet Period. |
+| Incident Change | A Metric Alert Rule's Incident opening, changing level, or closing. | Follows State Machine: Metric Incident. |
+| Tracker Event | A change the issue tracker reports on a linked issue. | Applied only after its signature is verified. |
+| Commit | A change recorded in a repository, with its message and author. | Identified by repository and hash. |
+| Artifact Upload | A source map or bundle sent by CI. | Carries a release or a debug id. |
+| Scope | A named permission an Access Token or role can hold. | Drawn from a fixed set. |
+| Grant | Permission for one Access Token to do one thing. | Issued only when the token holds the needed Scope. |
+| Release Health | Crash-free session and user rates for a Release in an environment. | Computed only from Sessions. |
+| Check-in | A scheduled job's report that a run started, succeeded or failed. | Belongs to one Cron Monitor. |
+| Probe Result | The outcome of one Uptime Monitor check. | Up or down, with the reason. |
+| Monitor Change | A monitor's move between OK, Failing, Incident and Recovering. | Follows State Machine: Cron and Uptime Monitor. |
+| Outcome Totals | Counts of Outcomes per kind and reason for a Project over a Time Range. | Every Arrival in the range is counted once. |
+| Expiry | The data removed by one retention pass. | Removes nothing inside its retention window. |
+| Erasure | The removal of one reporter's Reports and address. | Leaves no Follow-up Page that resolves. |
+| Platform Usage | Use of one Cloudflare product against its Platform Soft Limit. | Compared at least daily. |
 
 ---
 
@@ -592,8 +655,9 @@ the reporter unsubscribed or the Report is spam.
 | A Client Key is public (it ships in browser code) | A Client Key admits ingest only. It reads nothing. Origin restriction and Quotas bound abuse. |
 | A flood from one Project or from abuse | Quotas isolate Projects. Refusal is cheap and happens before processing. |
 | Secrets and personal data in events | Scrubbing runs before any person or store sees an event. Raw retention is bounded and readable only by reprocessing. |
-| A Report Reference is a bearer handle | It cannot be guessed, it reveals only the Follow-up Page, and it can be revoked. |
-| Reporter contact details reaching a public GitHub repository | Contact details and Attachments never leave Nightwatch. GitHub receives a link that requires sign-in. |
+| A leaked Report Reference | A reference grants nothing alone: the Follow-up Page also requires the reporter's or a Member's sign-in. References cannot be guessed and can be revoked. |
+| A forged sign-in | Identity is taken only from a verified assertion by an issuer the Organization trusts. Anything else identifies nobody. |
+| Reporter addresses reaching a public GitHub repository | Reporter addresses and Attachments never leave Nightwatch. GitHub receives a link that requires sign-in. |
 | A screenshot showing private data | Report Attachments are visible to Members of the Project only. |
 | Forged GitHub webhooks | A webhook is applied only after its signature is verified. |
 | Forged reply-by-email | A reply is posted only from a known Member address to an address Nightwatch issued for that issue. |
@@ -607,45 +671,46 @@ the reporter unsubscribed or the Report is spam.
 
 ## Ships where
 
-Cloudflare Workers platform, nonprod then prod stages, in one Cloudflare
-account per stage. Browsers receive only the report form and the
-Follow-up Page.
+Nightwatch ships as open source: tagged releases of this repository. It
+runs on any Cloudflare account that adopts it; no hosted deployment is
+assumed. Browsers receive the report form, the Follow-up Page and the
+triage console.
 
 ---
 
 ## Key Decisions
 
-| Decision | Choice | Rationale | Origin |
-|---|---|---|---|
-| Build or adopt | Build | No product closes the loop with a reporter who lacks GitHub access, and none runs on Cloudflare. | Owner, 2026-11-07 session, [concept](../concepts/nightwatch/CONCEPT.md) |
-| Hosting | Cloudflare only, K2 included | Owner direction for all products. | Owner, 2026-11-07 |
-| Relation to Sentry | Clean-room rewrite from studied mechanics | Forking needs Kafka and ClickHouse; a rewrite owns its shape. | Owner, 2026-11-07 |
-| SDK protocol | Accept the Sentry SDK protocol | Instrumentation is solved, and products can move without code changes. | Owner, 2026-11-07 |
-| Report is not an event | Separate entity attached to an Issue | A Report has a person, a reference and a conversation; an event has none. | Drafting, from G9 |
-| Report Status is derived | From the attached Issue and External Link | Team members triage once; reporters follow without extra work. | Drafting |
-| GitHub sync | Two-way for state and shared comments | Closing on GitHub must reach the reporter. | Owner, 2026-11-07 ("cuts an issue, gives the user something to follow up on") |
-| Grouping parity | Own versioned grouping, honoring SDK fingerprints | Parity would copy expression; SDK fingerprints keep user intent. | Drafting |
-| Deferred products | Tracing, replay, profiling, native symbolication | The core loop ships first; each is large. | Owner, 2026-11-07 ("deferred list sounds good") |
-| Platform limits | Free-plan allocations are soft limits; beta account caps are accepted | Keeps cost near zero; an overrun is a signal to review, not an outage. | Owner, 2026-11-07 |
+| Id | Decision | Choice | Rationale | Origin |
+|---|---|---|---|---|
+| D1 | Build or adopt | Build | No product closes the loop with a reporter who lacks GitHub access, and none runs on Cloudflare. | Owner, 2026-11-07 session, [concept](../concepts/nightwatch/CONCEPT.md) |
+| D2 | Hosting | Cloudflare only, K2 included | Owner direction for all products. | Owner, 2026-11-07 |
+| D3 | Relation to Sentry | Clean-room rewrite from studied mechanics; an homage, our own code base | Forking needs Kafka and ClickHouse; a rewrite owns its shape. | Owner, 2026-11-07 |
+| D4 | SDK protocol | Accept the Sentry SDK protocol | Instrumentation is solved, and products can move without code changes. | Owner, 2026-11-07 |
+| D5 | Report is not an event | Separate entity attached to an Issue | A Report has a person, a reference and a conversation; an event has none. | Drafting, from G9 |
+| D6 | Report Status is derived | From the attached Issue and External Link | Team members triage once; reporters follow without extra work. | Drafting |
+| D7 | GitHub sync | Two-way for state and shared comments | Closing on GitHub must reach the reporter. | Owner, 2026-11-07 ("cuts an issue, gives the user something to follow up on") |
+| D8 | Grouping parity | Own versioned grouping, honoring SDK fingerprints | Parity would copy expression; SDK fingerprints keep user intent. | Drafting |
+| D9 | Deferred products | Tracing, replay, profiling, native symbolication | The core loop ships first; each is large. | Owner, 2026-11-07 ("deferred list sounds good") |
+| D10 | Platform limits | Free-plan allocations are soft limits; beta account caps are accepted | Keeps cost near zero; an overrun is a signal to review, not an outage. | Owner, 2026-11-07 |
+| D11 | Reporter identity | Every reporter is signed in; the sign-in asserts their email | All users carry an Access token naming their email; anonymous Reports, human checks and contact forms are not needed. | Owner, 2026-11-07 |
+| D12 | Project form | Open source, no hosting guaranteed, developed and tested locally | Anyone can run it; contributors need no account; the hosted stage is an adopter's choice. | Owner, 2026-11-07 |
 
 ---
 
 ## Open Questions
 
-1. **Who are the reporters?** misvtt's reporters are already signed in
-   behind Cloudflare Access. If every product is like that, Reports can
-   require product identity and anonymous Reports are not needed.
-2. **Is Nightwatch for our products only?** If outside teams use it,
-   tenancy, quotas and support become product features, not safeguards.
-3. **Should a reporter be able to reopen a Report?** Today a reporter can
-   reply, and a member decides.
-4. **Who may mark a GitHub comment for the reporter?** Any commenter with
-   write access to the repository, or only Members?
-5. **What does a reporter see when two Reports are merged and one
-   reporter's words are private?** Today each Thread stays separate.
-6. **Should Cloudflare Issues feed Nightwatch?** It already groups our
-   own Workers' errors; importing its occurrences would avoid
-   double-instrumenting Workers.
+- **Q1 -- Does one deployment serve unrelated Organizations?** Open source
+  lets each adopter run their own. If one deployment also hosts strangers,
+  tenancy, quotas and support become product features, not safeguards.
+- **Q2 -- Should a reporter be able to reopen a Report?** Today a reporter
+  can reply, and a Member decides.
+- **Q3 -- Who may mark a GitHub comment for the reporter?** Any commenter
+  with write access to the repository, or only Members?
+- **Q4 -- What does a reporter see when two Reports are merged and one
+  reporter's words are private?** Today each Thread stays separate.
+- **Q5 -- Should Cloudflare Issues feed Nightwatch?** It already groups
+  Workers' errors; importing its occurrences would avoid
+  double-instrumenting Workers.
 
 ---
 
