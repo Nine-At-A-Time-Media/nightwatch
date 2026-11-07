@@ -4,6 +4,7 @@
 // processor reaches ProjectDO.
 import { describe, expect, it } from 'vitest';
 import { processArrival, type ProcessArrivalDeps } from '../../../src/application/process-arrival.js';
+import { releaseHealth } from '../../../src/application/releases/release-health.js';
 import { uploadArtifact } from '../../../src/application/releases/upload-artifact.js';
 import { eventBlobKey } from '../../../src/domain/event/event-summary.js';
 import { gv1 } from '../../../src/domain/grouping/grouping-version.js';
@@ -344,9 +345,9 @@ describe('processArrival', () => {
     await expect(processArrival(record([feedback], { assertion: assertionOf(ADA) }), w.deps)).rejects.toThrow(/unavailable/);
   });
 
-  it('leaves check-ins, sessions and other kinds to their own use cases, each with a deferred Outcome', async () => {
+  it('leaves security reports, attachments no Report takes, and other kinds to their own use cases, each with a deferred Outcome', async () => {
     const w = world();
-    const arrival = record([errorEvent(), { type: 'check_in', payload: {} }, { type: 'session', payload: {} }]);
+    const arrival = record([errorEvent(), { type: 'security', payload: {} }, { type: 'attachment', payload: 'bytes' }]);
     const result = await processArrival(arrival, w.deps);
 
     expect(result.assignments).toHaveLength(1);
@@ -356,7 +357,7 @@ describe('processArrival', () => {
         recordedAt: T0,
         kind: 'discarded',
         reason: 'deferred',
-        category: 'monitor',
+        category: 'security',
         quantity: 1,
         item: { recordId: arrival.id, index: 1 },
       },
@@ -365,12 +366,45 @@ describe('processArrival', () => {
         recordedAt: T0,
         kind: 'discarded',
         reason: 'deferred',
-        category: 'session',
+        category: 'attachment',
         quantity: 1,
         item: { recordId: arrival.id, index: 2 },
       },
     ]);
     expect(w.archive.archived).toEqual(result.outcomes);
+  });
+
+  it('Crash-free rate: Given sessions for a release, When a member opens the release, Then crash-free session and user rates are shown', async () => {
+    const w = world();
+    const attrs = { release: 'web@2.0.0', environment: 'production' };
+    const update = (did: string, status: string) => ({ type: 'session', payload: { sid: did, did, init: true, status, attrs } });
+    const aggregate = { type: 'sessions', payload: { attrs, aggregates: [{ started: '2026-11-01T00:00:00Z', exited: 2, crashed: 1 }] } };
+    const result = await processArrival(record([update('u-1', 'ok'), update('u-2', 'crashed'), aggregate]), w.deps);
+
+    expect(result.outcomes).toEqual([]);
+    expect(await releaseHealth(PROJECT, 'web@2.0.0', 'production', w)).toEqual({
+      release: 'web@2.0.0',
+      environment: 'production',
+      sessions: 5,
+      crashFreeSessionRate: 3 / 5,
+      users: 2,
+      crashFreeUserRate: 1 / 2,
+    });
+  });
+
+  it('Crash-free rate: a session item that does not parse is refused with an invalid Outcome naming the item', async () => {
+    const w = world();
+    const arrival = record([{ type: 'session', payload: { init: true, status: 'ok' } }]);
+    const result = await processArrival(arrival, w.deps);
+
+    expect(result.outcomes).toEqual([
+      expect.objectContaining({
+        kind: 'invalid',
+        reason: 'malformed-session',
+        category: 'session',
+        item: { recordId: arrival.id, index: 0 },
+      }),
+    ]);
   });
 
   it('refuses an event that does not normalize, and drops an Event a Tombstone holds, deleting its stored copy', async () => {
