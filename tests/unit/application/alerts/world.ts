@@ -6,6 +6,9 @@ import type { AlertSignal } from '../../../../src/application/alerts/evaluate-is
 import type { DigestPolicy } from '../../../../src/domain/alerts/digest.js';
 import type { AlertEvent, IssueAlertRule } from '../../../../src/domain/alerts/issue-alert-rule.js';
 import type { EventSummary } from '../../../../src/domain/event/event-summary.js';
+import { resolve } from '../../../../src/domain/issue/commands.js';
+import type { IssueChange } from '../../../../src/domain/issue/state.js';
+import { isRefusal } from '../../../../src/domain/refusal.js';
 import { FakeChannel } from '../../../_fakes/fake-channel.js';
 import { FakeClock } from '../../../_fakes/fake-clock.js';
 import { FakeControlStore } from '../../../_fakes/fake-control-store.js';
@@ -105,4 +108,30 @@ export async function arrive(w: World, event: AlertEvent, fingerprints: string[]
   if (!('issueId' in assignment)) throw new Error('event dropped');
   if (assignment.changes.length === 0) return [{ issueId: assignment.issueId, change: null, event }];
   return assignment.changes.map((change) => ({ issueId: change.issueId, change, event }));
+}
+
+/** An Issue that Mia (commented) and Bob (assigned) follow. */
+export async function followedIssue(w: World): Promise<string> {
+  const [signal] = await arrive(w, alertEvent(T0));
+  const issueId = signal?.issueId ?? '';
+  const store = w.projects.store(PROJECT);
+  await store.addParticipation(issueId, { member: MIA.member, reason: 'commented' });
+  await store.addParticipation(issueId, { member: BOB.member, reason: 'assigned' });
+  return issueId;
+}
+
+export async function resolveIssue(w: World, issueId: string): Promise<IssueChange> {
+  const store = w.projects.store(PROJECT);
+  const state = await store.getIssue(issueId);
+  if (!state) throw new Error(`no issue ${issueId}`);
+  const resolved = resolve(state, { kind: 'plain' }, BOB, w.clock.now());
+  if (isRefusal(resolved)) throw new Error(resolved.refusal);
+  await store.putIssue(resolved.state);
+  const [change] = resolved.changes;
+  if (!change) throw new Error('no change');
+  return change;
+}
+
+export function notifyDeps(w: World) {
+  return { control: w.control, projects: w.projects, mailer: w.mailer, signer: w.signer, clock: w.clock, settings: MAIL_SETTINGS };
 }

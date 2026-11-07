@@ -1,6 +1,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import {
+  isFromAddress,
   isReplyTokenLive,
   parseReplyAddress,
   replyAddress,
@@ -56,5 +57,12 @@ describe('reply address', () => {
     const one = threadHeaders({ projectId: 'project-1', issueId: 'issue-1', domain: 'mail.example' });
     expect(one).toEqual({ 'In-Reply-To': '<issue.project-1.issue-1@mail.example>', References: '<issue.project-1.issue-1@mail.example>' });
     expect(threadHeaders({ projectId: 'project-1', issueId: 'issue-2', domain: 'mail.example' })).not.toEqual(one);
+  });
+
+  it('matches a sender to an address without regard to case or display name', () => {
+    expect(isFromAddress({ from: 'Mia <MIA@Acme.Example>', address: 'mia@acme.example' })).toBe(true);
+    expect(isFromAddress({ from: 'mia@acme.example', address: 'mia@acme.example' })).toBe(true);
+    expect(isFromAddress({ from: 'eve@example.com', address: 'mia@acme.example' })).toBe(false);
+    expect(isFromAddress({ from: 'mia@acme.example.evil', address: 'mia@acme.example' })).toBe(false);
   });
 });
