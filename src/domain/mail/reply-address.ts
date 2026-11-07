@@ -21,6 +21,12 @@ export type ReplyToken = {
   readonly expiresAt: number;
 };
 
+/**
+ * A reply to an issue notification email, as the inbound-mail Worker hands
+ * it over once the email adapter has parsed it and authenticated its sender.
+ */
+export type InboundReply = { readonly to: string; readonly from: string; readonly text: string };
+
 /** A Reply Token's text and its signature, as read from an address. */
 export type SignedReplyToken = { readonly text: string; readonly signature: string };
 
@@ -82,6 +88,11 @@ export function parseReplyAddress(address: string): SignedReplyToken | null {
   const match = REPLY_ADDRESS.exec(bareAddress(address));
   const [, text, signature] = match ?? [];
   return text && signature ? { text, signature } : null;
+}
+
+/** Whether a sender (`Name <address>` or a bare address) is this address, without regard to case. */
+export function isFromAddress({ from, address }: { from: string; address: string }): boolean {
+  return bareAddress(from).toLowerCase() === address.trim().toLowerCase();
 }
 
 export function isReplyTokenLive(token: ReplyToken, now: number): boolean {
