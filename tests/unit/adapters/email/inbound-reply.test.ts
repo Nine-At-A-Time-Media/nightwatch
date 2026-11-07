@@ -24,15 +24,23 @@ const PLAIN = {
 describe('inboundReplyOf', () => {
   it('reads the delivery address, the From address and the plain text of a reply', async () => {
     const reply = await inboundReplyOf({ to: TO, raw: raw(PLAIN, 'Still broken for me.\r\n\r\n> earlier text') });
-    expect(reply).toEqual({ to: TO, from: 'ada@example.test', text: 'Still broken for me.\n\n> earlier text' });
+    expect(reply).toEqual({ to: TO, from: 'ada@example.test', text: 'Still broken for me.\n\n> earlier text\n' });
   });
 
   it('reads the text part of a multipart reply', async () => {
     const multipart = raw(
       { ...PLAIN, 'Content-Type': 'multipart/alternative; boundary="b1"' },
-      ['--b1', 'Content-Type: text/plain; charset=utf-8', '', 'Plain words.', '--b1', 'Content-Type: text/html', '', '<p>Plain words.</p>', '--b1--'].join(
-        '\r\n',
-      ),
+      [
+        '--b1',
+        'Content-Type: text/plain; charset=utf-8',
+        '',
+        'Plain words.',
+        '--b1',
+        'Content-Type: text/html',
+        '',
+        '<p>Plain words.</p>',
+        '--b1--',
+      ].join('\r\n'),
     );
     const reply = await inboundReplyOf({ to: TO, raw: multipart });
     expect(isRefusal(reply) ? reply : reply.text.trim()).toBe('Plain words.');

@@ -29,7 +29,11 @@ describe('SendEmailMailer', () => {
       to: 'ada@example.test',
       subject: 'Issue resolved',
       text: 'It is fixed.',
-      headers: { 'In-Reply-To': '<issue.p.i@mail.example.test>', References: '<issue.p.i@mail.example.test>', 'Reply-To': 'reply+t.s@r.test' },
+      headers: {
+        'In-Reply-To': '<issue.p.i@mail.example.test>',
+        References: '<issue.p.i@mail.example.test>',
+        'Reply-To': 'reply+t.s@r.test',
+      },
     });
 
     expect(result).toEqual({ ok: true });
@@ -47,7 +51,13 @@ describe('SendEmailMailer', () => {
 
   it('passes html through and omits Reply-To when the message has none', async () => {
     const { binding, sent } = recordingBinding();
-    await new SendEmailMailer({ binding, from: 'n@x.test' }).send({ to: 'a@x.test', subject: 's', text: 't', html: '<p>t</p>', headers: {} });
+    await new SendEmailMailer({ binding, from: 'n@x.test' }).send({
+      to: 'a@x.test',
+      subject: 's',
+      text: 't',
+      html: '<p>t</p>',
+      headers: {},
+    });
     expect(sent).toEqual([{ from: 'n@x.test', to: 'a@x.test', subject: 's', text: 't', html: '<p>t</p>', headers: {} }]);
   });
 
