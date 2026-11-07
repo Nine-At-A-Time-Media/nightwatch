@@ -8,6 +8,9 @@
 
 import { refusal, type Refusal } from '../refusal.js';
 
+/** A claim of a person's identity as presented with a request (the raw token); identifies nobody until verified. */
+export type Assertion = string;
+
 export type SignIn = {
   readonly email: string;
   readonly issuer: string;

@@ -7,11 +7,13 @@
  */
 
 import type { Fingerprint } from '../../src/domain/grouping/fingerprint.js';
-import type { EventId, IssueId } from '../../src/domain/ids.js';
+import type { EventId, IssueId, ReportId } from '../../src/domain/ids.js';
 import type { AssignmentTarget, Tombstone } from '../../src/domain/issue/assignment.js';
 import type { IssueChange, IssueState } from '../../src/domain/issue/state.js';
 import { isHeldBy, type GroupedEvent } from '../../src/domain/issue/tally.js';
 import type { Release, ReleaseFirstSeen } from '../../src/domain/release/ordering.js';
+import type { Report, Reporter } from '../../src/domain/report/report.js';
+import type { Comment, ReportStatusChange } from '../../src/domain/report/thread.js';
 import type { IssueStore, StoredForecast } from '../../src/ports/issue-store.js';
 
 const HOUR = 3_600_000;
@@ -32,6 +34,9 @@ export class FakeIssueStore implements IssueStore {
   readonly #tombstones: Tombstone[] = [];
   readonly #forecasts = new Map<IssueId, StoredForecast>();
   readonly #releases = new Map<Release, number>();
+  readonly #reports = new Map<ReportId, Report>();
+  readonly #comments: { issueId: IssueId; comment: Comment }[] = [];
+  readonly #statusChanges = new Map<ReportId, ReportStatusChange[]>();
 
   constructor(options: { dedupWindow: number; projectNormalRate?: number }) {
     this.#dedupWindow = options.dedupWindow;
@@ -104,6 +109,7 @@ export class FakeIssueStore implements IssueStore {
     this.#forecasts.delete(issueId);
     [...this.#owners].filter(([, owner]) => owner === issueId).forEach(([fingerprint]) => this.#owners.delete(fingerprint));
     [...this.#events].filter(([, held]) => held.issueId === issueId).forEach(([eventId]) => this.#events.delete(eventId));
+    this.#removeComments((held) => held.issueId === issueId);
   }
 
   async appendHistory(changes: readonly IssueChange[]): Promise<void> {
@@ -123,6 +129,10 @@ export class FakeIssueStore implements IssueStore {
     [...this.#events]
       .filter(([, held]) => held.issueId === move.from)
       .forEach(([eventId, held]) => this.#events.set(eventId, { issueId: move.to, event: held.event }));
+    [...this.#reports.values()]
+      .filter((report) => report.issueId === move.from)
+      .forEach((report) => this.#reports.set(report.id, { ...report, issueId: move.to }));
+    this.#comments.filter((held) => held.issueId === move.from).forEach((held) => (held.issueId = move.to));
   }
 
   async moveFingerprints(move: { from: IssueId; to: IssueId; fingerprints: readonly Fingerprint[] }): Promise<void> {
@@ -174,6 +184,50 @@ export class FakeIssueStore implements IssueStore {
 
   async recordReleaseFirstSeen(release: Release, at: number): Promise<void> {
     if (!this.#releases.has(release)) this.#releases.set(release, at);
+  }
+
+  async putReport(report: Report): Promise<void> {
+    this.#reports.set(report.id, report);
+  }
+
+  async getReport(reportId: ReportId): Promise<Report | null> {
+    return this.#reports.get(reportId) ?? null;
+  }
+
+  async reportsOn(issueId: IssueId): Promise<readonly Report[]> {
+    return [...this.#reports.values()].filter((report) => report.issueId === issueId);
+  }
+
+  async reportsBy(reporter: Reporter): Promise<readonly Report[]> {
+    const email = reporter.email.toLowerCase();
+    return [...this.#reports.values()].filter((report) => report.reporter.email.toLowerCase() === email);
+  }
+
+  async removeReport(reportId: ReportId): Promise<void> {
+    this.#reports.delete(reportId);
+    this.#statusChanges.delete(reportId);
+    this.#removeComments(({ comment }) => 'report' in comment.author && comment.author.report === reportId);
+  }
+
+  async appendComment(issueId: IssueId, comment: Comment): Promise<void> {
+    this.#comments.push({ issueId, comment });
+  }
+
+  async commentsOn(issueId: IssueId): Promise<readonly Comment[]> {
+    return this.#comments.filter((held) => held.issueId === issueId).map((held) => held.comment);
+  }
+
+  async recordStatusChange(reportId: ReportId, change: ReportStatusChange): Promise<void> {
+    this.#statusChanges.set(reportId, [...(this.#statusChanges.get(reportId) ?? []), change]);
+  }
+
+  async statusChangesOf(reportId: ReportId): Promise<readonly ReportStatusChange[]> {
+    return this.#statusChanges.get(reportId) ?? [];
+  }
+
+  #removeComments(matches: (held: { issueId: IssueId; comment: Comment }) => boolean): void {
+    const kept = this.#comments.filter((held) => !matches(held));
+    this.#comments.splice(0, this.#comments.length, ...kept);
   }
 
   async #eventsSince(range: { issueId: IssueId; since: number }): Promise<readonly GroupedEvent[]> {

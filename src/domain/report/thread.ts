@@ -11,8 +11,9 @@
  * `you` (the Report's Reporter) and holds nothing else about the Issue.
  */
 
+import { change, type Actor, type IssueChange, type IssueState } from '../issue/state.js';
 import type { Report } from './report.js';
-import type { ReportStatus } from './status.js';
+import type { IssueTriage, ReportStatus } from './status.js';
 
 /** A Comment by a Member, shared with the Reporter or kept private. */
 export type MemberComment = {
@@ -71,6 +72,27 @@ function entryOf(comment: Comment): FollowUpEntry {
 }
 
 // --- exports ---
+
+/**
+ * Whether a Member triaged the Issue by commenting. Only a shared Comment
+ * counts: a private note must leave the Reporter told nothing (design
+ * Behaviors: Private comment stays private). Assignment is not modelled on
+ * the Issue yet, so it never counts.
+ */
+export function triageOf(comments: readonly Comment[]): IssueTriage {
+  return { assigned: false, commentedByMember: comments.some((comment) => isMemberComment(comment) && comment.shared) };
+}
+
+/** The Report Status the Reporter was last shown: the latest change, or Received before any. */
+export function lastShownStatus(changes: readonly ReportStatusChange[]): ReportStatus {
+  const latest = changes.reduce<ReportStatusChange | null>((last, entry) => (last === null || entry.at >= last.at ? entry : last), null);
+  return latest?.status ?? 'received';
+}
+
+/** The Issue Change recording a saved Comment: it names the Comment, never its text. */
+export function commentRecorded(state: IssueState, comment: Comment, actor: Actor): IssueChange {
+  return change(state, { kind: 'comment', from: null, to: comment.id, actor, at: comment.at });
+}
 
 /** The Thread of `report`, from the Comments on its Issue. */
 export function threadOf(report: Report, comments: readonly Comment[]): Thread {
