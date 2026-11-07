@@ -94,8 +94,8 @@ export function alertEvent(at: number, overrides: Partial<AlertEvent> = {}): Ale
 }
 
 function summaryOf(event: AlertEvent): EventSummary {
-  const { tags: _tags, attributes: _attributes, ...summary } = event;
-  return summary;
+  const { eventId, at, release, environment, level, userKey, title, culprit } = event;
+  return { eventId, at, release, environment, level, userKey, title, culprit };
 }
 
 /** Sends the Event through assignEvent at its time; returns the Alert Signals it raises: one per Issue Change, or one with no change. */
