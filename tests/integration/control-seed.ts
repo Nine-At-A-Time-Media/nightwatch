@@ -3,6 +3,7 @@
 // `CONTROL` database. Ids are unique per test, since one database serves a
 // whole file.
 import type { IssueAlertRule } from '../../src/domain/alerts/issue-alert-rule.js';
+import type { OwnershipConfig } from '../../src/domain/ownership/config.js';
 
 /** One Organization with one Project and one Member who owns it. */
 export type SeededProject = {
@@ -42,4 +43,8 @@ export async function seedAlertRule(db: D1Database, projectId: string, rule: Iss
 
 export async function seedRepository(db: D1Database, organizationId: string, repository: string): Promise<void> {
   await run(db, 'INSERT INTO repositories (repository, organization_id) VALUES (?, ?)', repository, organizationId);
+}
+
+export async function seedOwnershipConfig(db: D1Database, projectId: string, config: OwnershipConfig): Promise<void> {
+  await run(db, 'INSERT INTO ownership_configs (project_id, config) VALUES (?, ?)', projectId, JSON.stringify(config));
 }

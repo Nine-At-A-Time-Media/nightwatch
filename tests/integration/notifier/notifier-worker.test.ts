@@ -30,7 +30,10 @@ import { link } from '../../../src/domain/tracker/external-link.js';
 import type { NotifierBindings } from '../../../src/workers/notifier/deps.js';
 import worker from '../../../src/workers/notifier/index.js';
 import { githubTracker } from '../../../src/workers/shared/github.js';
-import { seedAlertRule, seedProject, seedRepository } from '../control-seed.js';
+import type { NormalizedEvent } from '../../../src/domain/normalize/normalized-event.js';
+import { encodeScrubbedEvent } from '../../../src/domain/processing/processing.js';
+import { eventBlobKey } from '../../../src/domain/event/event-summary.js';
+import { seedAlertRule, seedOwnershipConfig, seedProject, seedRepository } from '../control-seed.js';
 
 const MINUTE = 60_000;
 
@@ -199,6 +202,34 @@ describe('notifier queue consumer', () => {
     const state = await env.GITHUB_API.fetch(`https://fake-github.local/__fake/issue?repository=${repository}&number=${opened.number}`);
     expect(await state.json()).toEqual({ state: 'closed', stateReason: 'completed' });
     expect(await projects().externalLinkOf(seeded.projectId, issueId)).toMatchObject({ state: 'linked', expected: { state: 'closed' } });
+  });
+
+  it("Owner suggested -- Given an Ownership Rule matching the new Issue's stored Event, When the Issue opens, Then the matched Member is suggested and auto-assigned", async () => {
+    const seeded = await seedProject(env.CONTROL);
+    await seedOwnershipConfig(env.CONTROL, seeded.projectId, {
+      ownershipRules: `path:src/pay/* ${seeded.email}`,
+      codeMappings: [],
+      autoAssign: true,
+    });
+    const eventId = crypto.randomUUID().replaceAll('-', '');
+    const stored = {
+      exceptions: [{ type: 'TypeError', value: null, frames: [{ filename: 'src/pay/charge.ts', lineno: 7, inApp: true }] }],
+      stacktrace: null,
+      request: null,
+      tags: {},
+    } as unknown as NormalizedEvent;
+    await notifierEnv().BLOBS.put(
+      eventBlobKey({ projectId: seeded.projectId, eventId }),
+      encodeScrubbedEvent({ event: stored, removals: [] }),
+    );
+    const assignment = await projects().assignEvent(seeded.projectId, summary(eventId), [`fp-${crypto.randomUUID()}`]);
+    const opened = assignment.changes.find((change) => change.kind === 'status' && change.from === null);
+    if (!('issueId' in assignment) || opened === undefined) throw new Error('no new issue opened');
+
+    const result = await consume([{ projectId: seeded.projectId, change: opened, step: 'suggestOwners' }]);
+
+    expect(result.acked).toEqual(['message-0']);
+    expect(await projects().assigneeOf(seeded.projectId, assignment.issueId)).toEqual({ member: seeded.member });
   });
 });
 
