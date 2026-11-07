@@ -3,6 +3,7 @@
 // against the ingest Worker's local-stage config (no remote bindings), plus
 // a local D1 `CONTROL` database and the control-plane migrations as
 // `TEST_MIGRATIONS`, which suites apply with applyD1Migrations;
+// `integration-core` does the same against the core Worker's (ProjectDO);
 // `widget` is the report widget package's own project (widget/vitest.config.ts).
 import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-plugin';
 import { defineConfig } from 'vitest/config';
@@ -33,6 +34,15 @@ export default defineConfig({
         test: {
           name: 'integration',
           include: ['tests/integration/**/*.test.ts'],
+          exclude: ['tests/integration/core/**'],
+          testTimeout: 10_000,
+        },
+      },
+      {
+        plugins: [cloudflareTest({ remoteBindings: false, wrangler: { configPath: './src/workers/core/wrangler.jsonc' } })],
+        test: {
+          name: 'integration-core',
+          include: ['tests/integration/core/**/*.test.ts'],
           testTimeout: 10_000,
         },
       },

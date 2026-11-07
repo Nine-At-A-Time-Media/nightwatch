@@ -169,4 +169,16 @@ describe.each<{ name: string; make: (clock: FakeClock) => Log }>([
     await appendAll(log, ['a']);
     expect(await log.pull({ subscription: 'nobody', workerId: 'w1', max: 10 })).toEqual([]);
   });
+
+  it('an unsubscribed subscription delivers nothing, and making it again starts afresh with nothing acked', async () => {
+    await log.subscribe({ subscription: SUBSCRIPTION, start: 'earliest' });
+    await appendAll(log, ['a', 'b']);
+    const leased = await log.pull({ subscription: SUBSCRIPTION, workerId: 'w1', max: 1 });
+    await log.ack({ subscription: SUBSCRIPTION, workerId: 'w1', offsets: leased.map((l) => l.offset) });
+    await log.unsubscribe({ subscription: SUBSCRIPTION });
+    expect(await log.pull({ subscription: SUBSCRIPTION, workerId: 'w1', max: 10 })).toEqual([]);
+    await log.unsubscribe({ subscription: SUBSCRIPTION });
+    await log.subscribe({ subscription: SUBSCRIPTION, start: 'earliest' });
+    expect(ids(await log.pull({ subscription: SUBSCRIPTION, workerId: 'w1', max: 10 }))).toEqual(['a', 'b']);
+  });
 });

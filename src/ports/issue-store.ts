@@ -143,6 +143,14 @@ export interface IssueStore {
   recallFiling(filingKey: string): Promise<RecordedFiling | null>;
   /** Records the filing under the key, replacing what it held. */
   recordFiling(filingKey: string, filing: RecordedFiling): Promise<void>;
+  // --- task-031: retention expiry ---
+
+  /** Removes every Event that happened before `cutoff`, from whichever Issue holds it; returns their Event Ids. */
+  removeEventsBefore(cutoff: number): Promise<readonly EventId[]>;
+  /** The Reports filed before `cutoff`. */
+  reportsFiledBefore(cutoff: number): Promise<readonly Report[]>;
+  /** Forgets every filing record that names one of the Reports. */
+  forgetFilingsOf(reportIds: readonly ReportId[]): Promise<void>;
   // --- task-027: Assignee writes and Report moves ---
 
   /** Saves the Issue's Assignee, replacing the one it had; null leaves it with none. */

@@ -1,7 +1,7 @@
 /**
  * The ingest Worker's entry point (architecture, Mechanism: Ingest): parse the
  * SDK request into an Arrival, call admitArrival, shape its Admission into the
- * HTTP answer. It also hosts LogDO and QuotaDO until the core Worker lands.
+ * HTTP answer. It also hosts LogDO and QuotaDO (see wrangler.jsonc for why here).
  */
 
 import { admitArrival } from '../../application/admit-arrival.js';

@@ -154,3 +154,9 @@ export function extendLeases(sql: SqlStorage, { subscription, workerId, offsets,
     );
   }
 }
+
+/** Forgets the subscription and every delivery it tracked; an unknown one is left as it is. */
+export function unsubscribe(sql: SqlStorage, { subscription }: { subscription: string }): void {
+  sql.exec('DELETE FROM deliveries WHERE subscription = ?', subscription);
+  sql.exec('DELETE FROM subscriptions WHERE name = ?', subscription);
+}
