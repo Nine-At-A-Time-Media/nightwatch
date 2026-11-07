@@ -21,6 +21,7 @@ export interface LogStub {
   ack(request: HeldRequest): Promise<void>;
   nack(request: HeldRequest): Promise<void>;
   extend(request: ExtendRequest): Promise<void>;
+  unsubscribe(request: { subscription: string }): Promise<void>;
 }
 
 type Held = { subscription: string; workerId: string; offsets: readonly number[] };
@@ -64,5 +65,9 @@ export class LogArrivalStream implements ArrivalStream, ArrivalSubscription {
 
   async extend(request: Held): Promise<void> {
     await this.#log.extend({ ...request, now: this.#clock.now(), leaseMs: this.#leaseMs });
+  }
+
+  async unsubscribe(request: { subscription: string }): Promise<void> {
+    await this.#log.unsubscribe(request);
   }
 }

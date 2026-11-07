@@ -518,6 +518,22 @@ export class SqliteIssueStore implements IssueStore {
     return this.#sql.exec(query, ...bindings).toArray();
   }
 
+  // --- task-031: retention expiry ---
+
+  async removeEventsBefore(cutoff: number): Promise<readonly EventId[]> {
+    const expired = this.#rows('SELECT event_id FROM events WHERE at < ? ORDER BY seq', cutoff).map((row) => String(row['event_id']));
+    this.#sql.exec('DELETE FROM events WHERE at < ?', cutoff);
+    return expired;
+  }
+
+  async reportsFiledBefore(cutoff: number): Promise<readonly Report[]> {
+    return allParsed<Report>(this.#rows('SELECT report FROM reports ORDER BY seq'), 'report').filter((report) => report.filedAt < cutoff);
+  }
+
+  async forgetFilingsOf(reportIds: readonly ReportId[]): Promise<void> {
+    for (const reportId of reportIds) this.#sql.exec("DELETE FROM filings WHERE json_extract(filing, '$.reportId') = ?", reportId);
+  }
+
   #one(query: string, ...bindings: SqlStorageValue[]): Row {
     return this.#sql.exec(query, ...bindings).one();
   }

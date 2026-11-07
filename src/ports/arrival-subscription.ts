@@ -18,4 +18,8 @@ export interface ArrivalSubscription {
   nack(request: { subscription: string; workerId: string; offsets: readonly number[] }): Promise<void>;
   /** Renew leases still held; a lease that already ran out is not revived. */
   extend(request: { subscription: string; workerId: string; offsets: readonly number[] }): Promise<void>;
+  // --- task-031: reprocessing deletes its subscription when done ---
+
+  /** Forgets the subscription with its deliveries and leases; forgetting an unknown one does nothing. */
+  unsubscribe(request: { subscription: string }): Promise<void>;
 }

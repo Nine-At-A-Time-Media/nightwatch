@@ -62,6 +62,17 @@ export class FakeArrivalStream implements ArrivalStream, ArrivalSubscription {
     for (const delivery of this.#held(request)) if (delivery.leaseExpiresAt > now) delivery.leaseExpiresAt = now + this.#leaseMs;
   }
 
+  // --- task-031: reprocessing deletes its subscription when done ---
+
+  async unsubscribe({ subscription }: { subscription: string }): Promise<void> {
+    this.#subscriptions.delete(subscription);
+  }
+
+  /** Whether the subscription exists, for assertions. */
+  hasSubscription(subscription: string): boolean {
+    return this.#subscriptions.has(subscription);
+  }
+
   #held({ subscription, workerId, offsets }: Held): Delivery[] {
     const sub = this.#subscriptions.get(subscription);
     const deliveries = offsets.map((offset) => sub?.deliveries.get(offset));
