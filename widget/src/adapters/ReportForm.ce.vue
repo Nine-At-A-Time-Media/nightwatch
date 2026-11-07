@@ -46,7 +46,8 @@
           {{ failureWording(shownRefusal) }}
         </p>
         <div class="actions">
-          <button type="submit" :disabled="state.phase === 'sending'" data-testid="report-submit">Submit</button>
+          <button v-if="canRetry" type="button" class="primary" data-testid="report-retry" @click="handleSubmit">Retry</button>
+          <button v-else type="submit" :disabled="state.phase === 'sending'" data-testid="report-submit">Submit</button>
           <button type="button" :disabled="state.phase === 'sending'" data-testid="report-cancel" @click="handleCancel">Cancel</button>
         </div>
       </form>
@@ -62,11 +63,13 @@
  * only for a message and an optional screenshot; never for who the reporter is.
  */
 import { computed, inject, shallowRef, useId } from 'vue';
-import { isRefusal, type Refusal } from '../domain/refusal.js';
+import { isRefusal, refusal, type Refusal } from '../domain/refusal.js';
 import {
   failureWording,
+  isRetryable,
   nextReportFormState,
   submissionOf,
+  type FilingReceipt,
   type ReportDraft,
   type ReportFormEvent,
   type ReportFormState,
@@ -110,6 +113,8 @@ const shownRefusal = computed<Refusal | null>(() =>
   state.value.phase === 'editing' || state.value.phase === 'failed' ? state.value.refusal : null,
 );
 
+const canRetry = computed<boolean>(() => state.value.phase === 'failed' && isRetryable(state.value.refusal));
+
 function dispatch(event: ReportFormEvent): void {
   state.value = nextReportFormState(state.value, event, limits.value);
 }
@@ -131,8 +136,17 @@ function handleScreenshot(event: Event): void {
   dispatch({ kind: 'edit', draft: { ...draft.value, screenshot: files?.[0] ?? null } });
 }
 
+// A send that throws never reached Nightwatch: the reporter is told so and may retry.
+async function sendSafely(submission: ReportSubmission): Promise<FilingReceipt | Refusal> {
+  try {
+    return await sender.send(props.endpoint, submission);
+  } catch {
+    return refusal('not-sent');
+  }
+}
+
 async function send(submission: ReportSubmission): Promise<void> {
-  const outcome = await sender.send(props.endpoint, submission);
+  const outcome = await sendSafely(submission);
   dispatch(isRefusal(outcome) ? { kind: 'failed', refusal: outcome } : { kind: 'sent', receipt: outcome });
 }
 
@@ -167,7 +181,7 @@ async function handleSubmit(): Promise<void> {
   color: #fff;
   cursor: pointer;
 }
-.actions button[type='button'] {
+.actions button[type='button']:not(.primary) {
   background: #fff;
   color: #1b1b1f;
   border-color: #c4c4cc;
