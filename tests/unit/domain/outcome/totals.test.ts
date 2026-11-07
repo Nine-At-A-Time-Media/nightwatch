@@ -73,4 +73,60 @@ describe('outcomeTotalsOf', () => {
       }),
     );
   });
+
+  it('counts an item admitted then discarded by processing once, as discarded: its processing Outcome supersedes its admission Outcome', () => {
+    const item = { recordId: 'rec-1', index: 0 };
+    const totals = outcomeTotalsOf({
+      projectId: 'web',
+      range,
+      outcomes: [outcome('accepted', null, { item }), outcome('discarded', 'tombstone', { item })],
+    });
+    expect(totals.totals).toEqual([{ kind: 'discarded', reason: 'tombstone', quantity: 1 }]);
+  });
+
+  it('counts each item of a record once by its final Outcome, a redelivered refusal once, and a record-wide refusal in place of every item of its record', () => {
+    const totals = outcomeTotalsOf({
+      projectId: 'web',
+      range,
+      outcomes: [
+        outcome('accepted', null, { item: { recordId: 'rec-1', index: 0 } }),
+        outcome('accepted', null, { item: { recordId: 'rec-1', index: 1 } }),
+        outcome('invalid', 'malformed-event', { item: { recordId: 'rec-1', index: 1 } }),
+        outcome('invalid', 'malformed-event', { item: { recordId: 'rec-1', index: 1 } }),
+        outcome('accepted', null, { item: { recordId: 'rec-2', index: 0 } }),
+        outcome('accepted', null, { item: { recordId: 'rec-2', index: 1 } }),
+        outcome('discarded', 'dead-letter', { item: { recordId: 'rec-2', index: null } }),
+        outcome('filtered', 'localhost'),
+        outcome('accepted', null, { quantity: 4 }),
+      ],
+    });
+    expect(totals.totals).toEqual([
+      { kind: 'accepted', reason: null, quantity: 5 },
+      { kind: 'filtered', reason: 'localhost', quantity: 1 },
+      { kind: 'invalid', reason: 'malformed-event', quantity: 1 },
+      { kind: 'discarded', reason: 'dead-letter', quantity: 1 },
+    ]);
+  });
+
+  it('counts every identified item exactly once, whatever Outcomes admission and processing archived for it and in whatever order', () => {
+    const arbitrary = fc.array(
+      fc.record({
+        record: fc.constantFrom('rec-1', 'rec-2'),
+        index: fc.integer({ min: 0, max: 3 }),
+        refusals: fc.array(fc.constantFrom<OutcomeKind>('invalid', 'discarded'), { maxLength: 2 }),
+      }),
+    );
+    fc.assert(
+      fc.property(arbitrary, (specs) => {
+        const outcomes = specs.flatMap((spec) => {
+          const item = { recordId: spec.record, index: spec.index };
+          return [outcome('accepted', null, { item }), ...spec.refusals.map((kind) => outcome(kind, 'r', { item }))];
+        });
+        const items = new Set(specs.map((spec) => `${spec.record}/${spec.index}`));
+        const totals = outcomeTotalsOf({ projectId: 'web', range, outcomes });
+        expect(totals.totals.reduce((sum, total) => sum + total.quantity, 0)).toBe(items.size);
+        expect(outcomeTotalsOf({ projectId: 'web', range, outcomes: [...outcomes].reverse() })).toEqual(totals);
+      }),
+    );
+  });
 });
