@@ -2,7 +2,8 @@
 // in-process fake agree on a representative subset -- assigning Events by
 // Fingerprint, filing a Report issue, a Release first seen, External Links
 // and filings -- and keep each Project apart. ProjectDO's own promises
-// follow: its alarm sweeps and schedules the next sweep, an object answers
+// follow: its alarm sweeps and schedules the next sweep, retention sets a
+// sweep when none is set, an object answers
 // for one Project only, and no step past the RPC surface is reachable.
 import { env, runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
@@ -10,6 +11,7 @@ import { DurableProjectClient } from '../../../src/adapters/do/durable-project-c
 import { SqliteIssueStore } from '../../../src/adapters/do-sqlite/sqlite-issue-store.js';
 import type { EventSummary } from '../../../src/domain/event/event-summary.js';
 import type { IssueState } from '../../../src/domain/issue/state.js';
+import type { RetentionPolicy } from '../../../src/domain/retention/retention.js';
 import type { Report } from '../../../src/domain/report/report.js';
 import type { ExternalLink } from '../../../src/domain/tracker/external-link.js';
 import type { ProjectClient } from '../../../src/ports/project-client.js';
@@ -24,10 +26,19 @@ const NOW = Date.now();
 
 // --- values ---
 
-function summary(eventId: string): EventSummary {
+const RETENTION: RetentionPolicy = {
+  raw: 30 * DAY,
+  event: 90 * DAY,
+  attachment: 30 * DAY,
+  report: 365 * DAY,
+  outcome: 90 * DAY,
+  history: 365 * DAY,
+};
+
+function summary(eventId: string, at = NOW): EventSummary {
   return {
     eventId,
-    at: NOW,
+    at,
     release: null,
     environment: 'production',
     level: 'error',
@@ -175,6 +186,16 @@ describe.each<{ name: string; make: () => ProjectClient }>([
     expect(moved).toMatchObject({ id: 'report-1', issueId: crash });
     expect((await client.reportsOn(projectId, crash)).map((held) => held.id)).toEqual(['report-1']);
   });
+
+  it('Retention expiry -- Given an event older than Event Retention, When retention runs and anyone asks for it, Then it is not found', async () => {
+    const client = make();
+    const projectId = project();
+    const old = issueIdOf(await client.assignEvent(projectId, summary('event-old', NOW - 100 * DAY), ['fp-old']));
+    const kept = issueIdOf(await client.assignEvent(projectId, summary('event-new'), ['fp-new']));
+    expect(await client.enforceRetention(projectId, RETENTION)).toEqual({ events: 1, issues: 1, reports: 0 });
+    expect(await client.getIssue(projectId, old)).toBeNull();
+    expect(await client.countEvents(projectId, { issueId: kept, since: 0 })).toBe(1);
+  });
 });
 
 describe('ProjectDO', () => {
@@ -193,6 +214,15 @@ describe('ProjectDO', () => {
     });
     expect(await runDurableObjectAlarm(stubOf(projectId))).toBe(true);
     expect(await client().getIssue(projectId, issueId)).toMatchObject({ status: 'unresolved', substatus: 'ongoing' });
+    const next = await runInDurableObject(stubOf(projectId), (_instance, state) => state.storage.getAlarm());
+    expect(next).toBeGreaterThan(NOW);
+  });
+
+  it('retention sets the sweep alarm of a Project that has none', async () => {
+    const projectId = project();
+    await client().getIssue(projectId, 'issue-1');
+    await runInDurableObject(stubOf(projectId), (_instance, state) => state.storage.deleteAlarm());
+    await client().enforceRetention(projectId, RETENTION);
     const next = await runInDurableObject(stubOf(projectId), (_instance, state) => state.storage.getAlarm());
     expect(next).toBeGreaterThan(NOW);
   });
