@@ -206,4 +206,55 @@ describe('admitArrival', () => {
     const retained = parseEnvelope(deps.stream.records[0]!.body!);
     expect(!isRefusal(retained) && retained.items.map((i) => i.header.type)).toEqual(['event']);
   });
+
+  it('A quota rejects with retry advice: Given a Quota is exhausted for a category, When an SDK sends that category, Then Nightwatch refuses it, tells the SDK when to retry that category, and records a rate-limited Outcome', async () => {
+    const deps = makeDeps({ limits: { [PROJECT]: { error: 0 } } });
+    const admission = await admitArrival(arrival(), deps);
+
+    expect(admission).toMatchObject({ decision: 'refused', status: 429 });
+    expect(admission.retryAdvice).toEqual([{ retryAfterSeconds: 60, categories: ['error'], scope: 'project', reason: 'quota-exceeded' }]);
+    expect(admission.outcomes).toEqual([outcome('rate_limited', 'quota-exceeded', 'error')]);
+    expect(deps.stream.records).toHaveLength(0);
+    expect(deps.archive.archived).toEqual(admission.outcomes);
+  });
+
+  it('A quota rejects with retry advice: only the exhausted category is refused; the rest is admitted with the advice', async () => {
+    const deps = makeDeps({ limits: { [PROJECT]: { error: 0 } } });
+    const admission = await admitArrival(arrival({ body: envelope([errorItem, { type: 'session', payload: { sid: 's' } }]) }), deps);
+
+    expect(admission.decision).toBe('admitted');
+    expect(admission.retryAdvice.map((a) => a.categories)).toEqual([['error']]);
+    expect(admission.outcomes).toEqual([outcome('rate_limited', 'quota-exceeded', 'error'), outcome('accepted', null, 'session')]);
+    const retained = parseEnvelope(deps.stream.records[0]!.body!);
+    expect(!isRefusal(retained) && retained.items.map((i) => i.header.type)).toEqual(['session']);
+  });
+
+  it('A quota rejects with retry advice: the Quota is asked per category with the Client Key and item count', async () => {
+    const deps = makeDeps();
+    await admitArrival(arrival({ body: envelope([errorItem, errorItem, { type: 'session', payload: {} }]) }), deps);
+
+    expect(deps.quota.requests).toEqual([
+      { projectId: PROJECT, publicKey: 'k1', category: 'error', quantity: 2 },
+      { projectId: PROJECT, publicKey: 'k1', category: 'session', quantity: 1 },
+    ]);
+  });
+
+  it('A quota rejects with retry advice: the advice never exceeds the Retry advice ceiling', async () => {
+    const deps = { ...makeDeps(), quota: new FakeQuotaGate({ [PROJECT]: { error: 0 } }, 86_400) };
+    const admission = await admitArrival(arrival(), deps);
+
+    expect(admission.retryAdvice.map((a) => a.retryAfterSeconds)).toEqual([settings.retryAdviceCeilingSeconds]);
+  });
+
+  it("Noisy tenant: Given one Project floods ingest, When its Quota is exhausted, Then other Projects' arrivals are still accepted", async () => {
+    const quiet = '43';
+    const deps = makeDeps({ configs: { [PROJECT]: projectConfig(), [quiet]: projectConfig() }, limits: { [PROJECT]: { error: 3 } } });
+    const flood = [];
+    for (let i = 0; i < 5; i++) flood.push(await admitArrival(arrival(), deps));
+
+    expect(flood.map((a) => a.decision)).toEqual(['admitted', 'admitted', 'admitted', 'refused', 'refused']);
+    const other = await admitArrival(arrival({ projectId: quiet }), deps);
+    expect(other.decision).toBe('admitted');
+    expect(other.outcomes).toEqual([{ ...outcome('accepted', null, 'error'), projectId: quiet }]);
+  });
 });
