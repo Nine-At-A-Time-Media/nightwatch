@@ -158,6 +158,19 @@ describe.each<{ name: string; make: () => ProjectClient }>([
     await client.recordFiling(projectId, 'key-1', { reportId: 'report-1', noticeSent: true });
     expect(await client.recallFiling(projectId, 'key-1')).toEqual({ reportId: 'report-1', noticeSent: true });
   });
+
+  // --- task-035: the console's issue list ---
+
+  it("lists every Issue the Project holds, and none of another Project's", async () => {
+    const client = make();
+    const [a, b] = [project(), project()];
+    const first = await client.assignEvent(a, summary('event-1'), ['fp-1']);
+    const second = await client.assignEvent(a, summary('event-2'), ['fp-2']);
+    await client.assignEvent(b, summary('event-3'), ['fp-3']);
+    const listed = (await client.listIssues(a)).map((issue) => issue.issueId);
+    expect(listed.toSorted()).toEqual([issueIdOf(first), issueIdOf(second)].toSorted());
+    expect(await client.listIssues(project())).toEqual([]);
+  });
 });
 
 describe('ProjectDO', () => {
