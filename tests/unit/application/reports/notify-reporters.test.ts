@@ -5,6 +5,7 @@ import { resolve } from '../../../../src/domain/issue/commands.js';
 import type { Resolution } from '../../../../src/domain/issue/resolution.js';
 import type { IssueChange } from '../../../../src/domain/issue/state.js';
 import { isRefusal } from '../../../../src/domain/refusal.js';
+import { link } from '../../../../src/domain/tracker/external-link.js';
 import { summary } from '../issues/world.js';
 import { ADA, BOB, filed, HOUR, member, PROJECT, T0, world, type World } from './world.js';
 
@@ -118,6 +119,18 @@ describe('notifyReporters', () => {
     expect(await notifyAll(w, await resolveIssue(w, await issueOf(w, receipt.reportId), { kind: 'plain' }))).toEqual([]);
     expect(w.mailer.sent).toEqual([]);
     expect(await shownStatuses(w, receipt.reportId)).toEqual(['received', 'fixed']);
+  });
+
+  it('reads the External Link: a new Issue linked to a GitHub issue shows its Report as Acknowledged', async () => {
+    const w = world();
+    const receipt = await filed(w, ADA);
+    const issueId = await issueOf(w, receipt.reportId);
+    await w.projects.recordExternalLink(PROJECT, link({ issueId, repository: 'acme/web', number: 7, lastKnown: { state: 'open' } }));
+    w.mailer.sent.length = 0;
+    const change: IssueChange = { issueId, kind: 'priority', from: 'medium', to: 'high', actor: member, origin: 'nightwatch', at: T0 + HOUR };
+
+    expect(await notifyReporters(PROJECT, change, w)).toEqual([{ reportId: receipt.reportId, to: ADA, about: { status: 'acknowledged' } }]);
+    expect(await shownStatuses(w, receipt.reportId)).toEqual(['received', 'acknowledged']);
   });
 
   it('sends nothing for a change on an Issue the Project no longer holds', async () => {
