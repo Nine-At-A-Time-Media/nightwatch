@@ -10,7 +10,7 @@ import type { ArrivalRecord } from '../../../src/domain/ingest/arrival.js';
 import type { ProcessingConfig } from '../../../src/domain/processing/processing.js';
 import { serializeEnvelope } from '../../../src/domain/protocol/envelope.js';
 import { FakeArchiveSink } from '../../_fakes/fake-archive-sink.js';
-import { ADA, PROJECT, T0, assertionOf, world as reportsWorld } from './reports/world.js';
+import { ADA, ORG, PROJECT, T0, assertionOf, world as reportsWorld } from './reports/world.js';
 
 // --- builders ---
 
@@ -226,6 +226,34 @@ describe('processArrival', () => {
     expect(w.effects.enqueued).toEqual(effects);
     expect(w.archive.archivedEvents).toHaveLength(1);
     expect(again.outcomes).toEqual([]);
+  });
+
+  it('keys each stored Event by its Project, so two Projects sending one event id keep their own Events', async () => {
+    const w = world();
+    const OTHER = 'project-2';
+    w.control.addProject(ORG, OTHER);
+    w.control.setProcessingConfig(OTHER, config());
+    const stolen = errorEvent({ exception: { values: [{ type: 'PaymentError', value: 'card stolen' }] } });
+    await processArrival(record([errorEvent()]), w.deps);
+    await processArrival(record([stolen], { projectId: OTHER }), w.deps);
+
+    const eventKeys = [...w.blobs.blobs.keys()].filter((key) => key.startsWith('events/'));
+    expect(eventKeys).toHaveLength(2);
+    expect(dec((await w.blobs.get(eventBlobKey({ projectId: PROJECT, eventId: EVENT_ID }))) ?? new Uint8Array())).toContain('declined');
+    expect(dec((await w.blobs.get(eventBlobKey({ projectId: OTHER, eventId: EVENT_ID }))) ?? new Uint8Array())).toContain('card stolen');
+  });
+
+  it('remembers Event ids per Project: the same event id in two Projects is a duplicate in neither', async () => {
+    const w = world();
+    const OTHER = 'project-2';
+    w.control.addProject(ORG, OTHER);
+    w.control.setProcessingConfig(OTHER, config());
+    const first = await processArrival(record([errorEvent()]), w.deps);
+    const second = await processArrival(record([errorEvent()], { projectId: OTHER }), w.deps);
+
+    expect(first.assignments[0]).toMatchObject({ duplicate: false });
+    expect(second.assignments[0]).toMatchObject({ duplicate: false });
+    expect(await w.projects.store(OTHER).listIssues()).toHaveLength(1);
   });
 
   it('files the Report a signed-in feedback item carries, as the Reporter the forwarded sign-in names', async () => {
