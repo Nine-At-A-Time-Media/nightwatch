@@ -1,0 +1,9 @@
+node_modules
+.wrangler
+.state
+pnpm-lock.yaml
+reports
+docs
+tasks
+*.md
+.designomatic.yml

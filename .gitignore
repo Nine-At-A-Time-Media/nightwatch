@@ -20,3 +20,6 @@ node_modules/
 .designomatic/
 # local tool state (hermetic)
 .state/
+node_modules/
+reports/
+.stryker-tmp/
