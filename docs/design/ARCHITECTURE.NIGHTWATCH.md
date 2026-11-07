@@ -192,7 +192,7 @@ calls the `ProjectDO` use case.
 
 | Design behavior | Use case (signature) | Ports | Runtime |
 |---|---|---|---|
-| An SDK event is accepted; A disabled key is refused; A wrong origin is refused; An oversized arrival is refused; A quota rejects with retry advice; Noise is filtered; Out-of-scope data is counted; Durable before acknowledged; Noisy tenant | `admitArrival(arrival: Arrival, deps: {config: ProjectConfigSource, quota: QuotaGate, stream: ArrivalStream, blobs: BlobStore, metrics: MetricsSink, archive: ArchiveSink, clock: Clock}): Promise<Admission>` | ProjectConfigSource, QuotaGate, ArrivalStream, BlobStore, MetricsSink, ArchiveSink, Clock | ingest |
+| An SDK event is accepted; A disabled key is refused; A wrong origin is refused; An oversized arrival is refused; A quota rejects with retry advice; Noise is filtered; Out-of-scope data is counted; Durable before acknowledged; Noisy tenant | `admitArrival(arrival: Arrival, deps: {config: ProjectConfigSource, quota: QuotaGate, stream: ArrivalStream, blobs: BlobStore, metrics: MetricsSink, archive: ArchiveSink, clock: Clock, ids: Ids}): Promise<Admission>` | ProjectConfigSource, QuotaGate, ArrivalStream, BlobStore, MetricsSink, ArchiveSink, Clock | ingest |
 
 ### Processing and grouping
 

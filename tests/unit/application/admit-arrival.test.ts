@@ -6,6 +6,7 @@ import { isRefusal } from '../../../src/domain/refusal.js';
 import { FakeArchiveSink } from '../../_fakes/fake-archive-sink.js';
 import { FakeArrivalStream } from '../../_fakes/fake-arrival-stream.js';
 import { FakeBlobStore } from '../../_fakes/fake-blob-store.js';
+import { FakeIds } from '../../_fakes/fake-ids.js';
 import { FakeClock } from '../../_fakes/fake-clock.js';
 import { FakeMetricsSink } from '../../_fakes/fake-metrics-sink.js';
 import { FakeProjectConfigSource } from '../../_fakes/fake-project-config-source.js';
@@ -39,6 +40,7 @@ function makeDeps({
     metrics: new FakeMetricsSink(),
     archive: new FakeArchiveSink(),
     clock: new FakeClock(NOW),
+    ids: new FakeIds('rec'),
     settings,
   };
 }

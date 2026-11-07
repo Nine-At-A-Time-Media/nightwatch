@@ -42,6 +42,7 @@ import type { ArchiveSink } from '../ports/archive-sink.js';
 import type { ArrivalStream } from '../ports/arrival-stream.js';
 import type { BlobStore } from '../ports/blob-store.js';
 import type { Clock } from '../ports/clock.js';
+import type { Ids } from '../ports/ids.js';
 import type { MetricsSink } from '../ports/metrics-sink.js';
 import type { ProjectConfigSource } from '../ports/project-config-source.js';
 import type { QuotaGate } from '../ports/quota-gate.js';
@@ -54,6 +55,7 @@ export type AdmitArrivalDeps = {
   readonly metrics: MetricsSink;
   readonly archive: ArchiveSink;
   readonly clock: Clock;
+  readonly ids: Ids;
   readonly settings: IngestSettings;
 };
 
@@ -122,7 +124,7 @@ async function retain({
   deps: AdmitArrivalDeps;
 }): Promise<Retained> {
   const body = keptBody({ arrival, envelope, fates });
-  const recordId = await arrivalRecordId({ projectId: arrival.projectId, receivedAt, body: arrival.body });
+  const recordId = arrivalRecordId({ receivedAt, unique: deps.ids.newId() });
   const blobKey = needsBlob({ endpoint: arrival.endpoint, body, fates, settings: deps.settings })
     ? rawBlobKey({ projectId: arrival.projectId, recordId })
     : null;

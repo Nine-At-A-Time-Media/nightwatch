@@ -4,24 +4,16 @@ import { arrivalRecordId, needsBlob, rawBlobKey, storageAdvice } from '../../../
 import type { ItemFate } from '../../../../src/domain/ingest/items.js';
 
 describe('arrivalRecordId', () => {
-  it('is the same for the same Project, time and body', async () => {
-    const body = new TextEncoder().encode('{}');
-    const a = await arrivalRecordId({ projectId: '1', receivedAt: 5, body });
-    const b = await arrivalRecordId({ projectId: '1', receivedAt: 5, body });
-    expect(a).toBe(b);
-    expect(a).toMatch(/^[0-9a-z]+-[0-9a-f]{32}$/);
+  it('names the receipt time and the unique part', () => {
+    expect(arrivalRecordId({ receivedAt: 36, unique: 'abc' })).toBe('10-abc');
   });
 
-  it('differs when the Project, the time or the body differs', async () => {
-    await fc.assert(
-      fc.asyncProperty(fc.uint8Array({ maxLength: 32 }), fc.uint8Array({ maxLength: 32 }), async (x, y) => {
-        const base = await arrivalRecordId({ projectId: '1', receivedAt: 5, body: x });
-        expect(await arrivalRecordId({ projectId: '2', receivedAt: 5, body: x })).not.toBe(base);
-        expect(await arrivalRecordId({ projectId: '1', receivedAt: 6, body: x })).not.toBe(base);
-        const other = await arrivalRecordId({ projectId: '1', receivedAt: 5, body: y });
-        expect(other === base).toBe(x.length === y.length && x.every((v, i) => v === y[i]));
+  it('gives distinct ids for distinct unique parts at the same time', () => {
+    fc.assert(
+      fc.property(fc.nat(), fc.string({ minLength: 1 }), fc.string({ minLength: 1 }), (receivedAt, a, b) => {
+        fc.pre(a !== b);
+        expect(arrivalRecordId({ receivedAt, unique: a })).not.toBe(arrivalRecordId({ receivedAt, unique: b }));
       }),
-      { numRuns: 50 },
     );
   });
 });

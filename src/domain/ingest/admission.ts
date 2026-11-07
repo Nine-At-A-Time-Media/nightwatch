@@ -47,9 +47,6 @@ const REFUSAL_STATUS = new Map<string, Exclude<AdmissionStatus, 200>>([
 
 const STORAGE_UNAVAILABLE = 'storage-unavailable';
 
-const HEX = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, '0'));
-const encoder = new TextEncoder();
-
 // --- predicates ---
 
 function hasVerdict(fates: readonly DecidedItem[], kind: OutcomeKind): boolean {
@@ -148,23 +145,9 @@ export function decideAdmission({
   return { decision: 'admitted', status: 200, recordId: null, outcomes, retryAdvice };
 }
 
-/** A stable id for an Arrival Record, derived from its Project, receipt time and body. */
-export async function arrivalRecordId({
-  projectId,
-  receivedAt,
-  body,
-}: {
-  projectId: string;
-  receivedAt: number;
-  body: Uint8Array;
-}): Promise<string> {
-  const prefix = encoder.encode(`${projectId}\n${receivedAt}\n`);
-  const material = new Uint8Array(prefix.length + body.length);
-  material.set(prefix);
-  material.set(body, prefix.length);
-  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', material));
-  const hex = Array.from(digest.subarray(0, 16), (byte) => HEX[byte] ?? '').join('');
-  return `${receivedAt.toString(36)}-${hex}`;
+/** The id of an Arrival Record: its receipt time, then a fresh unique part. */
+export function arrivalRecordId({ receivedAt, unique }: { receivedAt: number; unique: string }): string {
+  return `${receivedAt.toString(36)}-${unique}`;
 }
 
 export function arrivalRecord({
