@@ -311,12 +311,6 @@ export class FakeIssueStore implements IssueStore {
 
   // --- task-021: Assignee, Alert Firings and follow participations ---
 
-  /** Test helper: sets the Issue's Assignee, as a triage action would. */
-  setAssignee(issueId: IssueId, assignee: Assignee | null): void {
-    if (assignee === null) this.#assignees.delete(issueId);
-    else this.#assignees.set(issueId, assignee);
-  }
-
   async assigneeOf(issueId: IssueId): Promise<Assignee | null> {
     return this.#assignees.get(issueId) ?? null;
   }
@@ -354,5 +348,20 @@ export class FakeIssueStore implements IssueStore {
 
   async recordFiling(filingKey: string, filing: RecordedFiling): Promise<void> {
     this.#filings.set(filingKey, filing);
+  }
+  // --- task-027: Assignee writes and Report moves ---
+
+  async setAssignee(issueId: IssueId, assignee: Assignee | null): Promise<void> {
+    if (assignee === null) this.#assignees.delete(issueId);
+    else this.#assignees.set(issueId, assignee);
+  }
+
+  async moveReport(move: { reportId: ReportId; to: IssueId }): Promise<void> {
+    const report = this.#reports.get(move.reportId);
+    if (!report) return;
+    this.#reports.set(report.id, { ...report, issueId: move.to });
+    this.#comments
+      .filter((held) => 'report' in held.comment.author && held.comment.author.report === move.reportId)
+      .forEach((held) => (held.issueId = move.to));
   }
 }

@@ -11,6 +11,7 @@
  * `you` (the Report's Reporter) and holds nothing else about the Issue.
  */
 
+import type { Assignee } from '../alerts/issue-alert-rule.js';
 import { change, type Actor, type IssueChange, type IssueState } from '../issue/state.js';
 import type { Report } from './report.js';
 import type { IssueTriage, ReportStatus } from './status.js';
@@ -74,13 +75,13 @@ function entryOf(comment: Comment): FollowUpEntry {
 // --- exports ---
 
 /**
- * Whether a Member triaged the Issue by commenting. Only a shared Comment
- * counts: a private note must leave the Reporter told nothing (design
- * Behaviors: Private comment stays private). Assignment is not modelled on
- * the Issue yet, so it never counts.
+ * Whether a Member triaged the Issue by assigning it or commenting. Only a
+ * shared Comment counts: a private note must leave the Reporter told nothing
+ * (design Behaviors: Private comment stays private). An Issue holding an
+ * Assignee counts (design State Machine: Report Status, Acknowledged).
  */
-export function triageOf(comments: readonly Comment[]): IssueTriage {
-  return { assigned: false, commentedByMember: comments.some((comment) => isMemberComment(comment) && comment.shared) };
+export function triageOf(comments: readonly Comment[], assignee: Assignee | null): IssueTriage {
+  return { assigned: assignee !== null, commentedByMember: comments.some((comment) => isMemberComment(comment) && comment.shared) };
 }
 
 /** The Report Status the Reporter was last shown: the latest change, or Received before any. */

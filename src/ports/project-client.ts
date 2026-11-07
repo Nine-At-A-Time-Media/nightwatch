@@ -118,4 +118,13 @@ export interface ProjectClient {
   recallFiling(projectId: ProjectId, filingKey: string): Promise<RecordedFiling | null>;
   /** Records the filing under the key in the Project, replacing what it held. */
   recordFiling(projectId: ProjectId, filingKey: string, filing: RecordedFiling): Promise<void>;
+  // --- task-027: assignment and Report moves ---
+
+  /** Calls the ProjectDO use case assignIssue: a Member, or Nightwatch when the Project auto-assigns, sets the Assignee. */
+  assignIssue(
+    projectId: ProjectId,
+    issueId: IssueId,
+    assignee: Assignee | null,
+    actor: Member | 'system',
+  ): Promise<IssueChange[] | Refusal>;
 }

@@ -143,4 +143,10 @@ export interface IssueStore {
   recallFiling(filingKey: string): Promise<RecordedFiling | null>;
   /** Records the filing under the key, replacing what it held. */
   recordFiling(filingKey: string, filing: RecordedFiling): Promise<void>;
+  // --- task-027: Assignee writes and Report moves ---
+
+  /** Saves the Issue's Assignee, replacing the one it had; null leaves it with none. */
+  setAssignee(issueId: IssueId, assignee: Assignee | null): Promise<void>;
+  /** Attaches the Report to the Issue, moving the replies written on it there too. */
+  moveReport(move: { reportId: ReportId; to: IssueId }): Promise<void>;
 }
