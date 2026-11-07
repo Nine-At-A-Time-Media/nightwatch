@@ -4,7 +4,15 @@ import { sweep } from '../../../../src/domain/issue/sweep.js';
 import type { Status } from '../../../../src/domain/issue/state.js';
 import { DAY, T0, issueArbitrary, issueIn, policies } from './fixtures.js';
 
-const condition = { untilDate: T0 + DAY, count: null, window: null, userCount: null, userWindow: null, baselineCount: 1, baselineUserCount: 1 };
+const condition = {
+  untilDate: T0 + DAY,
+  count: null,
+  window: null,
+  userCount: null,
+  userWindow: null,
+  baselineCount: 1,
+  baselineUserCount: 1,
+};
 
 describe('sweep', () => {
   it('New becomes ongoing: Given a New issue, When it is older than the New Issue Age, Then it becomes Ongoing', () => {
@@ -13,15 +21,26 @@ describe('sweep', () => {
     const { state, changes } = sweep(fresh, T0 + 3 * DAY + 1, policies);
     expect(state).toMatchObject({ status: 'unresolved', substatus: 'ongoing', substatusSince: T0 + 3 * DAY + 1 });
     expect(changes).toEqual([
-      { issueId: 'issue-1', kind: 'status', from: 'unresolved/new', to: 'unresolved/ongoing', actor: 'sweep', origin: 'nightwatch', at: T0 + 3 * DAY + 1 },
+      {
+        issueId: 'issue-1',
+        kind: 'status',
+        from: 'unresolved/new',
+        to: 'unresolved/ongoing',
+        actor: 'sweep',
+        origin: 'nightwatch',
+        at: T0 + 3 * DAY + 1,
+      },
     ]);
   });
 
-  it.each(['escalating', 'regressed'] as const)('an Unresolved/%s issue settles to Ongoing after the Settle Age in that state', (substatus) => {
-    const hot = issueIn({ status: 'unresolved', substatus }, { substatusSince: T0 + DAY });
-    expect(sweep(hot, T0 + 8 * DAY, policies).state).toMatchObject({ substatus });
-    expect(sweep(hot, T0 + 8 * DAY + 1, policies).state).toMatchObject({ substatus: 'ongoing' });
-  });
+  it.each(['escalating', 'regressed'] as const)(
+    'an Unresolved/%s issue settles to Ongoing after the Settle Age in that state',
+    (substatus) => {
+      const hot = issueIn({ status: 'unresolved', substatus }, { substatusSince: T0 + DAY });
+      expect(sweep(hot, T0 + 8 * DAY, policies).state).toMatchObject({ substatus });
+      expect(sweep(hot, T0 + 8 * DAY + 1, policies).state).toMatchObject({ substatus: 'ongoing' });
+    },
+  );
 
   it('an issue leaves For Review at the Inbox Expiry', () => {
     const waiting = issueIn({ status: 'unresolved', substatus: 'ongoing' }, { forReviewSince: T0 });

@@ -11,7 +11,15 @@ describe('recordReleaseSeen', () => {
     const { state, changes } = recordReleaseSeen(pending, '2.0.0', AT);
     expect(state).toMatchObject({ status: 'resolved', resolution: { kind: 'in_next_release', release: '2.0.0' } });
     expect(changes).toEqual([
-      { issueId: 'issue-1', kind: 'resolution', from: 'in_next_release', to: 'in_next_release:2.0.0', actor: 'system', origin: 'nightwatch', at: AT },
+      {
+        issueId: 'issue-1',
+        kind: 'resolution',
+        from: 'in_next_release',
+        to: 'in_next_release:2.0.0',
+        actor: 'system',
+        origin: 'nightwatch',
+        at: AT,
+      },
     ]);
     // A later release does not rename it.
     expect(recordReleaseSeen(state, '2.1.0', AT)).toEqual({ state, changes: [] });
