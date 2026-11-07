@@ -3,7 +3,7 @@ id: task-012
 kind: task
 title: Composition roots, LogDO, wrangler configs, and the local dev loop
 created: 2026-11-07
-blocked_by: [task-008, task-009]
+blocked_by: [task-008, task-009, task-015]
 implements: docs/design/ARCHITECTURE.NIGHTWATCH.md
 ---
 
