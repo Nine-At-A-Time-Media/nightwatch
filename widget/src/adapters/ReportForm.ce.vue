@@ -3,7 +3,7 @@
     <button v-if="state.phase === 'idle'" type="button" class="trigger" data-testid="report-trigger" @click="handleOpen">
       Report a problem
     </button>
-    <div v-else role="dialog" aria-modal="true" :aria-labelledby="titleId" class="dialog" data-testid="report-dialog">
+    <div v-else role="dialog" :aria-labelledby="titleId" class="dialog" data-testid="report-dialog">
       <h2 :id="titleId">Report a problem</h2>
       <div v-if="state.phase === 'sent'" class="receipt">
         <p role="status" data-testid="report-sent">Report sent</p>
