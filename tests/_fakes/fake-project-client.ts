@@ -7,6 +7,7 @@
  */
 
 import { openReportIssue } from '../../src/application/reports/open-report-issue.js';
+import { markSpam } from '../../src/application/reports/mark-spam.js';
 import { recordReply } from '../../src/application/reports/record-reply.js';
 import { assignEvent } from '../../src/application/issues/assign-event.js';
 import { recordReleaseSeen } from '../../src/application/issues/record-release-seen.js';
@@ -15,10 +16,11 @@ import type { Fingerprint } from '../../src/domain/grouping/fingerprint.js';
 import type { IssueId, ProjectId, ReportId } from '../../src/domain/ids.js';
 import type { Assignment } from '../../src/domain/issue/assignment.js';
 import type { IssuePolicies } from '../../src/domain/issue/policies.js';
-import type { IssueChange, IssueState } from '../../src/domain/issue/state.js';
+import type { IssueChange, IssueState, Member } from '../../src/domain/issue/state.js';
 import type { Refusal } from '../../src/domain/refusal.js';
 import type { Release, ReleaseFirstSeen } from '../../src/domain/release/ordering.js';
 import type { Report } from '../../src/domain/report/report.js';
+import type { SpamVerdict } from '../../src/domain/report/spam.js';
 import type { Comment, ReporterComment, ReportStatusChange } from '../../src/domain/report/thread.js';
 import type { Clock } from '../../src/ports/clock.js';
 import type { EffectQueue } from '../../src/ports/effect-queue.js';
@@ -58,6 +60,10 @@ export class FakeProjectClient implements ProjectClient {
 
   async openReportIssue(projectId: ProjectId, report: Report): Promise<IssueChange[]> {
     return openReportIssue(report, { issues: this.store(projectId) });
+  }
+
+  async markSpam(projectId: ProjectId, reportId: ReportId, actor: Member | SpamVerdict): Promise<IssueChange[]> {
+    return markSpam(reportId, actor, { issues: this.store(projectId), clock: this.#side.clock });
   }
 
   async recordReply(projectId: ProjectId, comment: ReporterComment): Promise<IssueChange[] | Refusal> {

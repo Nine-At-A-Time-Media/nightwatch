@@ -7,10 +7,11 @@
  * is indexed by its hash, and only then is the Report attached to its own
  * Report issue in the Project, so a storage failure files nothing and the
  * refusal says to retry (the server side of "Failed send is visible"). The
- * receipt notice goes to the reporter's address whatever the form shows.
+ * receipt notice goes to the reporter's address whatever the form shows,
+ * and whatever the Spam Judge decided, so a spam verdict stays silent.
  *
  * Ports: SignInVerifier, QuotaGate, ProjectClient, ControlStore, BlobStore,
- * EffectQueue, Mailer, Ids, Clock. The Project comes from the route that
+ * SpamJudge, EffectQueue, Mailer, Ids, Clock. The Project comes from the route that
  * received the submission, never from the reporter.
  */
 
@@ -27,6 +28,7 @@ import {
 } from '../../domain/report/filing.js';
 import { receiptNotice } from '../../domain/report/notice.js';
 import { validateSubmission, type Report, type ReportSubmission } from '../../domain/report/report.js';
+import { isJudgedSpam } from '../../domain/report/spam.js';
 import type { Assertion, SignIn } from '../../domain/signin/sign-in.js';
 import type { BlobStore } from '../../ports/blob-store.js';
 import type { Clock } from '../../ports/clock.js';
@@ -37,6 +39,7 @@ import type { Mailer } from '../../ports/mailer.js';
 import type { ProjectClient } from '../../ports/project-client.js';
 import type { QuotaGate } from '../../ports/quota-gate.js';
 import type { SignInVerifier } from '../../ports/sign-in-verifier.js';
+import type { SpamJudge } from '../../ports/spam-judge.js';
 import { verifyAssertion } from '../signin/verify-assertion.js';
 import { mintReference } from './mint-reference.js';
 
@@ -49,6 +52,7 @@ export type FileReportDeps = {
   projects: ProjectClient;
   control: ControlStore;
   blobs: BlobStore;
+  spam: SpamJudge;
   effects: EffectQueue;
   mailer: Mailer;
   ids: Ids;
@@ -114,6 +118,12 @@ async function storeScreenshot(reportId: ReportId, screenshot: Uint8Array | null
   return unavailable(await blobs.put(key, screenshot)) ?? [key];
 }
 
+/** Asks the Spam Judge; a verdict at or above the threshold archives the Report, and nothing else follows from it. */
+async function judgeSpam(report: Report, deps: FileReportDeps): Promise<void> {
+  const verdict = await deps.spam.judge(report.message);
+  if (isJudgedSpam(verdict, deps.settings.spamThreshold)) await deps.projects.markSpam(report.projectId, report.id, verdict);
+}
+
 async function sendReceipt(report: Report, link: { reference: string; url: string }, mailer: Mailer): Promise<boolean> {
   const notice = receiptNotice({ reference: link.reference, link: link.url });
   const sent = await mailer.send({ to: report.reporter.email, subject: notice.subject, text: notice.text, headers: {} });
@@ -129,6 +139,7 @@ async function file(filing: Filing, deps: FileReportDeps): Promise<FilingReceipt
   if (notStored) return notStored;
   const report = reportOf(filing, { reportId, issueId: deps.ids.newId(), referenceHash: minted.hash, attachments });
   await deps.effects.enqueue(await deps.projects.openReportIssue(filing.projectId, report));
+  await judgeSpam(report, deps);
   const url = followUpUrl(deps.settings.followUpBaseUrl, minted.reference);
   const noticeSent = await sendReceipt(report, { reference: minted.reference, url }, deps.mailer);
   const outcome = filingOutcome({ projectId: filing.projectId, kind: 'accepted', reason: null, at: filing.at });

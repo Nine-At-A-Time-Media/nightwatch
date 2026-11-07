@@ -14,10 +14,11 @@ import type { EventSummary } from '../domain/event/event-summary.js';
 import type { Fingerprint } from '../domain/grouping/fingerprint.js';
 import type { IssueId, ProjectId, ReportId } from '../domain/ids.js';
 import type { Assignment } from '../domain/issue/assignment.js';
-import type { IssueChange, IssueState } from '../domain/issue/state.js';
+import type { IssueChange, IssueState, Member } from '../domain/issue/state.js';
 import type { Refusal } from '../domain/refusal.js';
 import type { Release, ReleaseFirstSeen } from '../domain/release/ordering.js';
 import type { Report } from '../domain/report/report.js';
+import type { SpamVerdict } from '../domain/report/spam.js';
 import type { Comment, ReporterComment, ReportStatusChange } from '../domain/report/thread.js';
 
 export interface ProjectClient {
@@ -27,6 +28,7 @@ export interface ProjectClient {
   recordReleaseSeen(projectId: ProjectId, release: Release): Promise<IssueChange[]>;
   /** Opens the Report issue the new Report names and attaches the Report to it. */
   openReportIssue(projectId: ProjectId, report: Report): Promise<IssueChange[]>;
+  markSpam(projectId: ProjectId, reportId: ReportId, actor: Member | SpamVerdict): Promise<IssueChange[]>;
   /** Saves a Reporter's reply on the Issue its Report is attached to. */
   recordReply(projectId: ProjectId, comment: ReporterComment): Promise<IssueChange[] | Refusal>;
   /** Records a change of the Report Status the Reporter is shown. */
