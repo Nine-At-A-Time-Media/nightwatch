@@ -5,6 +5,10 @@
 // `TEST_MIGRATIONS`, which suites apply with applyD1Migrations, and a
 // `MONITORS` stand-in that records each forwarded check-in in KV;
 // `integration-core` does the same against the core Worker's (ProjectDO);
+// `integration-notifier`, `integration-github` and `integration-inbound-mail`
+// run each of those Workers' configs, with a test entry (tests/integration/
+// <worker>/entry.ts) that also hosts ProjectDO and the local fake GitHub as
+// a named entrypoint the Worker binds to; the secrets are generated per run;
 // `integration-monitors` and `integration-scheduler` run their Worker's
 // config with a test entry that also hosts ProjectDO (built from the core
 // Worker's vars), since a cross-script Durable Object needs a pre-bundled
@@ -12,6 +16,7 @@
 // (`down.example.test` 503, `up.example.test` 200), so no request leaves;
 // `widget` is the report widget package's own project (widget/vitest.config.ts);
 // `console-server` and `console-components` are the console's (console/vitest.*.config.ts).
+import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-plugin';
 import { defineConfig } from 'vitest/config';
 import { unstable_readConfig } from 'wrangler';
@@ -42,6 +47,42 @@ const HOSTED_PROJECT_DO = {
   },
 };
 
+/** Secrets each run generates, as `.dev.vars` would hold them. */
+const SECRETS = {
+  GITHUB_APP_PRIVATE_KEY: generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+  }).privateKey,
+  GITHUB_WEBHOOK_SECRET: randomUUID(),
+  REPLY_TOKEN_SECRET: randomUUID(),
+};
+
+/** A Worker project whose test entry also hosts ProjectDO and the fake GitHub. */
+function workerProject(worker: string, miniflare: Record<string, unknown> = {}) {
+  return {
+    plugins: [
+      cloudflareTest(async () => ({
+        remoteBindings: false,
+        main: `./tests/integration/${worker}/entry.ts`,
+        wrangler: { configPath: `./src/workers/${worker}/wrangler.jsonc` },
+        miniflare: {
+          r2Buckets: ['BLOBS'],
+          ...miniflare,
+          durableObjects: { ...(miniflare['durableObjects'] as object), PROJECT: { className: 'ProjectDO', useSQLite: true } },
+          bindings: {
+            ...(miniflare['bindings'] as object),
+            ...CORE_VARS,
+            ...SECRETS,
+            TEST_MIGRATIONS: await readD1Migrations('./migrations'),
+          },
+        },
+      })),
+    ],
+    test: { name: `integration-${worker}`, include: [`tests/integration/${worker}/**/*.test.ts`], testTimeout: 10_000 },
+  };
+}
+
 export default defineConfig({
   test: {
     sequence: { shuffle: true },
@@ -68,7 +109,7 @@ export default defineConfig({
         test: {
           name: 'integration',
           include: ['tests/integration/**/*.test.ts'],
-          exclude: ['tests/integration/core/**', 'tests/integration/monitors/**', 'tests/integration/scheduler/**'],
+          exclude: ['tests/integration/{core,monitors,scheduler,notifier,github,inbound-mail}/**'],
           testTimeout: 10_000,
         },
       },
@@ -112,6 +153,23 @@ export default defineConfig({
           testTimeout: 10_000,
         },
       },
+      workerProject('notifier', {
+        // ProjectDO's Issue Changes go to a queue nothing consumes, so no
+        // test sees another's messages; tests hand the consumer its batches.
+        queueProducers: { EFFECTS: { queueName: 'nightwatch-effects-test-sink' } },
+        serviceBindings: { GITHUB_API: { name: 'nightwatch-notifier', entrypoint: 'FakeGitHubWorker' } },
+      }),
+      workerProject('github', {
+        queueProducers: { EFFECTS: { queueName: 'nightwatch-effects-test-sink' } },
+        serviceBindings: {
+          GITHUB_API: { name: 'nightwatch-github', entrypoint: 'FakeGitHubWorker' },
+          NIGHTWATCH_GITHUB: 'nightwatch-github',
+        },
+        kvNamespaces: ['GITHUB_TOKENS'],
+        // openExternalIssue's Tracker, built in the test as the notifier builds it.
+        bindings: { GITHUB_APP_ID: '1' },
+      }),
+      workerProject('inbound-mail', { queueProducers: { EFFECTS: { queueName: 'nightwatch-effects-test-sink' } } }),
       'widget/vitest.config.ts',
       'console/vitest.server.config.ts',
       'console/vitest.components.config.ts',

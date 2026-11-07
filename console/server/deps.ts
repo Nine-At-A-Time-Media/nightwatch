@@ -106,15 +106,17 @@ export function consoleDeps(env: ConsoleBindings) {
   // Cross-script Durable Object bindings carry no class type; the stubs offer the RPC surfaces named here.
   const projectNamespace = env.PROJECT as unknown as ProjectNamespace;
   const quotaNamespace = env.QUOTA as unknown as { getByName(name: string): QuotaCounter };
+  const projects = new DurableProjectClient({ namespace: projectNamespace });
   return {
     assertions,
     verifier: new AccessSignInVerifier({ keys, clock: { now: () => new Date(clock.now()) } }),
     control: new D1ControlStore(env.CONTROL),
-    projects: new DurableProjectClient({ namespace: projectNamespace }),
+    projects,
     quota: new DurableQuotaGate({ limits: config, counterFor: (projectId) => quotaNamespace.getByName(projectId), clock }),
     blobs: new R2BlobStore(env.BLOBS),
     spam: new AbstainingSpamJudge(),
-    effects: new QueueEffectQueue(env.EFFECTS),
+    // One request reaches one Project; its changes go out named with it.
+    effects: new QueueEffectQueue(env.EFFECTS, () => projects.lastProject()),
     mailer: new SendEmailMailer({ binding: env.MAIL, from: env.MAIL_FROM }),
     ids: new RandomIds(),
     clock,

@@ -1,0 +1,31 @@
+// The github Worker -- receives the GitHub App's webhooks: verifies each
+// before parsing, maps it to Tracker Events and Commits, and applies them.
+// The top level is the local stage (architecture, Local development): it
+// declares no remote-only binding. Adopters add `nonprod` and `prod`
+// environment blocks and repeat every binding there; bindings do not inherit.
+// Secret (`.dev.vars` locally, never a var): GITHUB_WEBHOOK_SECRET, the
+// App's webhook secret.
+{
+  "$schema": "../../../node_modules/wrangler/config-schema.json",
+  "name": "nightwatch-github",
+  "main": "index.ts",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": false,
+  "observability": { "enabled": true },
+  "durable_objects": {
+    // ProjectDO lives in the core Worker; `pnpm dev` runs both, so the
+    // binding resolves locally.
+    "bindings": [{ "name": "PROJECT", "class_name": "ProjectDO", "script_name": "nightwatch-core" }],
+  },
+  "d1_databases": [{ "binding": "CONTROL", "database_name": "nightwatch-control", "database_id": "nightwatch-control-local" }],
+  "vars": {
+    // Any other stage refuses every webhook until its adapters exist.
+    "STAGE": "local",
+    // Tracker settings, the same as the notifier's.
+    "CONSOLE_BASE_URL": "http://localhost:3000",
+    "TRACKER_LABELS": "nightwatch",
+    "GITHUB_APP_ACTOR": "nightwatch-local[bot]",
+    "SHARE_MARKER": "/reporter",
+    "TRACKER_MAX_REFUSALS": 3,
+  },
+}

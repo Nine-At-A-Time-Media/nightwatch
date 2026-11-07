@@ -38,6 +38,7 @@
   "dependencies": {
     "@jridgewell/trace-mapping": "^0.3.31",
     "jose": "^6.2.15",
+    "postal-mime": "4.1.4",
     "zod": "^4.6.7"
   }
 }

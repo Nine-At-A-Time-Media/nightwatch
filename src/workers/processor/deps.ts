@@ -27,6 +27,7 @@ import { R2NdjsonArchiveSink } from '../../adapters/r2-ndjson/r2-ndjson-archive-
 import { RulesSpamJudge } from '../../adapters/rules/rules-spam-judge.js';
 import { RandomIds } from '../../adapters/runtime/random-ids.js';
 import { SystemClock } from '../../adapters/runtime/system-clock.js';
+import type { ArrivalRecord } from '../../domain/ingest/arrival.js';
 import type { ProcessArrivalDeps } from '../../application/process-arrival.js';
 import type { ProcessingSettings } from '../../domain/processing/processing.js';
 import type { PumpSettings } from '../../domain/processing/pump.js';
@@ -54,7 +55,8 @@ export type PumpPorts = {
   readonly blobs: BlobStore;
   readonly archive: ArchiveSink;
   readonly clock: Clock;
-  readonly process: ProcessArrivalDeps;
+  /** processArrival's ports for one record; its Issue Changes go out named with the record's Project. */
+  readonly processFor: (record: ArrivalRecord) => ProcessArrivalDeps;
 };
 
 /** The Durable Object bindings to other Workers' classes, which generated types leave untyped. */
@@ -133,9 +135,12 @@ export function isLocalStage(env: ProcessorEnv): boolean {
   return env.STAGE === LOCAL_STAGE;
 }
 
-export function processArrivalDeps(env: ProcessorEnv, { clock, blobs, archive }: { clock: Clock; blobs: BlobStore; archive: ArchiveSink }) {
+export function processArrivalDeps(
+  env: ProcessorEnv,
+  { clock, blobs, archive }: { clock: Clock; blobs: BlobStore; archive: ArchiveSink },
+): (record: ArrivalRecord) => ProcessArrivalDeps {
   const ids = new RandomIds();
-  const deps: ProcessArrivalDeps = {
+  const deps: Omit<ProcessArrivalDeps, 'effects'> = {
     verifier: signInVerifier(env),
     quota: new DurableQuotaGate({
       limits: new D1ProjectConfigSource(env.CONTROL),
@@ -146,7 +151,6 @@ export function processArrivalDeps(env: ProcessorEnv, { clock, blobs, archive }:
     control: new D1ControlStore(env.CONTROL),
     blobs,
     spam: new RulesSpamJudge(),
-    effects: new QueueEffectQueue(env.EFFECTS),
     mailer: new SendEmailMailer({ binding: env.EMAIL, from: text({ name: 'MAIL_FROM', value: env.MAIL_FROM }) }),
     ids,
     clock,
@@ -154,7 +158,7 @@ export function processArrivalDeps(env: ProcessorEnv, { clock, blobs, archive }:
     settings: processingSettings(env),
     reportSettings: reportSettings(env),
   };
-  return deps;
+  return (record) => ({ ...deps, effects: new QueueEffectQueue(env.EFFECTS, () => record.projectId) });
 }
 
 /** The ports one StreamPumpDO runs on; refuses any stage but the local one. */
@@ -170,6 +174,6 @@ export function pumpPorts(env: ProcessorEnv): PumpPorts {
     blobs,
     archive,
     clock,
-    process: processArrivalDeps(env, { clock, blobs, archive }),
+    processFor: processArrivalDeps(env, { clock, blobs, archive }),
   };
 }

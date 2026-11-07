@@ -31,13 +31,13 @@ export function pumpNames(count: number): string[] {
 }
 
 function pumpDeps({ ports, plan }: PumpRuntime, workerId: string): PumpArrivalsDeps {
-  const { subscription, blobs, archive, clock, process } = ports;
+  const { subscription, blobs, archive, clock, processFor } = ports;
   return {
     subscription,
     blobs,
     archive,
     clock,
-    dispatch: (record: ArrivalRecord) => processArrival(record, process),
+    dispatch: (record: ArrivalRecord) => processArrival(record, processFor(record)),
     pump: { subscription: SUBSCRIPTION, workerId },
     settings: plan.settings,
   };
