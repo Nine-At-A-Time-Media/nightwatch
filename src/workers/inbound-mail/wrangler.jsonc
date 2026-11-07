@@ -1,0 +1,26 @@
+// The inbound-mail Email Worker -- Email Routing delivers replies to issue
+// emails here; each becomes the replying Member's comment on the Issue.
+// The top level is the local stage (architecture, Local development): it
+// declares no remote-only binding. Locally a message is delivered through
+// the local email handler route. Adopters add `nonprod` and `prod`
+// environment blocks and repeat every binding there; bindings do not inherit.
+// Secret (`.dev.vars` locally, never a var): REPLY_TOKEN_SECRET, the same
+// secret the notifier signs Reply Tokens with.
+{
+  "$schema": "../../../node_modules/wrangler/config-schema.json",
+  "name": "nightwatch-inbound-mail",
+  "main": "index.ts",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": false,
+  "observability": { "enabled": true },
+  "durable_objects": {
+    // ProjectDO lives in the core Worker; `pnpm dev` runs both, so the
+    // binding resolves locally.
+    "bindings": [{ "name": "PROJECT", "class_name": "ProjectDO", "script_name": "nightwatch-core" }],
+  },
+  "d1_databases": [{ "binding": "CONTROL", "database_name": "nightwatch-control", "database_id": "nightwatch-control-local" }],
+  "vars": {
+    // Any other stage rejects every message until its adapters exist.
+    "STAGE": "local",
+  },
+}
