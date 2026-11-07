@@ -20,7 +20,8 @@ export type Resolution =
   | { readonly kind: 'in_next_release'; readonly release: Release | null }
   | {
       readonly kind: 'in_commit';
-      /** The Commit's identity (repository and hash, as the caller keys it). */ readonly commit: string;
+      /** The Commit's identity (repository and hash, as the caller keys it). */
+      readonly commit: string;
       readonly release: Release | null;
     };
 

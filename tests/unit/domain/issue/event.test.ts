@@ -82,14 +82,16 @@ describe('applyEvent', () => {
 
   it('Early escalation does not hold for an issue past its young age, below the minimum count, or near its project normal rate', () => {
     const young = issueIn({ status: 'unresolved', substatus: 'new' }, { count: 9 });
-    expect(applied(young, T0 + 2 * DAY, { hourlyCount: 50, projectNormalRate: 10 }).state.substatus).toBe('new');
-    expect(applied({ ...young, count: 1 }, T0 + HOUR, { hourlyCount: 50, projectNormalRate: 10 }).state.substatus).toBe('new');
-    expect(applied(young, T0 + HOUR, { hourlyCount: 49, projectNormalRate: 10 }).state.substatus).toBe('new');
+    expect(applied(young, T0 + 2 * DAY, { hourlyCount: 50, projectNormalRate: 10 }).state).toMatchObject({ substatus: 'new' });
+    expect(applied({ ...young, count: 1 }, T0 + HOUR, { hourlyCount: 50, projectNormalRate: 10 }).state).toMatchObject({
+      substatus: 'new',
+    });
+    expect(applied(young, T0 + HOUR, { hourlyCount: 49, projectNormalRate: 10 }).state).toMatchObject({ substatus: 'new' });
   });
 
   it('Early escalation applies only within the New state', () => {
     const ongoing = issueIn({ status: 'unresolved', substatus: 'ongoing' }, { count: 9 });
-    expect(applied(ongoing, T0 + HOUR, { hourlyCount: 500, projectNormalRate: 1 }).state.substatus).toBe('ongoing');
+    expect(applied(ongoing, T0 + HOUR, { hourlyCount: 500, projectNormalRate: 1 }).state).toMatchObject({ substatus: 'ongoing' });
   });
 
   it('Hand-set priority sticks: Given a member set an issue Priority, When the issue escalates, Then its Priority does not change', () => {
@@ -129,22 +131,26 @@ describe('applyEvent', () => {
   it('Archived until condition: Given an issue archived until a user count, When the user count is met, Then it becomes Ongoing', () => {
     const snoozed = issueIn({ status: 'archived', substatus: 'until_condition', condition: { ...noCondition, userCount: 2 } });
     expect(applied(snoozed, T0 + HOUR, { isNewUser: false }).state.status).toBe('archived');
-    expect(applied({ ...snoozed, userCount: 2 }, T0 + HOUR, { isNewUser: true }).state.substatus).toBe('ongoing');
+    expect(applied({ ...snoozed, userCount: 2 }, T0 + HOUR, { isNewUser: true }).state).toMatchObject({ substatus: 'ongoing' });
   });
 
   it('Archived until condition: Given an issue archived until a date, When an event arrives after it, Then it becomes Ongoing', () => {
     const snoozed = issueIn({ status: 'archived', substatus: 'until_condition', condition: { ...noCondition, untilDate: T0 + DAY } });
     expect(applied(snoozed, T0 + HOUR).state.status).toBe('archived');
-    expect(applied(snoozed, T0 + DAY).state.substatus).toBe('ongoing');
+    expect(applied(snoozed, T0 + DAY).state).toMatchObject({ substatus: 'ongoing' });
   });
 
   it('Archived until condition counts within a window from the counts measured over it', () => {
     const condition = { ...noCondition, count: 5, window: HOUR, userCount: null };
     const snoozed = issueIn({ status: 'archived', substatus: 'until_condition', condition }, { count: 100 });
     expect(applied(snoozed, T0 + HOUR, { conditionWindowCount: 4 }).state.status).toBe('archived');
-    expect(applied(snoozed, T0 + HOUR, { conditionWindowCount: 5 }).state.substatus).toBe('ongoing');
-    const users = issueIn({ status: 'archived', substatus: 'until_condition', condition: { ...noCondition, userCount: 2, userWindow: HOUR } });
-    expect(applied(users, T0 + HOUR, { conditionWindowUserCount: 2 }).state.substatus).toBe('ongoing');
+    expect(applied(snoozed, T0 + HOUR, { conditionWindowCount: 5 }).state).toMatchObject({ substatus: 'ongoing' });
+    const users = issueIn({
+      status: 'archived',
+      substatus: 'until_condition',
+      condition: { ...noCondition, userCount: 2, userWindow: HOUR },
+    });
+    expect(applied(users, T0 + HOUR, { conditionWindowUserCount: 2 }).state).toMatchObject({ substatus: 'ongoing' });
   });
 
   it('Archived forever stays: Given an issue archived forever, When events arrive, Then it stays archived and counts rise', () => {
@@ -158,7 +164,13 @@ describe('applyEvent', () => {
     const resolved = issueIn({ status: 'resolved', resolution: { kind: 'in_release', release: '1.2.0' } });
     const { state, changes } = applied(resolved, T0 + HOUR, { release: '1.3.0' });
     expect(state).toMatchObject({ status: 'unresolved', substatus: 'regressed', substatusSince: T0 + HOUR, forReviewSince: T0 + HOUR });
-    expect(changes[0]).toMatchObject({ kind: 'status', from: 'resolved', to: 'unresolved/regressed', actor: 'system', origin: 'nightwatch' });
+    expect(changes[0]).toMatchObject({
+      kind: 'status',
+      from: 'resolved',
+      to: 'unresolved/regressed',
+      actor: 'system',
+      origin: 'nightwatch',
+    });
   });
 
   it('No regression from older release: Given an issue resolved in release R, When an event from a release older than R arrives, Then it stays resolved', () => {

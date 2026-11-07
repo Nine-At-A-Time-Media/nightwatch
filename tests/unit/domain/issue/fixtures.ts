@@ -65,16 +65,14 @@ export const statusArbitrary: fc.Arbitrary<Status> = fc.oneof(
     { status: 'deleting' },
     { status: 'merging' },
   ),
-  fc
-    .record({ untilDate: fc.option(time, { nil: null }), count: fc.option(fc.integer({ min: 1, max: 50 }), { nil: null }) })
-    .map(
-      ({ untilDate, count }) =>
-        ({
-          status: 'archived',
-          substatus: 'until_condition',
-          condition: { untilDate, count, window: null, userCount: null, userWindow: null, baselineCount: 1, baselineUserCount: 1 },
-        }) as const,
-    ),
+  fc.record({ untilDate: fc.option(time, { nil: null }), count: fc.option(fc.integer({ min: 1, max: 50 }), { nil: null }) }).map(
+    ({ untilDate, count }) =>
+      ({
+        status: 'archived',
+        substatus: 'until_condition',
+        condition: { untilDate, count, window: null, userCount: null, userWindow: null, baselineCount: 1, baselineUserCount: 1 },
+      }) as const,
+  ),
 );
 
 export const issueArbitrary: fc.Arbitrary<IssueState> = fc
