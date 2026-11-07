@@ -12,7 +12,8 @@ import {
   refuseArrival,
   type Admission,
 } from '../domain/ingest/admission.js';
-import type { Arrival, IngestSettings } from '../domain/ingest/arrival.js';
+import type { Arrival, IngestSettings, ProjectConfig } from '../domain/ingest/arrival.js';
+import { checkAccess } from '../domain/ingest/access.js';
 import { arrivalEnvelope, isOpen, itemOutcomes, settleOpenItems, triageItems } from '../domain/ingest/items.js';
 import type { Outcome } from '../domain/outcome/outcome.js';
 import { isRefusal } from '../domain/refusal.js';
@@ -53,15 +54,29 @@ async function retain({ arrival, receivedAt, deps }: { arrival: Arrival; receive
   return id;
 }
 
+function refuse({
+  arrival,
+  receivedAt,
+  reason,
+  deps,
+}: {
+  arrival: Arrival;
+  receivedAt: number;
+  reason: string;
+  deps: AdmitArrivalDeps;
+}): Promise<Admission> {
+  return finish(refuseArrival({ outcome: arrivalOutcome({ arrival, recordedAt: receivedAt, kind: 'invalid', reason }) }), deps);
+}
+
 // --- entry ---
 
 export async function admitArrival(arrival: Arrival, deps: AdmitArrivalDeps): Promise<Admission> {
   const receivedAt = deps.clock.now();
+  const config: ProjectConfig | null = await deps.config.get(arrival.projectId);
+  const access = checkAccess({ arrival, config });
+  if (isRefusal(access)) return refuse({ arrival, receivedAt, reason: access.refusal, deps });
   const envelope = arrivalEnvelope(arrival);
-  if (isRefusal(envelope)) {
-    const outcome = arrivalOutcome({ arrival, recordedAt: receivedAt, kind: 'invalid', reason: envelope.refusal });
-    return finish(refuseArrival({ outcome }), deps);
-  }
+  if (isRefusal(envelope)) return refuse({ arrival, receivedAt, reason: envelope.refusal, deps });
   const fates = triageItems(envelope);
   const recordId = fates.some(isOpen) ? await retain({ arrival, receivedAt, deps }) : null;
   const decided = settleOpenItems({ fates, verdict: { kind: 'accepted', reason: null } });

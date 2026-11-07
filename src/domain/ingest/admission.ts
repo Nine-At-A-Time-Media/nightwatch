@@ -35,7 +35,12 @@ const ENDPOINT_CATEGORY: Readonly<Record<EndpointKind, OutcomeCategory>> = {
   checkin: 'monitor',
 };
 
-const REFUSAL_STATUS = new Map<string, Exclude<AdmissionStatus, 200>>([]);
+const REFUSAL_STATUS = new Map<string, Exclude<AdmissionStatus, 200>>([
+  ['missing-credentials', 401],
+  ['multiple-credentials', 401],
+  ['malformed-credentials', 401],
+  ['disabled-key', 401],
+]);
 
 const HEX = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, '0'));
 const encoder = new TextEncoder();
