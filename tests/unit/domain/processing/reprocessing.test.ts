@@ -1,12 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import type { ArrivalRecord } from '../../../../src/domain/ingest/arrival.js';
-import {
-  isPastRange,
-  isRawExpired,
-  isReprocessed,
-  reprocessingSubscription,
-} from '../../../../src/domain/processing/reprocessing.js';
+import { isPastRange, isRawExpired, isReprocessed, reprocessingSubscription } from '../../../../src/domain/processing/reprocessing.js';
 
 const DAY = 86_400_000;
 const T0 = Date.UTC(2026, 10, 1);
@@ -17,7 +12,7 @@ function record(projectId: string, receivedAt: number): ArrivalRecord {
 }
 
 describe('reprocessing', () => {
-  it('reprocesses only the Project\'s records received within the range, by their server time', () => {
+  it("reprocesses only the Project's records received within the range, by their server time", () => {
     expect(isReprocessed(record('web', T0), { projectId: 'web', range })).toBe(true);
     expect(isReprocessed(record('web', T0 + DAY), { projectId: 'web', range })).toBe(false);
     expect(isReprocessed(record('api', T0), { projectId: 'web', range })).toBe(false);

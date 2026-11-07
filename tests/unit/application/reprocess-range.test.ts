@@ -89,7 +89,9 @@ function errorEvent(eventId: string): { type: string; payload: unknown } {
       timestamp: T0 / 1000,
       platform: 'python',
       release: 'api@1.0.0',
-      exception: { values: [{ type: 'PaymentError', value: 'declined', stacktrace: { frames: [{ module: 'app.pay', function: 'charge' }] } }] },
+      exception: {
+        values: [{ type: 'PaymentError', value: 'declined', stacktrace: { frames: [{ module: 'app.pay', function: 'charge' }] } }],
+      },
     },
   };
 }
@@ -189,7 +191,7 @@ describe('reprocessRange', () => {
     expect([w.archive.archived, w.archive.archivedEvents]).toEqual([[], []]);
   });
 
-  it('Interrupted reprocess: Given an operator\'s reprocess of a range, When it stops before finishing, Then the range holds either its prior derived state or its fully rebuilt state, never a mix, and the operator is told it did not finish', async () => {
+  it("Interrupted reprocess: Given an operator's reprocess of a range, When it stops before finishing, Then the range holds either its prior derived state or its fully rebuilt state, never a mix, and the operator is told it did not finish", async () => {
     const w = world();
     await ingestAndProcess(w, [
       record({ id: 'r1', items: [errorEvent(eventA)], receivedAt: T0 }),

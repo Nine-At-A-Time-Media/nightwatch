@@ -16,6 +16,7 @@ import {
   nackRecords,
   pullRecords,
   subscribe,
+  unsubscribe,
   type ExtendRequest,
   type HeldRequest,
   type PullRequest,
@@ -49,5 +50,9 @@ export class LogDO extends DurableObject<IngestEnv> {
 
   extend(request: ExtendRequest): void {
     extendLeases(this.ctx.storage.sql, request);
+  }
+
+  unsubscribe(request: { subscription: string }): void {
+    unsubscribe(this.ctx.storage.sql, request);
   }
 }
