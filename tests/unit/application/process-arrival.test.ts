@@ -14,6 +14,7 @@ import { serializeEnvelope } from '../../../src/domain/protocol/envelope.js';
 import { isRefusal } from '../../../src/domain/refusal.js';
 import { CI_TOKEN_SCOPES, tokenBytes } from '../../../src/domain/tenancy/access-token.js';
 import { FakeArchiveSink } from '../../_fakes/fake-archive-sink.js';
+import { FakeMonitorClient } from '../../_fakes/fake-monitor-client.js';
 import { ADA, ORG, PROJECT, T0, assertionOf, world as reportsWorld } from './reports/world.js';
 
 // --- builders ---
@@ -37,10 +38,11 @@ function world(processing: ProcessingConfig = config()) {
   const deps: ProcessArrivalDeps = {
     ...w,
     archive: new FakeArchiveSink(),
+    monitors: new FakeMonitorClient(),
     settings: { clampFutureMs: 60_000, maxTagValueLength: 200 },
     reportSettings: w.settings,
   };
-  return { ...w, deps, archive: deps.archive as FakeArchiveSink };
+  return { ...w, deps, archive: deps.archive as FakeArchiveSink, monitors: deps.monitors as FakeMonitorClient };
 }
 
 type Item = { readonly type: string; readonly payload: unknown };
@@ -372,6 +374,50 @@ describe('processArrival', () => {
       },
     ]);
     expect(w.archive.archived).toEqual(result.outcomes);
+  });
+
+  it('Missed check-in: a check_in item an SDK sent in an envelope reaches its Cron Monitor through MonitorClient, so a run that checked in is not missed', async () => {
+    const w = world();
+    w.monitors.hold(PROJECT, 'nightly-backup');
+    const result = await processArrival(record([{ type: 'check_in', payload: { monitor_slug: 'nightly-backup', status: 'ok' } }]), w.deps);
+
+    expect(w.monitors.checkIns).toEqual([{ projectId: PROJECT, monitorId: 'nightly-backup', status: 'ok' }]);
+    expect(result.outcomes).toEqual([]);
+  });
+
+  it('Missed check-in: a check-in for no monitor is discarded, and one that does not parse is invalid, each naming its item', async () => {
+    const w = world();
+    const arrival = record([
+      { type: 'check_in', payload: { monitor_slug: 'nobody', status: 'ok' } },
+      { type: 'check_in', payload: { status: 'ok' } },
+    ]);
+    const result = await processArrival(arrival, w.deps);
+
+    expect(result.outcomes).toEqual([
+      expect.objectContaining({
+        kind: 'discarded',
+        reason: 'unknown-monitor',
+        category: 'monitor',
+        item: { recordId: arrival.id, index: 0 },
+      }),
+      expect.objectContaining({
+        kind: 'invalid',
+        reason: 'malformed-check-in',
+        category: 'monitor',
+        item: { recordId: arrival.id, index: 1 },
+      }),
+    ]);
+    expect(w.monitors.checkIns).toHaveLength(1);
+  });
+
+  it('Missed check-in: a check-in that arrived on the cron endpoint is not forwarded again, since ingest already handed it to its monitor', async () => {
+    const w = world();
+    w.monitors.hold(PROJECT, 'nightly-backup');
+    const body = enc(JSON.stringify({ monitor_slug: 'nightly-backup', status: 'ok' }));
+    const result = await processArrival({ ...record([]), endpoint: 'checkin', body, blobKey: null }, w.deps);
+
+    expect(w.monitors.checkIns).toEqual([]);
+    expect(result.outcomes).toEqual([]);
   });
 
   it('Crash-free rate: Given sessions for a release, When a member opens the release, Then crash-free session and user rates are shown', async () => {
