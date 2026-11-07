@@ -4,13 +4,16 @@
 // processor reaches ProjectDO.
 import { describe, expect, it } from 'vitest';
 import { processArrival, type ProcessArrivalDeps } from '../../../src/application/process-arrival.js';
+import { uploadArtifact } from '../../../src/application/releases/upload-artifact.js';
 import { eventBlobKey } from '../../../src/domain/event/event-summary.js';
 import { gv1 } from '../../../src/domain/grouping/grouping-version.js';
 import type { ArrivalRecord } from '../../../src/domain/ingest/arrival.js';
 import type { ProcessingConfig } from '../../../src/domain/processing/processing.js';
 import { serializeEnvelope } from '../../../src/domain/protocol/envelope.js';
+import { isRefusal } from '../../../src/domain/refusal.js';
+import { CI_TOKEN_SCOPES, tokenBytes } from '../../../src/domain/tenancy/access-token.js';
 import { FakeArchiveSink } from '../../_fakes/fake-archive-sink.js';
-import { ADA, PROJECT, T0, assertionOf, world as reportsWorld } from './reports/world.js';
+import { ADA, ORG, PROJECT, T0, assertionOf, world as reportsWorld } from './reports/world.js';
 
 // --- builders ---
 
@@ -179,6 +182,28 @@ describe('processArrival', () => {
     const issueId = result.assignments[0] && 'issueId' in result.assignments[0] ? result.assignments[0].issueId : '';
     const [grouped] = await w.projects.store(PROJECT).eventsOf(issueId);
     expect(grouped?.summary.culprit).toBe('src/cart.ts in checkout');
+  });
+
+  it('Source map applied: an Artifact uploaded through uploadArtifact is the one processing finds for the Project', async () => {
+    const w = world();
+    const token = 'nw_ci_secret';
+    await w.control.putAccessToken(await w.ids.hashContent(tokenBytes(token)), {
+      organizationId: ORG,
+      scopes: CI_TOKEN_SCOPES,
+      expiresAt: null,
+      revoked: false,
+    });
+    const upload = { release: 'web@1.0.0', debugId: null, fileName: '~/static/app.min.js.map', bytes: enc(JSON.stringify(rawMap)) };
+    const uploaded = await uploadArtifact(upload, token, w);
+    if (isRefusal(uploaded)) throw new Error(uploaded.refusal);
+
+    await processArrival(record([browserError()]), w.deps);
+
+    const stored = await storedEvent(w);
+    expect(stored.event['errors']).toEqual([]);
+    expect(stored.event['exceptions']).toEqual([
+      expect.objectContaining({ frames: [expect.objectContaining({ filename: 'src/cart.ts', function: 'checkout' })] }),
+    ]);
   });
 
   it('Missing source map: Given no matching Artifact, When a minified error is processed, Then frames stay minified and the event records why', async () => {
