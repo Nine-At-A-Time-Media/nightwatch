@@ -118,4 +118,8 @@ export interface ProjectClient {
   recallFiling(projectId: ProjectId, filingKey: string): Promise<RecordedFiling | null>;
   /** Records the filing under the key in the Project, replacing what it held. */
   recordFiling(projectId: ProjectId, filingKey: string, filing: RecordedFiling): Promise<void>;
+  // --- task-035: the console's issue list ---
+
+  /** Every Issue the Project holds, in no promised order. */
+  listIssues(projectId: ProjectId): Promise<readonly IssueState[]>;
 }

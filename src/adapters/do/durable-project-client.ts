@@ -201,4 +201,10 @@ export class DurableProjectClient implements ProjectClient {
   recordFiling(projectId: ProjectId, filingKey: string, filing: RecordedFiling): Promise<void> {
     return this.#project(projectId).recordFiling(projectId, filingKey, filing);
   }
+
+  // --- task-035: the console's issue list ---
+
+  listIssues(projectId: ProjectId): Promise<readonly IssueState[]> {
+    return this.#project(projectId).listIssues(projectId);
+  }
 }

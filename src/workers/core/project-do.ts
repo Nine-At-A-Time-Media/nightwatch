@@ -213,4 +213,10 @@ export class ProjectDO extends DurableObject<CoreEnv> implements ProjectClient {
   recordFiling(projectId: ProjectId, filingKey: string, filing: RecordedFiling): Promise<void> {
     return steps.recordFilingStep(this.#runtime, projectId, { filingKey, filing });
   }
+
+  // --- task-035: the console's issue list ---
+
+  listIssues(projectId: ProjectId): Promise<readonly IssueState[]> {
+    return steps.listIssuesStep(this.#runtime, projectId);
+  }
 }

@@ -254,4 +254,10 @@ export class FakeProjectClient implements ProjectClient {
     const store = this.store(projectId);
     await store.transact(() => store.recordFiling(filingKey, filing));
   }
+
+  // --- task-035: the console's issue list ---
+
+  async listIssues(projectId: ProjectId): Promise<readonly IssueState[]> {
+    return this.store(projectId).listIssues();
+  }
 }

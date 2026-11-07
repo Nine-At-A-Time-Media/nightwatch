@@ -259,6 +259,11 @@ export async function getIssueStep(r: ProjectRuntime, projectId: ProjectId, issu
   return r.issues.getIssue(issueId);
 }
 
+export async function listIssuesStep(r: ProjectRuntime, projectId: ProjectId): Promise<readonly IssueState[]> {
+  await claim(r, projectId);
+  return r.issues.listIssues();
+}
+
 export async function releasesSeenStep(r: ProjectRuntime, projectId: ProjectId): Promise<ReleaseFirstSeen> {
   await claim(r, projectId);
   return r.issues.releaseFirstSeen();
