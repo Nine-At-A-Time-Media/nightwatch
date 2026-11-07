@@ -10,23 +10,15 @@
  * notifications, Outbound actions).
  */
 
-import type { IssueId, ProjectId } from '../domain/ids.js';
+import type { AlertMessage } from '../domain/alerts/alert-message.js';
 import type { Durability } from '../domain/ingest/arrival.js';
+
+export type { AlertMessage };
 
 /** Where one action's message goes: a resolved email address, or a webhook URL. */
 export type Destination = { readonly kind: 'email'; readonly address: string } | { readonly kind: 'webhook'; readonly url: string };
 
 export type ChannelKind = Destination['kind'];
-
-/** What an Issue Alert Rule's firing says, identical on every attempt of one delivery. */
-export type AlertMessage = {
-  readonly deliveryId: string;
-  readonly projectId: ProjectId;
-  readonly ruleId: string;
-  readonly issueId: IssueId;
-  readonly subject: string;
-  readonly text: string;
-};
 
 export interface Channel {
   readonly kind: ChannelKind;

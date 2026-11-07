@@ -99,3 +99,11 @@ export function compareReleases(a: Release, b: Release, firstSeen: ReleaseFirstS
   const byVersion = versionA && versionB ? compareSemanticVersions(versionA, versionB) : 0;
   return byVersion || compareFirstSight(a, b, firstSeen) || compareText(a, b);
 }
+
+/** The newest Release seen, or null when none was. */
+export function latestReleaseOf(firstSeen: ReleaseFirstSeen): Release | null {
+  return [...firstSeen.keys()].reduce<Release | null>(
+    (latest, release) => (latest === null || compareReleases(release, latest, firstSeen) > 0 ? release : latest),
+    null,
+  );
+}
