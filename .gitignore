@@ -15,3 +15,8 @@ node_modules/
 .claude/skills/
 .agents/
 .codex/
+
+# designomatic run artifacts
+.designomatic/
+# local tool state (hermetic)
+.state/

@@ -1,0 +1,59 @@
+# .designomatic.yml -- repo-local designomatic panels for nightwatch.
+#
+# Every seat runs on the Claude subscription through the claude CLI, so a run
+# costs no API spend and needs no provider keys. Owner direction (2026-11-06):
+# sonnet reviewers, opus for judgement (editor and critic). max_cycles is the
+# only spend bound on a CLI-only run.
+#
+# Panels judge against the provisioned SDLC skills for the document's kind.
+# Schema: template-tools docs/design/DESIGN.DESIGNOMATIC-PANELS.md.
+panels:
+  concept-review:
+    phase: 1
+    description: >-
+      Is a concept's intent clear enough for phase 2 to open on it? Judged as
+      a concept: unrestricted, never converged, never asked for goals, seams,
+      or feasibility.
+    reviewers:
+      - {model: claude@cli:sonnet, persona: product}
+      - {model: claude@cli:sonnet, persona: generalist}
+    editor: claude@cli:opus
+    critic: claude@cli:opus
+    max_cycles: 1
+
+  design-review:
+    phase: 2
+    description: >-
+      Full review of a design record before it goes to a human: the
+      capability contract -- what and why, no mechanism, no numbers.
+    reviewers:
+      - {model: claude@cli:sonnet, persona: generalist}
+      - {model: claude@cli:sonnet, persona: security}
+      - {model: claude@cli:sonnet, persona: architect}
+      - {model: claude@cli:sonnet, persona: operability}
+    editor: claude@cli:opus
+    critic: claude@cli:opus
+    max_cycles: 2
+
+  seam-review:
+    parent: design-review
+    phase: 3
+    description: >-
+      Review of an architecture record (docs/design/ARCHITECTURE.*.md): every
+      axis of change named and mapped to exactly one seam, the module map
+      present, radar rows proposed.
+    reviewers:
+      - {model: claude@cli:sonnet, persona: architect}
+      - {model: claude@cli:sonnet, persona: generalist}
+    max_cycles: 1
+
+  falsify:
+    parent: design-review
+    phase: 2
+    description: >-
+      Are the goals and guarantees stated so they could later be shown to have
+      drifted? Use when a draft reads well but promises nothing checkable.
+    reviewers:
+      - {model: claude@cli:sonnet, persona: falsifiability}
+      - {model: claude@cli:sonnet, persona: correctness}
+    max_cycles: 1
