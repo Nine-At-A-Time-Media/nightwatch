@@ -18,7 +18,9 @@ function facts(overrides: Partial<OwnershipFacts> = {}): OwnershipFacts {
 
 describe('parseOwnershipRules', () => {
   it('reads one rule per line, skipping blank lines and comments, with email and #team owners', () => {
-    const parsed = parseOwnershipRules(['# owners', '', 'path:src/checkout/* ada@acme.example #payments', 'module:checkout.* #web'].join('\n'));
+    const parsed = parseOwnershipRules(
+      ['# owners', '', 'path:src/checkout/* ada@acme.example #payments', 'module:checkout.* #web'].join('\n'),
+    );
 
     expect(parsed.errors).toEqual([]);
     expect(parsed.rules).toEqual([
@@ -43,7 +45,9 @@ describe('parseOwnershipRules', () => {
   });
 
   it('names the line of each rule it cannot read, and keeps the others', () => {
-    const parsed = parseOwnershipRules(['path:src/* #web', 'colour:red #web', 'path:src/*', 'path:src/* not-an-owner', 'tags.:x #web'].join('\n'));
+    const parsed = parseOwnershipRules(
+      ['path:src/* #web', 'colour:red #web', 'path:src/*', 'path:src/* not-an-owner', 'tags.:x #web'].join('\n'),
+    );
 
     expect(parsed.rules).toHaveLength(1);
     expect(parsed.errors).toEqual([
@@ -103,7 +107,11 @@ describe('ownershipFactsOf', () => {
     const event = {
       exceptions: [
         { type: 'Cause', value: null, frames: [{ filename: 'src/cause.ts', lineno: 1 }] },
-        { type: 'TypeError', value: 'x', frames: [{ filename: 'src/pay.ts', absPath: '/app/src/pay.ts', module: 'pay', lineno: 7, inApp: true }] },
+        {
+          type: 'TypeError',
+          value: 'x',
+          frames: [{ filename: 'src/pay.ts', absPath: '/app/src/pay.ts', module: 'pay', lineno: 7, inApp: true }],
+        },
       ],
       stacktrace: null,
       request: { url: 'https://shop.example/pay', headers: {} },
@@ -125,6 +133,10 @@ describe('ownershipFactsOf', () => {
       tags: {},
     } as unknown as NormalizedEvent;
 
-    expect(ownershipFactsOf(event)).toEqual({ frames: [{ path: '/app/src/pay.ts', module: null, lineno: null, inApp: false }], url: null, tags: {} });
+    expect(ownershipFactsOf(event)).toEqual({
+      frames: [{ path: '/app/src/pay.ts', module: null, lineno: null, inApp: false }],
+      url: null,
+      tags: {},
+    });
   });
 });
