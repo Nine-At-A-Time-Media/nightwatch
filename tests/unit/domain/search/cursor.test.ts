@@ -44,7 +44,7 @@ describe('sort keys', () => {
         const left = { key, issueId: a };
         const right = { key, issueId: b };
         expect(Math.sign(compareForSort(left, right))).toBe(a === b ? 0 : a < b ? -1 : 1);
-        expect(Math.sign(compareForSort(left, right))).toBe(-Math.sign(compareForSort(right, left)));
+        expect(Math.sign(compareForSort(left, right)) + Math.sign(compareForSort(right, left))).toBe(0);
       }),
     );
   });
