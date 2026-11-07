@@ -36,6 +36,7 @@ const OUTCOME_ROW = z.object({
     'client_report',
   ]),
   quantity: z.number(),
+  item: z.object({ recordId: z.string(), index: z.number().int().nonnegative().nullable() }).optional(),
 });
 
 // --- helpers ---
@@ -59,12 +60,18 @@ function rowOf(line: string): unknown {
   }
 }
 
+/** A parsed row as an Outcome; a row naming no item has no `item` key at all. */
+function outcomeOf(row: z.infer<typeof OUTCOME_ROW>): Outcome {
+  const { item, ...outcome } = row;
+  return item === undefined ? outcome : { ...outcome, item };
+}
+
 /** The Outcomes on the lines of one object; a line that is not one is logged and left out. */
 function outcomesIn(text: string, key: string): readonly Outcome[] {
   const rows = text.split('\n').filter((line) => line !== '');
   return rows.flatMap((line) => {
     const parsed = OUTCOME_ROW.safeParse(rowOf(line));
-    if (parsed.success) return [parsed.data];
+    if (parsed.success) return [outcomeOf(parsed.data)];
     console.error(JSON.stringify({ event: 'archive-query.bad-row', key }));
     return [];
   });

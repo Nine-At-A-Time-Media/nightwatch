@@ -47,4 +47,3 @@ describe('outcomeTotals', () => {
     expect(totals.totals).toEqual([{ kind: 'discarded', reason: 'tombstone', quantity: 1 }]);
   });
 });
-

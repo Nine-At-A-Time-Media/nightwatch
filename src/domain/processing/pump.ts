@@ -44,7 +44,7 @@ export function deadLetterKey(record: ArrivalRecord): string {
   return `${DEAD_LETTER_PREFIX}${record.id}`;
 }
 
-/** The Outcome of a record that failed past its retry bound: discarded, in the default category, as of its receipt. */
+/** The Outcome of a record that failed past its retry bound: discarded, in the default category, as of its receipt, for every item of the record. */
 export function deadLetterOutcome(record: ArrivalRecord): Outcome {
   return {
     projectId: record.projectId,
@@ -53,6 +53,7 @@ export function deadLetterOutcome(record: ArrivalRecord): Outcome {
     reason: DEAD_LETTER_REASON,
     category: 'default',
     quantity: 1,
+    item: { recordId: record.id, index: null },
   };
 }
 

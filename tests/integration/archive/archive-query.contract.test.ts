@@ -41,6 +41,8 @@ describe.each<{ name: string; make: () => Seeded }>([
     const { query, seed } = make();
     const inRange = [
       outcome(project, START),
+      outcome(project, START + 1, { item: { recordId: 'rec-1', index: 0 } }),
+      outcome(project, START + 2, { kind: 'invalid', reason: 'raw-expired', item: { recordId: 'rec-1', index: null } }),
       outcome(project, START + 13 * 3_600_000, { kind: 'rate_limited', reason: 'quota-exceeded', quantity: 3 }),
       outcome(project, START + 2 * DAY - 1, { kind: 'filtered', reason: 'localhost' }),
     ];

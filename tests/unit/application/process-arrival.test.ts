@@ -327,10 +327,13 @@ describe('processArrival', () => {
   it('refuses feedback without a sign-in, with the filing Outcome archived', async () => {
     const w = world();
     const report = { type: 'user_report', payload: { event_id: EVENT_ID, comments: 'it crashed' } };
-    const result = await processArrival(record([report]), w.deps);
+    const arrival = record([report]);
+    const result = await processArrival(arrival, w.deps);
 
     expect(result.filingReceipts).toEqual([]);
-    expect(result.outcomes).toEqual([expect.objectContaining({ kind: 'invalid', reason: 'unsigned', category: 'feedback' })]);
+    expect(result.outcomes).toEqual([
+      expect.objectContaining({ kind: 'invalid', reason: 'unsigned', category: 'feedback', item: { recordId: arrival.id, index: 0 } }),
+    ]);
     expect(w.archive.archived).toEqual(result.outcomes);
   });
 
@@ -343,15 +346,29 @@ describe('processArrival', () => {
 
   it('leaves check-ins, sessions and other kinds to their own use cases, each with a deferred Outcome', async () => {
     const w = world();
-    const result = await processArrival(
-      record([errorEvent(), { type: 'check_in', payload: {} }, { type: 'session', payload: {} }]),
-      w.deps,
-    );
+    const arrival = record([errorEvent(), { type: 'check_in', payload: {} }, { type: 'session', payload: {} }]);
+    const result = await processArrival(arrival, w.deps);
 
     expect(result.assignments).toHaveLength(1);
     expect(result.outcomes).toEqual([
-      { projectId: PROJECT, recordedAt: T0, kind: 'discarded', reason: 'deferred', category: 'monitor', quantity: 1 },
-      { projectId: PROJECT, recordedAt: T0, kind: 'discarded', reason: 'deferred', category: 'session', quantity: 1 },
+      {
+        projectId: PROJECT,
+        recordedAt: T0,
+        kind: 'discarded',
+        reason: 'deferred',
+        category: 'monitor',
+        quantity: 1,
+        item: { recordId: arrival.id, index: 1 },
+      },
+      {
+        projectId: PROJECT,
+        recordedAt: T0,
+        kind: 'discarded',
+        reason: 'deferred',
+        category: 'session',
+        quantity: 1,
+        item: { recordId: arrival.id, index: 2 },
+      },
     ]);
     expect(w.archive.archived).toEqual(result.outcomes);
   });

@@ -36,8 +36,10 @@ import type { Fingerprint } from '../domain/grouping/fingerprint.js';
 import { toEventSummary } from '../domain/normalize/event-summary.js';
 import { toGroupingInput } from '../domain/normalize/grouping-input.js';
 import { normalizeEvent, type NormalizedEvent } from '../domain/normalize/normalize.js';
+import type { Outcome, OutcomeKind } from '../domain/outcome/outcome.js';
 import {
   encodeScrubbedEvent,
+  itemOutcome,
   itemPayload,
   mergeResults,
   normalizeContext,
@@ -84,6 +86,13 @@ type Processing = { readonly record: ArrivalRecord; readonly header: Readonly<Re
 type Placed = { readonly item: EnvelopeItem; readonly index: number };
 
 type Scrubbed = { readonly scrubbed: ScrubbedEvent; readonly userKey: string | null };
+
+// --- helpers ---
+
+/** The Outcome processing decided for an item, naming it so it supersedes the item's admission Outcome. */
+function itemFate(placed: Placed, processing: Processing, fate: { kind: OutcomeKind; reason: string }): Outcome {
+  return processingOutcome({ record: processing.record, index: placed.index, type: placed.item.header.type, ...fate });
+}
 
 // --- flow: reading the record ---
 
@@ -148,14 +157,14 @@ async function assign(
  * so nothing follows it.
  */
 async function settle(
-  placed: { assignment: Assignment; summary: EventSummary; item: EnvelopeItem },
+  settled: { assignment: Assignment; summary: EventSummary; placed: Placed },
   processing: Processing,
   deps: ProcessArrivalDeps,
 ): Promise<ProcessingResult> {
-  const { assignment, summary, item } = placed;
+  const { assignment, summary, placed } = settled;
   if ('tombstone' in assignment) {
     await deps.blobs.delete(eventBlobKey({ projectId: processing.record.projectId, eventId: summary.eventId }));
-    const outcome = processingOutcome({ record: processing.record, type: item.header.type, kind: 'discarded', reason: 'tombstone' });
+    const outcome = itemFate(placed, processing, { kind: 'discarded', reason: 'tombstone' });
     return processingResult({ assignments: [assignment], outcomes: [outcome] });
   }
   if (assignment.duplicate) return processingResult({ assignments: [assignment] });
@@ -166,10 +175,10 @@ async function settle(
 
 // --- flow: items ---
 
-async function processEvent(item: EnvelopeItem, processing: Processing, deps: ProcessArrivalDeps): Promise<ProcessingResult> {
-  const normalized = normalizeEvent(itemPayload(item), normalizeContext({ ...processing, settings: deps.settings }));
+async function processEvent(placed: Placed, processing: Processing, deps: ProcessArrivalDeps): Promise<ProcessingResult> {
+  const normalized = normalizeEvent(itemPayload(placed.item), normalizeContext({ ...processing, settings: deps.settings }));
   if (isRefusal(normalized)) {
-    const outcome = processingOutcome({ record: processing.record, type: item.header.type, kind: 'invalid', reason: normalized.refusal });
+    const outcome = itemFate(placed, processing, { kind: 'invalid', reason: normalized.refusal });
     return processingResult({ outcomes: [outcome] });
   }
   const { scrubbed, userKey } = await scrub(normalized, processing, deps.ids);
@@ -180,33 +189,33 @@ async function processEvent(item: EnvelopeItem, processing: Processing, deps: Pr
   const summary = toEventSummary(mapped.event, userKey);
   const fingerprints = deriveFingerprints(toGroupingInput(mapped.event), processing.config.grouping);
   const assignment = await assign({ summary, fingerprints }, processing, deps);
-  return settle({ assignment, summary, item }, processing, deps);
+  return settle({ assignment, summary, placed }, processing, deps);
 }
 
 // --- flow: feedback ---
 
-/** A filing storage could not take is thrown, so the record is retried; any other refusal stands with its Outcome. */
-function filed(filing: FilingReceipt | FilingRefusal): ProcessingResult {
+/** A filing storage could not take is thrown, so the record is retried; any other refusal stands with its Outcome, named as the item. */
+function filed(filing: FilingReceipt | FilingRefusal, placed: { record: ArrivalRecord; index: number }): ProcessingResult {
   if (!isRefusal(filing)) return processingResult({ filingReceipts: [filing] });
   if (filing.retryable !== undefined) throw new Error(`feedback could not be filed: ${filing.refusal} (retryable: ${filing.retryable})`);
-  return processingResult({ outcomes: filing.outcome === undefined ? [] : [filing.outcome] });
+  return processingResult({ outcomes: filing.outcome === undefined ? [] : [itemOutcome({ outcome: filing.outcome, ...placed })] });
 }
 
 /** Files the Report a feedback item carries, as whoever the sign-in the tunnel forwarded names, keyed so a redelivery files nothing new. */
 async function fileFeedback(placed: Placed, processing: Processing, deps: ProcessArrivalDeps): Promise<ProcessingResult> {
   const { record } = processing;
   const submission = feedbackSubmission(placed.item, { recordId: record.id, index: placed.index });
-  return filed(await fileReport(record.projectId, submission, record.assertion, { ...deps, settings: deps.reportSettings }));
+  const filing = await fileReport(record.projectId, submission, record.assertion, { ...deps, settings: deps.reportSettings });
+  return filed(filing, { record, index: placed.index });
 }
 
 async function processItem(placed: Placed, processing: Processing, deps: ProcessArrivalDeps): Promise<ProcessingResult> {
-  const { item } = placed;
-  const route = processingRoute(item.header.type);
-  if (route === 'event') return processEvent(item, processing, deps);
+  const route = processingRoute(placed.item.header.type);
+  if (route === 'event') return processEvent(placed, processing, deps);
   if (route === 'feedback') return fileFeedback(placed, processing, deps);
 
   // Milestone: check-ins, sessions, attachments and security reports wait for their own use cases.
-  const outcome = processingOutcome({ record: processing.record, type: item.header.type, kind: 'discarded', reason: 'deferred' });
+  const outcome = itemFate(placed, processing, { kind: 'discarded', reason: 'deferred' });
   return processingResult({ outcomes: [outcome] });
 }
 
@@ -224,7 +233,7 @@ async function finish(result: ProcessingResult, archive: ArchiveSink): Promise<P
 }
 
 function refuseRecord(record: ArrivalRecord, reason: string): ProcessingResult {
-  return processingResult({ outcomes: [processingOutcome({ record, type: record.endpoint, kind: 'invalid', reason })] });
+  return processingResult({ outcomes: [processingOutcome({ record, index: null, type: record.endpoint, kind: 'invalid', reason })] });
 }
 
 // --- exports ---
