@@ -1,0 +1,16 @@
+# adherence.toml -- the widget package's declaration to the adherence suite
+# (tds-utils docs/design/DESIGN.ARCH-ADHERENCE.md). Paths are relative to
+# widget/. The records (design and architecture) live at the repository
+# root, docs/design/; this declaration carries no [records] (architecture
+# record, Adherence).
+#
+# Left UNDECLARED on purpose: build and tool configuration (*.config.ts,
+# tsconfig.json, package.json, src/env.d.ts) and dist/ (build output,
+# gitignored).
+
+[layers]
+domain = ["src/domain/**"]
+ports = ["src/ports/**"]
+adapters = ["src/adapters/**"]
+"composition root" = ["src/main.ts"]
+test = ["tests/**"]
