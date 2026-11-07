@@ -22,8 +22,11 @@ import {
   keptBody,
   settleOpenItems,
   triageItems,
+  type ItemFate,
 } from '../domain/ingest/items.js';
+import { applyQuotaDenials, capRetryAdvice, openQuantities } from '../domain/ingest/quota.js';
 import type { Outcome } from '../domain/outcome/outcome.js';
+import type { DataCategory, RetryAdviceEntry } from '../domain/protocol/retry-advice.js';
 import { isRefusal } from '../domain/refusal.js';
 import type { ArchiveSink } from '../ports/archive-sink.js';
 import type { ArrivalStream } from '../ports/arrival-stream.js';
@@ -54,6 +57,27 @@ async function recordOutcomes(outcomes: readonly Outcome[], deps: AdmitArrivalDe
 async function finish(admission: Admission, deps: AdmitArrivalDeps): Promise<Admission> {
   await recordOutcomes(admission.outcomes, deps);
   return admission;
+}
+
+/** Ask the QuotaGate for each category's open items; the capped advice of every denial. */
+async function checkQuotas({
+  arrival,
+  publicKey,
+  fates,
+  deps,
+}: {
+  arrival: Arrival;
+  publicKey: string;
+  fates: readonly ItemFate[];
+  deps: AdmitArrivalDeps;
+}): Promise<Map<DataCategory, RetryAdviceEntry>> {
+  const denials = new Map<DataCategory, RetryAdviceEntry>();
+  for (const { category, quantity } of openQuantities(fates)) {
+    const decision = await deps.quota.check({ projectId: arrival.projectId, publicKey, category, quantity });
+    if (!decision.allowed)
+      denials.set(category, capRetryAdvice({ entry: decision.advice, ceilingSeconds: deps.settings.retryAdviceCeilingSeconds }));
+  }
+  return denials;
 }
 
 async function retain({
@@ -96,10 +120,12 @@ export async function admitArrival(arrival: Arrival, deps: AdmitArrivalDeps): Pr
   if (isOversizeArrival({ arrival, limits: access.config.sizeLimits })) return refuse({ arrival, receivedAt, reason: 'too-large', deps });
   const envelope = arrivalEnvelope(arrival);
   if (isRefusal(envelope)) return refuse({ arrival, receivedAt, reason: envelope.refusal, deps });
-  const fates = triageItems({ envelope, limits: access.config.sizeLimits });
+  const triaged = triageItems({ envelope, limits: access.config.sizeLimits });
+  const denials = await checkQuotas({ arrival, publicKey: access.credentials.publicKey, fates: triaged, deps });
+  const fates = applyQuotaDenials({ fates: triaged, denials });
   const body = keptBody({ arrival, envelope, fates });
   const recordId = fates.some(isOpen) ? await retain({ arrival, receivedAt, body, deps }) : null;
   const decided = settleOpenItems({ fates, verdict: { kind: 'accepted', reason: null } });
   const outcomes = itemOutcomes({ fates: decided, projectId: arrival.projectId, recordedAt: receivedAt });
-  return finish(decideAdmission({ fates: decided, outcomes, recordId }), deps);
+  return finish(decideAdmission({ fates: decided, outcomes, recordId, retryAdvice: [...denials.values()] }), deps);
 }

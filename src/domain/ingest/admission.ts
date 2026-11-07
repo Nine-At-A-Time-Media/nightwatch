@@ -79,20 +79,27 @@ export function refuseArrival({ outcome }: { outcome: Outcome }): Admission {
   return { decision: 'refused', status: refusalStatus(outcome.reason), outcomes: [outcome], retryAdvice: [] };
 }
 
-/** The Admission once every item has its fate and its Outcome. */
+/**
+ * The Admission once every item has its fate and its Outcome: admitted when
+ * any item was accepted, or when nothing was refused (all filtered or
+ * discarded); refused when items were only rate limited or invalid.
+ */
 export function decideAdmission({
   fates,
   outcomes,
   recordId,
+  retryAdvice,
 }: {
   fates: readonly DecidedItem[];
   outcomes: readonly Outcome[];
   recordId: string | null;
+  retryAdvice: RetryAdvice;
 }): Admission {
-  if (hasVerdict(fates, 'accepted')) return { decision: 'admitted', status: 200, recordId, outcomes, retryAdvice: [] };
+  if (hasVerdict(fates, 'accepted')) return { decision: 'admitted', status: 200, recordId, outcomes, retryAdvice };
+  if (hasVerdict(fates, 'rate_limited')) return { decision: 'refused', status: 429, outcomes, retryAdvice };
   const invalid = fates.find((fate) => fate.verdict.kind === 'invalid');
-  if (invalid) return { decision: 'refused', status: refusalStatus(invalid.verdict.reason), outcomes, retryAdvice: [] };
-  return { decision: 'admitted', status: 200, recordId: null, outcomes, retryAdvice: [] };
+  if (invalid) return { decision: 'refused', status: refusalStatus(invalid.verdict.reason), outcomes, retryAdvice };
+  return { decision: 'admitted', status: 200, recordId: null, outcomes, retryAdvice };
 }
 
 /** A stable id for an Arrival Record, derived from its Project, receipt time and body. */
