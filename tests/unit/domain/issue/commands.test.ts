@@ -15,7 +15,10 @@ import { isRefusal, type Refusal } from '../../../../src/domain/refusal.js';
 import { HOUR, T0, issueArbitrary, issueIn, member } from './fixtures.js';
 
 const AT = T0 + HOUR;
-const unresolvedAll: Status[] = (['new', 'ongoing', 'escalating', 'regressed'] as const).map((substatus) => ({ status: 'unresolved', substatus }));
+const unresolvedAll: Status[] = (['new', 'ongoing', 'escalating', 'regressed'] as const).map((substatus) => ({
+  status: 'unresolved',
+  substatus,
+}));
 const archivedAll: Status[] = [
   { status: 'archived', substatus: 'until_escalating' },
   {
@@ -40,7 +43,12 @@ function inReview(status: Status): IssueState {
 describe('resolve', () => {
   it.each(unresolvedAll)('resolves an Unresolved/$substatus issue and takes it out of For Review', (status) => {
     const { state, changes } = done(resolve(inReview(status), { kind: 'in_release', release: '1.0.0' }, member, AT));
-    expect(state).toMatchObject({ status: 'resolved', resolution: { kind: 'in_release', release: '1.0.0' }, substatusSince: AT, forReviewSince: null });
+    expect(state).toMatchObject({
+      status: 'resolved',
+      resolution: { kind: 'in_release', release: '1.0.0' },
+      substatusSince: AT,
+      forReviewSince: null,
+    });
     expect(changes.map((c) => [c.kind, c.to])).toEqual([
       ['status', 'resolved'],
       ['resolution', 'in_release:1.0.0'],
@@ -67,13 +75,21 @@ describe('archive', () => {
 
   it('archives until a condition, taking the baseline counts at archiving', () => {
     const condition = { untilDate: null, count: 100, window: HOUR, userCount: 5, userWindow: null };
-    const { state } = done(archive(issueIn(unresolvedAll[1]!, { count: 40, userCount: 7 }), { substatus: 'until_condition', condition }, member, AT));
-    expect(state).toMatchObject({ status: 'archived', substatus: 'until_condition', condition: { ...condition, baselineCount: 40, baselineUserCount: 7 } });
+    const { state } = done(
+      archive(issueIn(unresolvedAll[1]!, { count: 40, userCount: 7 }), { substatus: 'until_condition', condition }, member, AT),
+    );
+    expect(state).toMatchObject({
+      status: 'archived',
+      substatus: 'until_condition',
+      condition: { ...condition, baselineCount: 40, baselineUserCount: 7 },
+    });
   });
 
   it('refuses to archive until a condition that names no date, count or user count', () => {
     const condition = { untilDate: null, count: null, window: HOUR, userCount: null, userWindow: null };
-    expect(archive(issueIn(unresolvedAll[1]!), { substatus: 'until_condition', condition }, member, AT)).toEqual({ refusal: 'condition_required' });
+    expect(archive(issueIn(unresolvedAll[1]!), { substatus: 'until_condition', condition }, member, AT)).toEqual({
+      refusal: 'condition_required',
+    });
   });
 
   it('archives forever, as spam when the Report issue is judged spam', () => {
@@ -163,7 +179,12 @@ describe('every command', () => {
         ];
         for (const result of results) {
           if (isRefusal(result)) continue;
-          expect(result.state).toMatchObject({ count: state.count, userCount: state.userCount, firstSeen: state.firstSeen, lastSeen: state.lastSeen });
+          expect(result.state).toMatchObject({
+            count: state.count,
+            userCount: state.userCount,
+            firstSeen: state.firstSeen,
+            lastSeen: state.lastSeen,
+          });
           for (const c of result.changes) {
             expect(c).toMatchObject({ issueId: state.issueId, actor, origin: actor === 'tracker' ? 'tracker' : 'nightwatch', at: AT });
           }

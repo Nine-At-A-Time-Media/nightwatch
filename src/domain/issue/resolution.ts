@@ -31,6 +31,15 @@ export function isPendingResolution(resolution: Resolution): boolean {
   return (resolution.kind === 'in_next_release' || resolution.kind === 'in_commit') && resolution.release === null;
 }
 
+// --- helpers ---
+
+/** The History label of a Resolution: `plain`, `in_release:1.2.0`, `in_next_release`, `in_commit:abc:1.2.0`. */
+export function resolutionLabel(resolution: Resolution): string {
+  if (resolution.kind === 'plain') return resolution.kind;
+  const parts = resolution.kind === 'in_commit' ? [resolution.kind, resolution.commit] : [resolution.kind];
+  return [...parts, ...(resolution.release === null ? [] : [resolution.release])].join(':');
+}
+
 /** The Regression Policy. */
 export function isRegression(resolution: Resolution, eventRelease: Release | null, firstSeen: ReleaseFirstSeen): boolean {
   if (resolution.kind === 'plain') return true;
