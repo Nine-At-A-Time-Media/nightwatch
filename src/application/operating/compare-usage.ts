@@ -6,8 +6,9 @@
  * through the Channel of its kind. That alert is the only effect: no
  * Arrival is refused for a crossing.
  *
- * A failed delivery is logged and the rest go on; the next comparison
- * alerts again while the product stays over.
+ * A failed delivery does not stop the others; the next comparison alerts
+ * again while the product stays over, which bounds how late the operator
+ * hears of it by the Platform Usage Interval.
  *
  * Ports: UsageSource, Channel, Clock.
  */
@@ -36,8 +37,7 @@ export type CompareUsageDeps = {
 
 async function deliver(message: AlertMessage, destination: Destination, channels: readonly Channel[]): Promise<void> {
   const channel = channels.find((candidate) => candidate.kind === destination.kind);
-  const delivered = channel === undefined ? { ok: false } : await channel.deliver(destination, message);
-  if (!delivered.ok) console.error(JSON.stringify({ event: 'compare-usage.alert-undelivered', deliveryId: message.deliveryId }));
+  if (channel !== undefined) await channel.deliver(destination, message);
 }
 
 async function alertOperator(message: AlertMessage, deps: CompareUsageDeps): Promise<void> {
