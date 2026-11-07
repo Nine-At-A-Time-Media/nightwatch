@@ -36,3 +36,9 @@ export function conditionWindows(state: IssueState): ConditionWindows {
   if (state.status !== 'archived' || state.substatus !== 'until_condition') return NO_WINDOWS;
   return { window: state.condition.window, userWindow: state.condition.userWindow };
 }
+
+/** Where the condition windows of an Event at `at` start; null where the Issue counts over no window. */
+export function conditionWindowStarts(state: IssueState, at: number): { events: number | null; users: number | null } {
+  const { window, userWindow } = conditionWindows(state);
+  return { events: window === null ? null : at - window, users: userWindow === null ? null : at - userWindow };
+}

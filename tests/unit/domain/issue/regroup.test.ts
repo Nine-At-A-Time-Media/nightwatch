@@ -4,7 +4,7 @@ import type { EventSummary } from '../../../../src/domain/event/event-summary.js
 import { eventBlobKey } from '../../../../src/domain/event/event-summary.js';
 import { duplicateOf, dropped, joined, targetOf } from '../../../../src/domain/issue/assignment.js';
 import { absorbMerge, beginMerges, mergeRefusal, recount, splitOff, splitRefusal } from '../../../../src/domain/issue/regroup.js';
-import { conditionWindows, hourStart, isHeldBy } from '../../../../src/domain/issue/tally.js';
+import { conditionWindowStarts, conditionWindows, hourStart, isHeldBy } from '../../../../src/domain/issue/tally.js';
 import { isRefusal } from '../../../../src/domain/refusal.js';
 import { HOUR, T0, issueArbitrary, issueIn, member } from './fixtures.js';
 
@@ -152,6 +152,8 @@ describe('tally helpers', () => {
       userWindow: null,
     });
     expect(conditionWindows(issueIn(ongoing))).toEqual({ window: null, userWindow: null });
+    const archived = issueIn({ status: 'archived', substatus: 'until_condition', condition });
+    expect(conditionWindowStarts(archived, T0 + 2 * HOUR)).toEqual({ events: T0 + HOUR, users: null });
   });
 });
 
