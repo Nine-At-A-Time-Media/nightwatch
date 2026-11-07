@@ -599,6 +599,13 @@ the reporter unsubscribed or the Report is spam.
 | Uptime Failure Count | The number of consecutive failed checks that make an Uptime Monitor Failure. | Set per monitor; at least one. |
 | Failure | A missed, late, failed, overlong or down result. | Recorded once per expected run. |
 | Platform Usage | Use of one Cloudflare product against its Platform Soft Limit. | Compared within the Platform Usage Interval. |
+| Normalized Event | An Event after validation and clock-drift correction, before scrubbing. | Invalid parts are absent and listed as Event Errors. |
+| Event Error | A part of an Event that was dropped, clamped or could not be mapped, with the reason. | Never carries the dropped value. |
+| Frame | One call in a stack trace: module or file, function, position, and whether it is in-app. | Positions never contribute to a Fingerprint. |
+| Grouping Input | The facts grouping reads from a Normalized Event. | Holds no value a Scrubbing Rule removed. |
+| Removal | The record that a Scrubbing Rule removed a field: its path, the rule, the method and the original length. | Never holds the removed value. |
+| Snooze Condition | The date, count or user count that unarchives an Issue archived until a condition. | Any one condition met unarchives it. |
+| Report Status Change | One change of a Report's shown Report Status, with its date. | Appears on the Follow-up Page. |
 | Platform Soft Limit | The usage of one Cloudflare product above which the operator is alerted. | Crossing it never by itself refuses an Arrival. |
 | Platform Usage Interval | How often Platform Usage is compared with its Platform Soft Limit. | Bounds how late a crossing is reported. |
 
