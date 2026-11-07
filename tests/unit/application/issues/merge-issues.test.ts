@@ -35,7 +35,7 @@ describe('mergeIssues', () => {
       { issueId: target, kind: 'merge', from: source, to: target, actor: member, origin: 'nightwatch', at: T0 + HOUR },
     ]);
     expect(w.effects.enqueued).toEqual(changes);
-    expect(w.issues.history).toEqual(expect.arrayContaining(changes));
+    expect(w.issues.history).toEqual(expect.arrayContaining(w.effects.enqueued));
     const later = await assignEvent(summary(T0 + 2 * HOUR), ['fp-b'], assignDeps(w));
     expect(issueIdOf(later)).toBe(target);
   });

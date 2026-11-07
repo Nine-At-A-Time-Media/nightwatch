@@ -167,6 +167,11 @@ export function leaveForReview(state: IssueState, actor: Actor, at: number): Iss
   return { state: { ...state, forReviewSince: null }, changes: [change(state, { kind: 'for_review', from: 'in', to: null, actor, at })] };
 }
 
+/** The Refusal for acting on an Issue the Project does not hold. */
+export function issueNotFound(): Refusal {
+  return refusal('issue_not_found');
+}
+
 /** The Refusal for acting on an Issue that is going away, or null when it is not. */
 export function goneRefusal(state: IssueState): Refusal | null {
   if (state.status === 'deleting') return refusal('issue_deleting');
