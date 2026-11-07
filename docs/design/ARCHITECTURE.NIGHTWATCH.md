@@ -51,6 +51,7 @@ with no Cloudflare account.
  | Worker +     |          |  SQLite): Issues, Fingerprints, Tombstones,     |
  | StreamPumpDO |          |  counters, Reports, Threads, History, event     |
  +--+--+--+-----+          |  index, sweep alarms. QuotaDO per Project.      |
+    |  |  |                |  Merge and split Workflows.                     |
     |  |  |                +---------------------+----------------------------+
     |  |  +-> R2 events/, attachments/           | Issue Changes (ids)
     |  +----> Basin Pipelines -> Basin Catalog   v
@@ -92,9 +93,10 @@ govern one tree; the two browser applications are packages of their own.
 ## Seams
 
 Each volatile axis has one seam. Every port has an in-memory fake on day
-one; the "Second mechanism" column says why the seam is not ceremony.
+one. The last column says why the seam is not ceremony: for a port, its
+second mechanism; for a policy or parameter set, what retunes it.
 
-| Axis | Seam | Kind | Day-one adapter | Second mechanism |
+| Axis | Seam | Kind | Day-one adapter or value | Second mechanism, or what retunes it |
 |---|---|---|---|---|
 | Durable arrival log | `ArrivalStream` | port | K2 | `LogDO`, an append-only log in a Durable Object with subscriptions and leases. The local stage runs on it, because K2 has no local emulation. |
 | Payload and file storage | `BlobStore` | port | R2 | in-memory fake |
@@ -102,8 +104,9 @@ one; the "Second mechanism" column says why the seam is not ceremony.
 | Per-Project issue state | `IssueStore` | port | Durable Object SQLite, inside `ProjectDO` | in-memory fake; D1 if the per-object limit is outgrown |
 | Reaching a Project's state from another runtime | `ProjectClient` | port | Durable Object stub | direct call into an in-process `IssueStore` (tests, local CLI) |
 | Ingest-side project config | `ProjectConfigSource` | port | KV, written from D1 | D1 direct read |
-| Admission quotas | `QuotaGate` | port | `QuotaDO` leases behind the Rate Limiting binding | Rate Limiting binding alone |
-| Side-effect dispatch | `EffectQueue` | port | Queues with a dead-letter queue | Workflows for long jobs |
+| Admission quotas and Client Key state | `QuotaGate` | port | `QuotaDO` leases behind the Rate Limiting binding | Rate Limiting binding alone |
+| Side-effect dispatch | `EffectQueue` | port | Queues with a dead-letter queue | in-memory fake |
+| Long jobs (merge and split past one request) | `LongJob` | port | Workflows | in-memory fake that runs the steps inline |
 | Outbound mail | `Mailer` | port | Email Sending `send_email` binding | Email Sending REST API |
 | Alert channel | `Channel` | port | email, webhook | Slack, PagerDuty |
 | Issue tracker | `Tracker` | port | GitHub App | Jira |
@@ -116,18 +119,13 @@ one; the "Second mechanism" column says why the seam is not ceremony.
 | Platform usage | `UsageSource` | port | Cloudflare account analytics API | fake |
 | Uptime check | `UptimeProbe` | port | `fetch` from the monitors Worker | fake |
 | Time | `Clock` | port | system clock | fake clock |
-| Randomness | `Ids` | port | Web Crypto | seeded fake |
+| Randomness and reference hashing | `Ids` | port | Web Crypto | seeded fake |
 | Grouping rules | `GroupingVersion` | policy | the first version | later versions, matched side by side during transition |
-| Regression | `RegressionPolicy` | policy | semantic-version-or-first-seen ordering | none planned |
-| Early escalation | `EarlyEscalationPolicy` | policy | age, count, rate multiple | retuned only |
-| Forecast | `ForecastPolicy` | policy | mean plus spread over recent hourly counts | retuned only |
-| Digest timing | `DigestPolicy` | policy | minimum, increment, maximum | retuned only |
-| Report Status | `reportStatusOf` | policy (pure function) | the design's Report Status table | none |
-| Ownership | `OwnershipResolver` | policy | last match wins, rules over CODEOWNERS | none |
-| Scrubbing | `ScrubbingRules` | policy | built-in rule set plus project rules | none |
-| Inbound filters | `InboundFilters` | policy | built-in filter set plus project lists | none |
-| Retention | `RetentionPolicy` | parameter set | per kind of data | none |
-| Issue timing and escalation | `IssuePolicies` | parameter set | New Issue Age, Settle Age, Inbox Expiry, `EarlyEscalationPolicy`, `ForecastPolicy`, `RegressionPolicy` | none |
+| Digest timing | `DigestPolicy` | policy | minimum, increment, maximum | retuned per Project |
+| Scrubbing | `ScrubbingRules` | policy | built-in rule set plus project rules | retuned per Project through its rules |
+| Inbound filters | `InboundFilters` | policy | built-in filter set plus project lists | retuned per Project through its lists |
+| Retention | `RetentionPolicy` | parameter set | per kind of data | retuned per Organization |
+| Issue timing and escalation | `IssuePolicies` | policy set | New Issue Age, Settle Age, Inbox Expiry, Early Escalation Policy, Forecast Policy, Regression Policy | retuned per Project |
 
 ---
 
@@ -143,20 +141,25 @@ Layers follow the coding skill: `domain`, then `ports`, then
 | `src/domain/protocol` (envelope, DSN, Retry Advice) | domain | all |
 | `src/domain/normalize`, `src/domain/scrub`, `src/domain/sourcemap` | domain | processor |
 | `src/domain/grouping` (Fingerprint derivation, rule languages, Grouping Versions) | domain | processor |
-| `src/domain/issue` (Status machine, Resolution, Regression Policy, escalation, Forecast, snooze) | domain | core |
+| `src/domain/issue` (Status machine, Resolution, Regression Policy, escalation, Forecast, snooze, triage actions) | domain | core |
 | `src/domain/report` (Report, Thread, `reportStatusOf`) | domain | core, console |
 | `src/domain/search` (Issue Query parser and plan) | domain | console, core |
 | `src/domain/alerts` (rule evaluation, Digest timing, breach counting) | domain | notifier, monitors |
+| `src/domain/mail` (quoted-text stripping of inbound replies) | domain | inbound-mail |
+| `src/domain/tracker` (outbound GitHub template with no reporter or Attachment field, share-marker rule, no-echo match) | domain | github |
 | `src/domain/monitor` (schedules, Failure, thresholds) | domain | monitors |
 | `src/domain/ownership`, `src/domain/release` (ordering, commit references) | domain | core, github |
 | `src/domain/tenancy` (roles, Scopes, permission) | domain | console |
 | `src/domain/signin` (claims to Reporter or Member, trusted issuers) | domain | all entry points |
 | `src/ports/*` | ports | all |
-| `src/application/*` | application | per use case |
-| `src/adapters/k2`, `logdo`, `r2`, `r2-ndjson`, `d1`, `d1-rollup`, `do`, `kv`, `queues`, `email`, `github`, `access`, `workers-ai`, `rules`, `basin`, `wae`, `cf-usage`, `fetch` | adapters | as bound |
+| `src/application/*` | application | the Runtime column of the Use-case surface |
+| `src/adapters/k2`, `logdo`, `r2`, `r2-ndjson`, `d1`, `d1-rollup`, `do`, `kv`, `queues`, `workflows`, `access`, `workers-ai`, `rules`, `basin`, `wae`, `cf-usage`, `fetch` | adapters | as bound |
+| `src/adapters/email` (send, reply-token mint and verify, MIME parse of inbound replies) | adapters | notifier, inbound-mail |
+| `src/adapters/github` (webhook signature verification, installation-token minting and KV cache, REST and GraphQL calls) | adapters | github |
+| `src/adapters/webcrypto` (`Ids`: random ids, Report Reference minting and hashing) | adapters | all |
 | `src/workers/ingest` | composition root | ingest Worker |
 | `src/workers/processor` (+ `StreamPumpDO`) | composition root | processor Worker |
-| `src/workers/core` (`ProjectDO`, `QuotaDO`, `LogDO`) | composition root | core Worker |
+| `src/workers/core` (`ProjectDO`, `QuotaDO`, `LogDO`, merge and split Workflow classes) | composition root | core Worker |
 | `dev/local-issuer`, `dev/fake-github` (local stand-ins started by `pnpm dev`) | test | local stage only |
 | `src/workers/notifier` (+ `DigestDO`) | composition root | notifier Worker |
 | `src/workers/github` | composition root | github Worker |
@@ -181,82 +184,87 @@ Every type is a term in the design's Domain Language. Values come first;
 ports arrive last in one `deps` object. Every function returns a named
 value from the design, or a `Refusal`.
 
+A use case whose runtime is `ProjectDO` takes `IssueStore`. Every other
+runtime reaches a Project's state only through `ProjectClient`, which
+calls the `ProjectDO` use case.
+
 ### Ingest
 
-| Design behavior | Use case (signature) | Ports |
-|---|---|---|
-| An SDK event is accepted; A disabled key is refused; A wrong origin is refused; An oversized arrival is refused; A quota rejects with retry advice; Noise is filtered; Out-of-scope data is counted; Durable before acknowledged; Noisy tenant | `admitArrival(arrival: Arrival, deps: {config: ProjectConfigSource, quota: QuotaGate, stream: ArrivalStream, blobs: BlobStore, metrics: MetricsSink, archive: ArchiveSink, clock: Clock}): Promise<Admission>` | ProjectConfigSource, QuotaGate, ArrivalStream, BlobStore, MetricsSink, ArchiveSink, Clock |
+| Design behavior | Use case (signature) | Ports | Runtime |
+|---|---|---|---|
+| An SDK event is accepted; A disabled key is refused; A wrong origin is refused; An oversized arrival is refused; A quota rejects with retry advice; Noise is filtered; Out-of-scope data is counted; Durable before acknowledged; Noisy tenant | `admitArrival(arrival: Arrival, deps: {config: ProjectConfigSource, quota: QuotaGate, stream: ArrivalStream, blobs: BlobStore, metrics: MetricsSink, archive: ArchiveSink, clock: Clock}): Promise<Admission>` | ProjectConfigSource, QuotaGate, ArrivalStream, BlobStore, MetricsSink, ArchiveSink, Clock | ingest |
 
 ### Processing and grouping
 
-| Design behavior | Use case (signature) | Ports |
-|---|---|---|
-| Source map applied; Missing source map; Scrubbing removes data; Duplicate arrival | `processArrival(record: ArrivalRecord, deps: {control: ControlStore, blobs: BlobStore, projects: ProjectClient, effects: EffectQueue, archive: ArchiveSink, clock: Clock}): Promise<ProcessingResult>` | ControlStore, BlobStore, ProjectClient, EffectQueue, ArchiveSink, Clock |
-| Same crash, same issue; New crash, new issue; Concurrent first events; SDK fingerprint wins; Default token extends; Volatile parts ignored; Tombstoned events dropped; Early escalation; Archived until escalating; Archived until condition; Archived forever stays; Regression in newer release; No regression from older release; Hand-set priority sticks | `assignEvent(summary: EventSummary, fingerprints: Fingerprint[], deps: {issues: IssueStore, clock: Clock, ids: Ids, policies: IssuePolicies}): Promise<Assignment>` (inside `ProjectDO`) | IssueStore, Clock, Ids |
-| Reprocess a range; Raw retention expired | `reprocessRange(project: ProjectId, range: TimeRange, deps: {stream: ArrivalStream, projects: ProjectClient, clock: Clock, retention: RetentionPolicy}): Promise<Reprocessing>` | ArrivalStream, ProjectClient, Clock |
+| Design behavior | Use case (signature) | Ports | Runtime |
+|---|---|---|---|
+| (no design row; the pump loop that pulls, dispatches by item kind, dead-letters and acks) | `pumpArrivals(deps: {stream: ArrivalStream, blobs: BlobStore, archive: ArchiveSink, clock: Clock, dispatch: {event: processArrival, feedback: fileReport}}): Promise<Outcome[]>` | ArrivalStream, BlobStore, ArchiveSink, Clock; `dispatch` is the root's binding of the two use cases | `StreamPumpDO` |
+| Source map applied; Missing source map; Scrubbing removes data; Duplicate arrival | `processArrival(record: ArrivalRecord, deps: {control: ControlStore, blobs: BlobStore, projects: ProjectClient, effects: EffectQueue, archive: ArchiveSink, clock: Clock}): Promise<ProcessingResult>` | ControlStore, BlobStore, ProjectClient, EffectQueue, ArchiveSink, Clock | processor |
+| Same crash, same issue; New crash, new issue; Concurrent first events; SDK fingerprint wins; Default token extends; Volatile parts ignored; Tombstoned events dropped; Early escalation; Archived until escalating; Archived until condition; Archived forever stays; Regression in newer release; No regression from older release; Hand-set priority sticks | `assignEvent(summary: EventSummary, fingerprints: Fingerprint[], deps: {issues: IssueStore, clock: Clock, ids: Ids, policies: IssuePolicies}): Promise<Assignment>` | IssueStore, Clock, Ids | `ProjectDO` |
+| Reprocess a range; Raw retention expired | `reprocessRange(project: ProjectId, range: TimeRange, deps: {stream: ArrivalStream, projects: ProjectClient, clock: Clock, retention: RetentionPolicy}): Promise<Reprocessing>` | ArrivalStream, ProjectClient, Clock | processor |
 
 ### Issues
 
-| Design behavior | Use case (signature) | Ports |
-|---|---|---|
-| New becomes ongoing; Auto-resolve | `sweepIssues(project: ProjectId, deps: {issues: IssueStore, effects: EffectQueue, clock: Clock, policies: IssuePolicies}): Promise<IssueChange[]>` (ProjectDO alarm) | IssueStore, EffectQueue, Clock |
-| Resolve in next release | `recordReleaseSeen(release: Release, deps: {issues: IssueStore, effects: EffectQueue, clock: Clock}): Promise<IssueChange[]>` | IssueStore, EffectQueue, Clock |
-| Merge | `mergeIssues(target: IssueId, sources: IssueId[], actor: Member, deps: {issues: IssueStore, blobs: BlobStore, effects: EffectQueue, clock: Clock}): Promise<IssueChange[] \| Refusal>` | IssueStore, BlobStore, EffectQueue, Clock |
-| Split | `splitIssue(issue: IssueId, fingerprints: Fingerprint[], actor: Member, deps: {issues: IssueStore, ids: Ids, clock: Clock}): Promise<IssueChange[] \| Refusal>` | IssueStore, Ids, Clock |
-| Discard | `discardIssue(issue: IssueId, actor: Member, deps: {issues: IssueStore, blobs: BlobStore, clock: Clock}): Promise<IssueChange[] \| Refusal>` | IssueStore, BlobStore, Clock |
-| Owner suggested; Suspect commit | `suggestOwners(issue: IssueId, event: EventSummary, deps: {control: ControlStore, codeHost: CodeHost, projects: ProjectClient}): Promise<OwnerSuggestion>` | ControlStore, CodeHost, ProjectClient |
-| Search; Cross-tenant search | `searchIssues(query: IssueQuery, viewer: Member, cursor: Cursor \| null, deps: {control: ControlStore, projects: ProjectClient}): Promise<IssuePage>` | ControlStore, ProjectClient |
+| Design behavior | Use case (signature) | Ports | Runtime |
+|---|---|---|---|
+| (no row of its own; a Member's resolve, archive, snooze, priority or assign action, which sets the Given of the archive and priority rows under `assignEvent`) | `triageIssue(issue: IssueId, action: TriageAction, actor: Member, deps: {issues: IssueStore, effects: EffectQueue, clock: Clock, policies: IssuePolicies}): Promise<IssueChange[] \| Refusal>`; `TriageAction` is a union of the design's Status, Resolution and priority values | IssueStore, EffectQueue, Clock | `ProjectDO` |
+| New becomes ongoing; Auto-resolve | `sweepIssues(project: ProjectId, deps: {issues: IssueStore, effects: EffectQueue, clock: Clock, policies: IssuePolicies}): Promise<IssueChange[]>` (alarm) | IssueStore, EffectQueue, Clock | `ProjectDO` |
+| Resolve in next release | `recordReleaseSeen(release: Release, deps: {issues: IssueStore, effects: EffectQueue, clock: Clock}): Promise<IssueChange[]>` | IssueStore, EffectQueue, Clock | `ProjectDO` |
+| Merge | `mergeIssues(target: IssueId, sources: IssueId[], actor: Member, deps: {issues: IssueStore, blobs: BlobStore, effects: EffectQueue, jobs: LongJob, clock: Clock}): Promise<IssueChange[] \| Refusal>` | IssueStore, BlobStore, EffectQueue, LongJob, Clock | `ProjectDO` |
+| Split | `splitIssue(issue: IssueId, fingerprints: Fingerprint[], actor: Member, deps: {issues: IssueStore, ids: Ids, jobs: LongJob, clock: Clock}): Promise<IssueChange[] \| Refusal>` | IssueStore, Ids, LongJob, Clock | `ProjectDO` |
+| Discard | `discardIssue(issue: IssueId, actor: Member, deps: {issues: IssueStore, blobs: BlobStore, clock: Clock}): Promise<IssueChange[] \| Refusal>` | IssueStore, BlobStore, Clock | `ProjectDO` |
+| Owner suggested; Suspect commit | `suggestOwners(issue: IssueId, event: EventSummary, deps: {control: ControlStore, codeHost: CodeHost, projects: ProjectClient}): Promise<OwnerSuggestion>` | ControlStore, CodeHost, ProjectClient | github |
+| Search; Cross-tenant search | `searchIssues(query: IssueQuery, viewer: Member, cursor: Cursor \| null, deps: {control: ControlStore, projects: ProjectClient}): Promise<IssuePage>` | ControlStore, ProjectClient | console |
 
 ### Reports
 
-| Design behavior | Use case (signature) | Ports |
-|---|---|---|
-| Report filed in Nightwatch's form; Report filed through an SDK widget; Unsigned report refused; Empty message refused; Report quota | `fileReport(submission: ReportSubmission, signIn: SignIn \| null, deps: {verifier: SignInVerifier, quota: QuotaGate, projects: ProjectClient, control: ControlStore, blobs: BlobStore, spam: SpamJudge, effects: EffectQueue, ids: Ids, clock: Clock}): Promise<FilingReceipt \| Refusal>` | SignInVerifier, QuotaGate, ProjectClient, ControlStore, BlobStore, SpamJudge, EffectQueue, Ids, Clock |
-| Reporter not asked who they are | `openReportForm(signIn: SignIn, deps: {verifier: SignInVerifier}): Promise<ReportForm \| Refusal>` | SignInVerifier |
-| Failed send is visible | (the widget's own behavior; kept as a component test that drives the widget against a `fileReport` endpoint that fails) | none |
-| Follow-up Page shows status; Follow-up Page refuses others; Unknown reference | `viewFollowUp(reference: ReportReference, signIn: SignIn, deps: {verifier: SignInVerifier, control: ControlStore, projects: ProjectClient}): Promise<FollowUpView \| Refusal>` | SignInVerifier, ControlStore, ProjectClient |
-| Status change notifies; Fix ships; Duplicate reports share outcome; Unsubscribe | `notifyReporters(change: IssueChange, deps: {projects: ProjectClient, control: ControlStore, mailer: Mailer, clock: Clock}): Promise<ReporterNotification[]>` | ProjectClient, ControlStore, Mailer, Clock |
-| Shared reply reaches reporter; Private comment stays private | `addComment(issue: IssueId, comment: Comment, actor: Member, deps: {issues: IssueStore, effects: EffectQueue, clock: Clock}): Promise<IssueChange[]>` | IssueStore, EffectQueue, Clock |
-| Reporter reply reaches team | `replyAsReporter(reference: ReportReference, comment: Comment, signIn: SignIn, deps: {verifier: SignInVerifier, control: ControlStore, projects: ProjectClient, effects: EffectQueue, clock: Clock}): Promise<IssueChange[] \| Refusal>` | SignInVerifier, ControlStore, ProjectClient, EffectQueue, Clock |
-| Spam is silent | `markSpam(report: ReportId, actor: Member \| SpamJudge, deps: {issues: IssueStore, clock: Clock}): Promise<IssueChange[]>` | IssueStore, Clock |
-| My reports | `listMyReports(signIn: SignIn, deps: {verifier: SignInVerifier, control: ControlStore, projects: ProjectClient}): Promise<ReportList \| Refusal>` | SignInVerifier, ControlStore, ProjectClient |
+| Design behavior | Use case (signature) | Ports | Runtime |
+|---|---|---|---|
+| Report filed in Nightwatch's form; Report filed through an SDK widget; Unsigned report refused; Empty message refused; Report quota; Failed send is visible | `fileReport(submission: ReportSubmission, signIn: SignIn \| null, deps: {verifier: SignInVerifier, quota: QuotaGate, projects: ProjectClient, control: ControlStore, blobs: BlobStore, spam: SpamJudge, effects: EffectQueue, ids: Ids, clock: Clock}): Promise<FilingReceipt \| Refusal>`; "Failed send is visible" is the scenario where this endpoint fails, driven from a widget component test | SignInVerifier, QuotaGate, ProjectClient, ControlStore, BlobStore, SpamJudge, EffectQueue, Ids, Clock | console; processor (SDK feedback, from `pumpArrivals`) |
+| Reporter not asked who they are | `openReportForm(signIn: SignIn, deps: {verifier: SignInVerifier}): Promise<ReportForm \| Refusal>` | SignInVerifier | console |
+| Follow-up Page shows status; Follow-up Page refuses others; Unknown reference | `viewFollowUp(reference: ReportReference, signIn: SignIn, deps: {verifier: SignInVerifier, control: ControlStore, projects: ProjectClient, ids: Ids}): Promise<FollowUpView \| Refusal>` | SignInVerifier, ControlStore, ProjectClient, Ids | console |
+| Status change notifies; Fix ships; Duplicate reports share outcome; Unsubscribe | `notifyReporters(change: IssueChange, deps: {projects: ProjectClient, control: ControlStore, mailer: Mailer, clock: Clock}): Promise<ReporterNotification[]>` | ProjectClient, ControlStore, Mailer, Clock | notifier |
+| Shared reply reaches reporter; Private comment stays private | `addComment(issue: IssueId, comment: Comment, actor: Member, deps: {issues: IssueStore, effects: EffectQueue, clock: Clock}): Promise<IssueChange[]>` | IssueStore, EffectQueue, Clock | `ProjectDO` |
+| Reporter reply reaches team | `replyAsReporter(reference: ReportReference, comment: Comment, signIn: SignIn, deps: {verifier: SignInVerifier, control: ControlStore, projects: ProjectClient, effects: EffectQueue, ids: Ids, clock: Clock}): Promise<IssueChange[] \| Refusal>` | SignInVerifier, ControlStore, ProjectClient, EffectQueue, Ids, Clock | console |
+| Spam is silent | `markSpam(report: ReportId, actor: Member \| SpamVerdict, deps: {issues: IssueStore, clock: Clock}): Promise<IssueChange[]>` | IssueStore, Clock | `ProjectDO` |
+| My reports | `listMyReports(signIn: SignIn, deps: {verifier: SignInVerifier, control: ControlStore, projects: ProjectClient}): Promise<ReportList \| Refusal>` | SignInVerifier, ControlStore, ProjectClient | console |
 
 ### Alerts and notifications
 
-| Design behavior | Use case (signature) | Ports |
-|---|---|---|
-| New issue alert; Quiet period; Frequency alert; Filter blocks | `evaluateIssueAlerts(change: IssueChange, deps: {control: ControlStore, projects: ProjectClient, channels: Channel[], clock: Clock}): Promise<AlertFiring[]>` | ControlStore, ProjectClient, Channel, Clock |
-| Digest gathers | `deliverDigest(digest: Digest, deps: {mailer: Mailer, clock: Clock, policy: DigestPolicy}): Promise<Digest>` (DigestDO alarm) | Mailer, Clock |
-| Metric incident opens and closes | `evaluateMetricRule(rule: MetricAlertRule, deps: {projects: ProjectClient, channels: Channel[], clock: Clock}): Promise<IncidentChange \| null>` (MetricRuleDO alarm) | ProjectClient, Channel, Clock |
-| Reply by email; Unknown replier | `applyEmailReply(reply: InboundReply, deps: {control: ControlStore, projects: ProjectClient, clock: Clock}): Promise<IssueChange[] \| Refusal>` | ControlStore, ProjectClient, Clock |
-| Settings respected | `notifyFollowers(change: IssueChange, deps: {control: ControlStore, projects: ProjectClient, mailer: Mailer}): Promise<WorkflowNotification[]>` | ControlStore, ProjectClient, Mailer |
+| Design behavior | Use case (signature) | Ports | Runtime |
+|---|---|---|---|
+| New issue alert; Quiet period; Frequency alert; Filter blocks | `evaluateIssueAlerts(change: IssueChange, deps: {control: ControlStore, projects: ProjectClient, channels: Channel[], clock: Clock}): Promise<AlertFiring[]>` | ControlStore, ProjectClient, Channel, Clock | notifier |
+| Digest gathers | `deliverDigest(digest: Digest, deps: {mailer: Mailer, clock: Clock, policy: DigestPolicy}): Promise<Digest>` (alarm) | Mailer, Clock | `DigestDO` |
+| Metric incident opens and closes | `evaluateMetricRule(rule: MetricAlertRule, deps: {projects: ProjectClient, channels: Channel[], clock: Clock}): Promise<IncidentChange \| null>` (alarm) | ProjectClient, Channel, Clock | `MetricRuleDO` |
+| Reply by email; Unknown replier | `applyEmailReply(reply: InboundReply, deps: {control: ControlStore, projects: ProjectClient, clock: Clock}): Promise<IssueChange[] \| Refusal>` | ControlStore, ProjectClient, Clock | inbound-mail |
+| Settings respected | `notifyFollowers(change: IssueChange, deps: {control: ControlStore, projects: ProjectClient, mailer: Mailer}): Promise<WorkflowNotification[]>` | ControlStore, ProjectClient, Mailer | notifier |
 
 ### Code and GitHub
 
-| Design behavior | Use case (signature) | Ports |
-|---|---|---|
-| Open GitHub issue | `openExternalIssue(issue: IssueId, repository: Repository, actor: Member, deps: {tracker: Tracker, projects: ProjectClient, control: ControlStore}): Promise<ExternalLink \| Refusal>` | Tracker, ProjectClient, ControlStore |
-| GitHub close resolves; GitHub not-planned closes report; GitHub reopen; No echo; Shared GitHub comment; Uninstalled app | `applyTrackerEvent(event: TrackerEvent, deps: {control: ControlStore, projects: ProjectClient, clock: Clock}): Promise<IssueChange[] \| Refusal>` | ControlStore, ProjectClient, Clock |
-| Nightwatch resolve closes GitHub; Contact never leaves | `pushIssueChange(change: IssueChange, deps: {tracker: Tracker, projects: ProjectClient, control: ControlStore}): Promise<ExternalLink \| Refusal>` | Tracker, ProjectClient, ControlStore |
-| Resolve by commit | `applyCommits(commits: Commit[], deps: {control: ControlStore, projects: ProjectClient, clock: Clock}): Promise<IssueChange[]>` | ControlStore, ProjectClient, Clock |
+| Design behavior | Use case (signature) | Ports | Runtime |
+|---|---|---|---|
+| Open GitHub issue | `openExternalIssue(issue: IssueId, repository: Repository, actor: Member, deps: {tracker: Tracker, projects: ProjectClient, control: ControlStore}): Promise<ExternalLink \| Refusal>` | Tracker, ProjectClient, ControlStore | github |
+| GitHub close resolves; GitHub not-planned closes report; GitHub reopen; No echo; Shared GitHub comment; Uninstalled app | `applyTrackerEvent(event: TrackerEvent, deps: {control: ControlStore, projects: ProjectClient, clock: Clock}): Promise<IssueChange[] \| Refusal>` | ControlStore, ProjectClient, Clock | github |
+| Nightwatch resolve closes GitHub; Contact never leaves | `pushIssueChange(change: IssueChange, deps: {tracker: Tracker, projects: ProjectClient, control: ControlStore}): Promise<ExternalLink \| Refusal>` | Tracker, ProjectClient, ControlStore | github |
+| Resolve by commit | `applyCommits(commits: Commit[], deps: {control: ControlStore, projects: ProjectClient, clock: Clock}): Promise<IssueChange[]>` | ControlStore, ProjectClient, Clock | github |
 
 ### Releases and monitors
 
-| Design behavior | Use case (signature) | Ports |
-|---|---|---|
-| Artifact upload | `uploadArtifact(upload: ArtifactUpload, token: AccessToken, deps: {control: ControlStore, blobs: BlobStore}): Promise<Artifact \| Refusal>` | ControlStore, BlobStore |
-| CI token cannot read | `authorize(token: AccessToken, scope: Scope, deps: {control: ControlStore}): Promise<Grant \| Refusal>` | ControlStore |
-| Crash-free rate | `releaseHealth(release: Release, environment: Environment, deps: {projects: ProjectClient}): Promise<ReleaseHealth>` | ProjectClient |
-| Missed check-in; Overlong run; Monitor issue opens and resolves; URL down | `advanceMonitor(monitor: MonitorId, input: CheckIn \| ProbeResult \| null, deps: {projects: ProjectClient, probe: UptimeProbe, clock: Clock}): Promise<MonitorChange \| null>` (MonitorDO) | ProjectClient, UptimeProbe, Clock |
+| Design behavior | Use case (signature) | Ports | Runtime |
+|---|---|---|---|
+| Artifact upload | `uploadArtifact(upload: ArtifactUpload, token: AccessToken, deps: {control: ControlStore, blobs: BlobStore}): Promise<Artifact \| Refusal>` | ControlStore, BlobStore | console |
+| CI token cannot read | `authorize(token: AccessToken, scope: Scope, deps: {control: ControlStore}): Promise<Grant \| Refusal>` | ControlStore | console |
+| Crash-free rate | `releaseHealth(release: Release, environment: Environment, deps: {projects: ProjectClient}): Promise<ReleaseHealth>` | ProjectClient | console |
+| Missed check-in; Overlong run; Monitor issue opens and resolves; URL down | `advanceMonitor(monitor: MonitorId, input: CheckIn \| ProbeResult \| null, deps: {projects: ProjectClient, probe: UptimeProbe, clock: Clock}): Promise<MonitorChange \| null>` | ProjectClient, UptimeProbe, Clock | `MonitorDO` |
 
 ### Operating
 
-| Design behavior | Use case (signature) | Ports |
-|---|---|---|
-| Outcome totals | `outcomeTotals(project: ProjectId, range: TimeRange, deps: {archive: ArchiveQuery}): Promise<OutcomeTotals>` | ArchiveQuery |
-| Retention expiry | `enforceRetention(project: ProjectId, deps: {issues: IssueStore, blobs: BlobStore, clock: Clock, retention: RetentionPolicy}): Promise<Expiry>` | IssueStore, BlobStore, Clock |
-| Erasure | `eraseReporter(reporter: Reporter, actor: Member, deps: {control: ControlStore, projects: ProjectClient, blobs: BlobStore}): Promise<Erasure \| Refusal>` | ControlStore, ProjectClient, BlobStore |
-| Soft limit crossed | `compareUsage(deps: {usage: UsageSource, channels: Channel[], clock: Clock}): Promise<PlatformUsage[]>` | UsageSource, Channel, Clock |
+| Design behavior | Use case (signature) | Ports | Runtime |
+|---|---|---|---|
+| Outcome totals | `outcomeTotals(project: ProjectId, range: TimeRange, deps: {archive: ArchiveQuery}): Promise<OutcomeTotals>` | ArchiveQuery | console |
+| Retention expiry | `enforceRetention(project: ProjectId, deps: {issues: IssueStore, blobs: BlobStore, clock: Clock, retention: RetentionPolicy}): Promise<Expiry>` | IssueStore, BlobStore, Clock | `ProjectDO` |
+| Erasure | `eraseReporter(reporter: Reporter, actor: Member, deps: {control: ControlStore, projects: ProjectClient, blobs: BlobStore}): Promise<Erasure \| Refusal>` | ControlStore, ProjectClient, BlobStore | console |
+| Soft limit crossed | `compareUsage(deps: {usage: UsageSource, channels: Channel[], clock: Clock}): Promise<PlatformUsage[]>` | UsageSource, Channel, Clock | scheduler |
 
 ---
 
@@ -271,10 +279,18 @@ value from the design, or a `Refusal`.
   request that carries several.
 - It reads the Project's config (Client Keys, origins, filters, size
   limits, Quotas, trusted issuers) from `ProjectConfigSource`. KV holds
-  it; the console rewrites the entry whenever D1 changes.
-- `QuotaGate` checks category Quotas. `QuotaDO` (one per Project) leases
-  units to each ingest isolate, so most requests make no Durable Object
-  call. The Rate Limiting binding guards each Client Key before `QuotaDO`.
+  it; the console rewrites the entry whenever D1 changes. Each Client
+  Key's enabled state is not taken from KV.
+- `QuotaGate` checks category Quotas and Client Key state. `QuotaDO` (one
+  per Project) leases units to each ingest isolate, so most requests make
+  no Durable Object call. The Rate Limiting binding guards each Client
+  Key before `QuotaDO`.
+- `QuotaDO` owns each Client Key's enabled state. Every lease names one
+  Client Key and expires after the quota lease lifetime. Disabling a key
+  is a call to `QuotaDO`: it grants no further lease for the key, and it
+  reports the disable complete only once every outstanding lease has
+  expired. From that point every arrival on the key is refused. The
+  console writes D1 after `QuotaDO` confirms.
 - Items of out-of-scope kinds (transactions, spans, replays, profiles)
   are dropped with Outcomes.
 - The Arrival is produced to the K2 stream `arrivals`. A body over the K2
@@ -308,22 +324,24 @@ value from the design, or a `Refusal`.
 ### Stream consumption and processing
 
 K2 offers HTTP pull consumption with leases and no Worker consumer
-binding. `StreamPumpDO` drives it:
+binding. `StreamPumpDO` drives it through `pumpArrivals`:
 
 - Each pump instance holds a `worker_id` on the shared subscription
   `processing`; several instances split the work.
-- An alarm loop pulls a batch, calls `processArrival` per record through a
-  service binding to the processor Worker, and acks the batch. A record
-  that fails past its retry bound is written to R2 `deadletter/` and
-  acked, with an Outcome.
+- An alarm calls `pumpArrivals`, which pulls a batch, dispatches each
+  record by item kind, and acks the batch. Event items go to
+  `processArrival`; feedback items go to `fileReport`, carrying the
+  sign-in the tunnel forwarded. The `StreamPumpDO` root binds both
+  through a service binding to the processor Worker.
+- A record that fails past its retry bound is written to R2
+  `deadletter/` and acked, with an Outcome.
 - K2 gives no ordering across pumps, so processing is idempotent: Event
   ids key every write, and `ProjectDO` ignores an Event id it already
   counted within the dedup window.
 - `processArrival` normalizes, scrubs, applies source maps, derives
   Fingerprints, stores the scrubbed Event in R2 `events/`, and calls
-  `assignEvent` through `ProjectClient`. Feedback items become Reports
-  through `fileReport`, carrying the sign-in the tunnel forwarded.
-  Issue Changes go to the `effects` queue as ids.
+  `assignEvent` through `ProjectClient`. Issue Changes go to the
+  `effects` queue as ids.
 - `reprocessRange` creates a subscription at the earliest retained
   record, skips records outside the Time Range by their server
   timestamp, and deletes the subscription when done. Raw Retention is
@@ -345,11 +363,14 @@ binding. `StreamPumpDO` drives it:
   snoozes, History, Comments, Reports, Threads, and exact per-hour
   counters (events, users by hashed id, Sessions by status).
 - Status changes call `src/domain/issue`, which returns the next state
-  and the Issue Changes; the DO writes both in one transaction.
+  and the Issue Changes; the DO writes both in one transaction. A
+  Member's own action takes the same path through `triageIssue`.
 - `ProjectDO` alarms run sweeps (age transitions, inbox expiry, snooze
   dates, auto-resolve, retention) and recompute Forecasts.
-- Merge and split run as Workflows when they move more Events than one
-  request can; affected Fingerprints are locked so new Events wait.
+- Merge and split start a job through `LongJob` when they move more
+  Events than one request can; affected Fingerprints are locked so new
+  Events wait. The Workflow's steps call back into `ProjectDO` through
+  `ProjectClient`.
 - Search parses the Issue Query in `src/domain/search`, resolves the
   viewer's Projects from D1, sends the plan to each `ProjectDO`, and
   merges the pages by sort key with a Cursor.
@@ -359,10 +380,13 @@ binding. `StreamPumpDO` drives it:
 - The widget is a Vue custom element the product embeds. It posts the
   Report Submission through the tunnel route and shows the Filing
   Receipt it gets back, including the Follow-up Page link.
-- SDK `feedback` items take the ingest path and become Reports in
-  `processArrival`.
-- A Report Reference is 128 random bits, encoded for URLs. D1 stores only
-  its hash, with the Organization, Project and Report it names.
+- SDK `feedback` items take the ingest path and reach `fileReport`
+  through `pumpArrivals`.
+- `fileReport` asks `SpamJudge` and passes its verdict to `markSpam` as
+  a `SpamVerdict` value.
+- `Ids` mints each Report Reference as random, unguessable bits of the
+  Report Reference width, encoded for URLs, and hashes it. D1 stores only
+  the hash, with the Organization, Project and Report it names.
 - `reportStatusOf(issueState, externalLink)` is pure. `notifyReporters`
   computes the status before and after a change and sends a notice only
   when it differs.
@@ -378,29 +402,31 @@ binding. `StreamPumpDO` drives it:
   alarm from `DigestPolicy`.
 - `MetricRuleDO` alarms on the rule's resolution, reads counters, counts
   consecutive breaches, and changes the Incident.
-- Mail goes through the `send_email` binding. Each issue email carries a
-  Reply-To address with an HMAC token naming the Issue and the recipient
-  Member, and a Message-ID thread key per Issue.
-- Email Routing delivers replies to the inbound-mail Email Worker, which
-  verifies the token and the sender, strips quoted text, and calls
-  `applyEmailReply`.
+- Mail goes through the `send_email` binding. The email adapter gives
+  each issue email a Reply-To address with an HMAC token naming the Issue
+  and the recipient Member, and a Message-ID thread key per Issue.
+- Email Routing delivers replies to the inbound-mail Email Worker. The
+  email adapter parses the message and verifies the token;
+  `src/domain/mail` strips quoted text; `applyEmailReply` matches the
+  sender and applies the reply.
 
 ### Code and GitHub
 
-- One GitHub App per deployment. The github Worker verifies webhook
-  signatures, then handles `installation`, `installation_repositories`,
-  `issues` (closed with its state reason, reopened), `issue_comment`,
-  `push` and `pull_request`.
-- Installation tokens are minted from the App key held as a Worker secret
-  and cached in KV until shortly before expiry.
+- One GitHub App per deployment. The github adapter verifies webhook
+  signatures before parsing; the github Worker then handles
+  `installation`, `installation_repositories`, `issues` (closed with its
+  state reason, reopened), `issue_comment`, `push` and `pull_request`.
+- The github adapter mints installation tokens from the App key held as
+  a Worker secret and caches them in KV until shortly before expiry.
 - No echo: every outbound change records the expected resulting GitHub
   state on the External Link. An inbound event that matches it, or whose
-  actor is the App, is ignored.
+  actor is the App, is ignored; the match is `src/domain/tracker`.
 - Shared GitHub comments: a comment that starts with the share marker
-  enters the Thread. Who may use it is design Q3.
-- Outbound bodies come from a template with no field for reporter
-  addresses or Attachments. Evidence links point to the console, behind
-  Access.
+  enters the Thread; the marker rule is `src/domain/tracker`. Who may use
+  it is design Q3.
+- Outbound bodies come from the `src/domain/tracker` template, which has
+  no field for reporter addresses or Attachments. Evidence links point to
+  the console, behind Access.
 - Suspect commits use the GitHub GraphQL blame for the top in-app frame,
   through the Code Mapping.
 
@@ -433,15 +459,15 @@ binding. `StreamPumpDO` drives it:
 | Public Client Key | Ingest routes accept Client Keys only; the console never does. |
 | Flood | Rate Limiting binding before `QuotaDO`; refusal before any write. |
 | Personal data | Scrubbing runs in `processArrival` before R2 `events/` and before any DO write; `raw/` and K2 are read only by pumps. |
-| Leaked Report Reference | 128 random bits, hashed at rest, revocable; `viewFollowUp` also requires the reporter's or a Member's sign-in. |
+| Leaked Report Reference | Random and unguessable at the Report Reference width, hashed at rest, revocable; `viewFollowUp` also requires the reporter's or a Member's sign-in. |
 | Forged sign-in | `SignInVerifier` checks signature, issuer, audience and expiry; only issuers the Organization trusts count. |
 | Reporter addresses to GitHub | The outbound template has no such field; a test asserts it for every outbound path. |
-| Forged webhooks | HMAC verification before parsing. |
-| Forged email replies | HMAC token in the address plus sender match. |
+| Forged webhooks | HMAC verification in the github adapter before parsing. |
+| Forged email replies | HMAC token in the address, verified by the email adapter, plus sender match. |
 | Cross-tenant | `ProjectDO` ids derive from Project ids; entry points resolve the viewer's Projects before any DO call; tests cover search, Follow-up Pages and notices. |
 | Stolen Access Token | Stored as hashes in D1; scoped; revocable; optional expiry. |
 | Source maps | Readable only through the console, behind Access. |
-| RPC exposure | Every step past an authorization check is a module function, never a method on a `WorkerEntrypoint` or Durable Object class (the cloudflare-hosting skill). |
+| RPC exposure | Every step past an authorization check is a module function, never a method on a `WorkerEntrypoint`, Workflow or Durable Object class (the cloudflare-hosting skill). |
 
 ---
 
@@ -464,9 +490,11 @@ environment. CI runs the same.
   `wrangler dev` from starting at all without an API token. Adopters
   declare K2, Basin and Workers AI bindings in their own `nonprod` and
   `prod` environment blocks.
-- Each composition root picks its adapters from the bindings present:
-  `ArrivalStream` is K2 when a K2 binding exists, else `LogDO`, and so on
-  for each row below. That choice is the only stage-dependent code.
+- Each composition root reads an explicit stage parameter. On the local
+  stage it picks the stand-ins in the table below. On any other stage it
+  requires the real adapter for every port and refuses to start if a
+  binding is missing or a stand-in would be chosen, as it does for the
+  development issuer. That choice is the only stage-dependent code.
 - Tests run under `@cloudflare/vitest-plugin`, the renamed
   `@cloudflare/vitest-pool-workers`, so bindings in tests are the same
   runtime as in production.
@@ -476,29 +504,30 @@ environment. CI runs the same.
 - pnpm blocks install scripts by default; `pnpm-workspace.yaml` allows
   builds for `esbuild` and `workerd` only.
 
-Measured on 2026-11-07 with wrangler 4.158.0 and workerd 1.20261104.1,
-no login, no API token:
+The local stage maps each product to the adapter that carries it. The
+measured local status of each product, and the versions measured, are
+the as-built's.
 
-| Product | Local status | What carries it locally |
-|---|---|---|
-| Workers, service bindings, Static Assets | full | itself |
-| Durable Objects (SQLite, alarms) | full | itself |
-| D1, R2, KV | full | itself |
-| Queues (with dead-letter queue) | full | itself |
-| Workflows | full | itself |
-| Cron Triggers | full when triggered by hand; crons do not fire on their own | the scheduled handler, called by tests and by `pnpm dev:tick` |
-| Rate Limiting binding | full | itself |
-| Email Sending | simulated: each message is written as an `.eml` file | itself |
-| Email Workers (inbound) | full through the local email handler route | itself |
-| Secrets Store | full once a secret is created locally | not used; Worker secrets in `.dev.vars` |
-| K2 (produce and consume) | remote only; no local emulation | `LogDO` adapter |
-| Basin Pipelines | no-op: data is discarded | R2 NDJSON `ArchiveSink` adapter |
-| Basin SQL | remote only | D1 roll-up `ArchiveQuery` adapter |
-| Analytics Engine | no-op: nothing stored | nothing needed; live charts are empty locally |
-| Workers AI | remote only | rules `SpamJudge` adapter |
-| Cloudflare Access | mock identity only; tokens are not checked | Nightwatch's own JWT check against the local issuer |
-| Cloudflare account usage API | remote only | fake `UsageSource` |
-| GitHub | external service | a local fake GitHub Worker (issues, comments, webhooks signed with a local secret) |
+| Product | What carries it on the local stage |
+|---|---|
+| Workers, service bindings, Static Assets | itself |
+| Durable Objects (SQLite, alarms) | itself |
+| D1, R2, KV | itself |
+| Queues (with dead-letter queue) | itself |
+| Workflows | itself |
+| Cron Triggers | the scheduled handler, called by tests and by `pnpm dev:tick` |
+| Rate Limiting binding | itself |
+| Email Sending | itself; each message is written as an `.eml` file |
+| Email Workers (inbound) | itself, through the local email handler route |
+| Secrets Store | not used; Worker secrets in `.dev.vars` |
+| K2 (produce and consume) | `LogDO` adapter |
+| Basin Pipelines | R2 NDJSON `ArchiveSink` adapter |
+| Basin SQL | D1 roll-up `ArchiveQuery` adapter |
+| Analytics Engine | nothing needed; live charts are empty locally |
+| Workers AI | rules `SpamJudge` adapter |
+| Cloudflare Access | Nightwatch's own JWT check against the local issuer |
+| Cloudflare account usage API | fake `UsageSource` |
+| GitHub | a local fake GitHub Worker (issues, comments, webhooks signed with a local secret) |
 
 ---
 
@@ -508,13 +537,14 @@ no login, no API token:
 |---|---|
 | Event, Attachment and Arrival size limits | ingest settings, overridable per Project in D1 |
 | Quota per category per scope; Report Quota | D1 project config, copied to KV; enforced by `QuotaGate` |
+| Quota lease lifetime (introduced here: how long a Client Key disable takes to complete) | ingest settings, honored by `QuotaDO` |
 | Retry advice ceiling | ingest settings |
 | Raw Retention | K2 stream retention and the R2 `raw/` lifecycle rule |
 | Event, Attachment, Report, Outcome, History Retention | `RetentionPolicy` from D1 Organization settings; R2 lifecycle rules; Basin partition expiry |
 | Clock-drift clamp | `src/domain/normalize` settings from the processor composition root |
 | New Issue Age, Settle Age, Inbox Expiry | `IssuePolicies`, built by the `ProjectDO` composition root from D1 project config |
-| Early Escalation Policy thresholds | `EarlyEscalationPolicy` in `IssuePolicies` |
-| Forecast window and refresh | `ForecastPolicy` in `IssuePolicies` |
+| Early Escalation Policy thresholds | Early Escalation Policy in `IssuePolicies` |
+| Forecast window and refresh | Forecast Policy in `IssuePolicies` |
 | Auto-Resolve Age | D1 project config |
 | Alert Quiet Period, metric window, breach and recovery counts | D1 rule rows |
 | Alert Evaluation Delay | `effects` queue batch timeout and consumer settings |
@@ -522,11 +552,11 @@ no login, no API token:
 | Suspect Commit Window | github settings |
 | Grouping transition window | D1 project config (current and secondary Grouping Version, end time) |
 | Report Reference lifetime | `RetentionPolicy` |
+| Report Reference width (introduced here) | `Ids` adapter settings |
 | Spam Judge threshold | `SpamJudge` adapter settings |
 | Cron margin, maximum runtime, Uptime interval, failure and recovery counts | D1 monitor rows, read by `MonitorDO` |
 | Reply-by-email address lifetime | notifier settings (token expiry) |
 | Platform Soft Limits | scheduler settings, one value per product |
-| Config propagation lag (introduced here: KV is eventually consistent) | KV cache TTL in ingest settings |
 | Dedup window | `ProjectDO` settings |
 
 "Settings" are Worker `vars` in each Worker's `wrangler.jsonc`, read once
@@ -538,10 +568,10 @@ by its composition root. The as-built records their values per stage.
 
 | Question | Answer |
 |---|---|
-| Release class | A tagged release of this repository is R2: it publishes packages and new configuration for adopters. Our own first deployment, if we make one, is R3 and owes the readiness review. |
+| Release class | R2: a tagged release of this repository publishes packages and new configuration for adopters. |
 | Stages and platforms | The repository defines the local stage only. An adopter adds `nonprod` and `prod` as Wrangler environments in their own config; bindings are repeated per environment, `workers_dev` is false, and `observability` is on (the cloudflare-hosting skill). Workers Paid is required for K2, Basin and Email Sending. |
 | Rollout and rollback | Workers deploy with gradual versions; rollback is `wrangler rollback`. Durable Object schema changes are expand-contract migrations inside each DO. K2 records and R2 objects carry a schema version. Written data does not roll back. |
-| Our own deployment | Not guaranteed. If we run one, its Access application, policies and tokens live in the private infra repo (tds-internal), and its Wrangler environments live there or in a private deploy repo, never in this public one. |
+| Our own deployment | Not guaranteed. If we run one, that deployment is R3 and owes the readiness review. Its Access application, policies and tokens live in the private infra repo (tds-internal), and its Wrangler environments live there or in a private deploy repo, never in this public one. |
 | Telemetry | OpenTelemetry semantics on Workers Logs and traces: `service.name`, `service.version`, `deployment.environment.name` on every record; structured JSON logs; no secret, reporter address or event content in any telemetry. |
 | Data warehouse | Nothing is ledgered. Nightwatch is open source with no guaranteed host, and its Basin archive holds its history. A deployment of ours may add a ledger through its own record. |
 
@@ -555,7 +585,6 @@ by its composition root. The as-built records their values per stage.
 | Email Sending quota reached | notifier errors; reporter notices delayed | notifier logs | `Mailer` |
 | GitHub sync loop or drift | External Link broken or flapping | github Worker logs keyed by link | `Tracker`; no-echo record |
 | Tunnel route missing or not forwarding the assertion | every report refused as unsigned | ingest Refusal reasons in Workers Logs | `SignInVerifier`; product integration |
-| Config change not yet seen by ingest | a disabled key admits data briefly | KV entry age | config propagation lag |
 
 ---
 
@@ -583,6 +612,11 @@ by its composition root. The as-built records their values per stage.
 `docs/TECH-RADAR.md` carries each row. Fleet rows keep the fleet's ring
 and name the fleet as their source.
 
+The design targets this public repository and, for a deployment of ours,
+the private infra repo (tds-internal) or a private deploy repo. Each
+tier below is checked against both: "none" means neither repository's
+visibility nor plan gates the feature.
+
 | Item | Ring | Source | Tier that gates it | Rationale |
 |---|---|---|---|---|
 | TypeScript (strict) | Adopt | fleet | none | The language of every runtime here. |
@@ -597,14 +631,18 @@ and name the fleet as their source.
 | Vue 3 + Nuxt | Adopt | fleet | none | Console (Nitro `cloudflare-module` preset) and the widget (Vue custom element). |
 | Cloudflare Workers, wrangler, Durable Objects, R2 | Trial | fleet | Workers Paid for production volume | Runtime, deploy tool, per-Project state, blobs. |
 | Cloudflare Secrets Store | Trial | fleet | open beta | Not used at first: the GitHub App key is a per-Worker secret. |
-| GitHub Actions | Adopt | fleet | none on a public repository | CI. |
+| GitHub Actions | Adopt | fleet | none on the public repository; on a private repository, minutes come from the owner's plan | CI. |
 | Cloudflare K2 | Trial | proposed | Workers Paid; public beta | The arrival log, behind `ArrivalStream`. |
 | Cloudflare Basin (Pipelines, Catalog, SQL) | Trial | proposed | Workers Paid | Exact Outcomes and the archive. |
 | D1, KV, Queues, Workflows | Trial | proposed | Workers Paid for production volume | Control plane, config cache, effects, long jobs. |
+| Rate Limiting binding | Trial | proposed | Cloudflare plan limits only; no repository tier | Per-Client-Key guard before `QuotaDO`. |
+| Cron Triggers | Trial | proposed | none | Scheduler Worker: archive maintenance and Platform Usage. |
+| Workers Logs | Trial | proposed | Workers plan sets volume and retention; no repository tier | Operability logs and traces. |
 | Analytics Engine | Trial | proposed | none while unbilled | Live, sampled metrics. |
 | Email Sending, Email Routing | Trial | proposed | Workers Paid and an onboarded domain; Sending is beta | Mail out and replies in. |
 | Cloudflare Access | Trial | proposed | Zero Trust seats | Every sign-in. |
 | Workers AI | Trial | proposed | none for the free allocation | Second `SpamJudge` adapter. |
+| GitHub App (webhooks, installation tokens, REST and GraphQL APIs, CODEOWNERS reads) | Trial | proposed | none: Apps, their webhooks and GraphQL blame work on public and private repositories alike | Backs `Tracker` and `CodeHost`. |
 | `jose` | Trial | proposed | none | JWT verification and signing. |
 | `@jridgewell/trace-mapping` | Trial | proposed | none | Source map lookup. |
 | `postal-mime` | Trial | proposed | none | Parse inbound replies. |
@@ -664,6 +702,8 @@ and name the fleet as their source.
 | Basin SQL on the request path | No binding and no latency guarantee. |
 | Containers for processing | Nothing in scope needs a native runtime. |
 | A `Symbolicator` port now | One mechanism (source maps in Workers) and no second in scope. |
+| `reportStatusOf` as a seam | One rule, the design's Report Status table, and nothing retunes it; it is a domain function in `src/domain/report`. |
+| `OwnershipResolver` as a seam | One rule (last match wins, rules over CODEOWNERS) and nothing retunes it; it is a domain function in `src/domain/ownership`. |
 | Hyperdrive to an external Postgres | Off Cloudflare. |
 | Ingest-time clock for monitors | Durable Object alarms give a reliable wall clock. |
 | Separate ports for Member and Reporter identity | Both are the same Access assertion; the domain decides which a person is. |
