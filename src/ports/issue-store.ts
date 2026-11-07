@@ -25,6 +25,7 @@ import type { Environment, SessionBucket, SessionCounts, UserCounts } from '../d
 import type { Release, ReleaseFirstSeen } from '../domain/release/ordering.js';
 import type { Report, Reporter } from '../domain/report/report.js';
 import type { Comment, ReportStatusChange } from '../domain/report/thread.js';
+import type { ExternalLink } from '../domain/tracker/external-link.js';
 
 /** A Forecast with the time it was computed, so a sweep knows when to refresh it. */
 export type StoredForecast = Forecast & { readonly computedAt: number };
@@ -127,4 +128,12 @@ export interface IssueStore {
   /** Each reason a Member follows the Issue. */
   participationsOf(issueId: IssueId): Promise<readonly Participation[]>;
   addParticipation(issueId: IssueId, participation: Participation): Promise<void>;
+  // --- task-011: External Links and Short Id lookup ---
+
+  /** Saves the Issue's External Link, replacing the one it had. */
+  putExternalLink(externalLink: ExternalLink): Promise<void>;
+  /** The Issue's External Link, Linked or Broken; null when it has none. */
+  externalLinkOf(issueId: IssueId): Promise<ExternalLink | null>;
+  /** The Issue the Short Id counter names in this Project, or null. */
+  issueOfShortId(shortId: number): Promise<IssueId | null>;
 }

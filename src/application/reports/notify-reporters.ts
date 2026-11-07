@@ -23,6 +23,7 @@ import { reporterNotificationFor, reporterNotificationForComment, type ReporterN
 import type { Report } from '../../domain/report/report.js';
 import { reportStatusOf, type ReportStatusFacts } from '../../domain/report/status.js';
 import { lastShownStatus, triageOf, type Comment } from '../../domain/report/thread.js';
+import type { ExternalLink } from '../../domain/tracker/external-link.js';
 import type { Clock } from '../../ports/clock.js';
 import type { ControlStore } from '../../ports/control-store.js';
 import type { Ids } from '../../ports/ids.js';
@@ -39,7 +40,14 @@ export type NotifyReportersDeps = {
   settings: ReportSettings;
 };
 
-type IssueFacts = { projectId: ProjectId; organizationId: OrganizationId; issue: IssueState; comments: readonly Comment[]; facts: Omit<ReportStatusFacts, 'lastShown'> };
+type IssueFacts = {
+  projectId: ProjectId;
+  organizationId: OrganizationId;
+  issue: IssueState;
+  externalLink: ExternalLink | null;
+  comments: readonly Comment[];
+  facts: Omit<ReportStatusFacts, 'lastShown'>;
+};
 
 // --- helpers ---
 
@@ -68,7 +76,7 @@ async function send(
 
 async function statusNotification(report: Report, issue: IssueFacts, deps: NotifyReportersDeps): Promise<ReporterNotification | null> {
   const before = lastShownStatus(await deps.projects.statusChangesOf(issue.projectId, report.id));
-  const after = reportStatusOf(issue.issue, null, { ...issue.facts, lastShown: before });
+  const after = reportStatusOf(issue.issue, issue.externalLink, { ...issue.facts, lastShown: before });
   if (after !== before && !report.spam) {
     await deps.projects.recordShownStatus(issue.projectId, report.id, { status: after, at: deps.clock.now() });
   }
@@ -96,7 +104,8 @@ async function notifyOne(change: IssueChange, stored: Report, issue: IssueFacts,
 async function factsOf(scope: { projectId: ProjectId; organizationId: OrganizationId }, issue: IssueState, projects: ProjectClient): Promise<IssueFacts> {
   const comments = await projects.commentsOn(scope.projectId, issue.issueId);
   const releasesSeen = await projects.releasesSeen(scope.projectId);
-  return { ...scope, issue, comments, facts: { triage: triageOf(comments), releasesSeen } };
+  const externalLink = await projects.externalLinkOf(scope.projectId, issue.issueId);
+  return { ...scope, issue, externalLink, comments, facts: { triage: triageOf(comments), releasesSeen } };
 }
 
 // --- exports ---
