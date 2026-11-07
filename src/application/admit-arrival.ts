@@ -15,6 +15,7 @@ import {
 import type { Arrival, IngestSettings, ProjectConfig } from '../domain/ingest/arrival.js';
 import { checkAccess } from '../domain/ingest/access.js';
 import {
+  applyInboundFilters,
   arrivalEnvelope,
   isOpen,
   isOversizeArrival,
@@ -121,8 +122,10 @@ export async function admitArrival(arrival: Arrival, deps: AdmitArrivalDeps): Pr
   const envelope = arrivalEnvelope(arrival);
   if (isRefusal(envelope)) return refuse({ arrival, receivedAt, reason: envelope.refusal, deps });
   const triaged = triageItems({ envelope, limits: access.config.sizeLimits });
-  const denials = await checkQuotas({ arrival, publicKey: access.credentials.publicKey, fates: triaged, deps });
-  const fates = applyQuotaDenials({ fates: triaged, denials });
+  const userAgent = arrival.headers['user-agent'] ?? null;
+  const unfiltered = applyInboundFilters({ fates: triaged, filters: access.config.inboundFilters, userAgent });
+  const denials = await checkQuotas({ arrival, publicKey: access.credentials.publicKey, fates: unfiltered, deps });
+  const fates = applyQuotaDenials({ fates: unfiltered, denials });
   const body = keptBody({ arrival, envelope, fates });
   const recordId = fates.some(isOpen) ? await retain({ arrival, receivedAt, body, deps }) : null;
   const decided = settleOpenItems({ fates, verdict: { kind: 'accepted', reason: null } });

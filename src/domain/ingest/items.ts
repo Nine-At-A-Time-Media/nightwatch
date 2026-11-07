@@ -9,6 +9,7 @@ import { parseEnvelope, serializeEnvelope, type Envelope, type EnvelopeItem } fr
 import type { DataCategory } from '../protocol/retry-advice.js';
 import type { Refusal } from '../refusal.js';
 import type { Arrival, EndpointKind, SizeLimits } from './arrival.js';
+import { matchingInboundFilter, type InboundFilterConfig } from './inbound-filters.js';
 
 export type ItemClass =
   | { readonly scope: 'in'; readonly category: DataCategory }
@@ -32,6 +33,8 @@ const IN_SCOPE = new Map<string, DataCategory>([
   ['security', 'security'],
 ]);
 
+const decoder = new TextDecoder();
+
 const ENDPOINT_ITEM: Readonly<Record<Exclude<EndpointKind, 'envelope'>, string>> = {
   store: 'event',
   security: 'security',
@@ -53,7 +56,19 @@ function isOversizeItem({ item, limits }: { item: EnvelopeItem; limits: SizeLimi
   return item.payload.length > (item.header.type === 'attachment' ? limits.attachment : limits.event);
 }
 
+function isFilterable(fate: ItemFate): fate is OpenItem {
+  return isOpen(fate) && fate.item.header.type === 'event';
+}
+
 // --- helpers ---
+
+function parsedPayload(item: EnvelopeItem): unknown {
+  try {
+    return JSON.parse(decoder.decode(item.payload));
+  } catch {
+    return undefined;
+  }
+}
 
 export function classifyItem(type: string): ItemClass {
   const inScope = IN_SCOPE.get(type);
@@ -80,6 +95,23 @@ function triageItem({ item, limits }: { item: EnvelopeItem; limits: SizeLimits }
 /** Each item's fate before quotas and durability. */
 export function triageItems({ envelope, limits }: { envelope: Envelope; limits: SizeLimits }): ItemFate[] {
   return envelope.items.map((item) => triageItem({ item, limits }));
+}
+
+/** Filter every open event an Inbound Filter matches; an event that does not parse is left to processing. */
+export function applyInboundFilters({
+  fates,
+  filters,
+  userAgent,
+}: {
+  fates: readonly ItemFate[];
+  filters: InboundFilterConfig;
+  userAgent: string | null;
+}): ItemFate[] {
+  return fates.map((fate) => {
+    const event = isFilterable(fate) ? parsedPayload(fate.item) : undefined;
+    const filter = event === undefined ? null : matchingInboundFilter({ event, config: filters, userAgent });
+    return filter ? { ...fate, verdict: { kind: 'filtered', reason: filter } } : fate;
+  });
 }
 
 /** The body to retain: as received when every item is kept, else the envelope header and the kept items. */
