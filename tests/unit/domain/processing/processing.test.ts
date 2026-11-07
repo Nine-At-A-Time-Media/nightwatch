@@ -119,29 +119,39 @@ describe('normalizeContext', () => {
   });
 });
 
+const PLACE = { recordId: 'rec-1', index: 2 };
+
 describe('feedbackSubmission', () => {
-  it('reads the message and associated event of a feedback item', () => {
+  it('reads the message and associated event of a feedback item, keyed by its own event id', () => {
     const feedback = item('feedback', {
+      event_id: 'f'.repeat(32),
       contexts: { feedback: { message: 'the save button does nothing', associated_event_id: 'c'.repeat(32) } },
     });
-    expect(feedbackSubmission(feedback)).toEqual({
+    expect(feedbackSubmission(feedback, PLACE)).toEqual({
       message: 'the save button does nothing',
       screenshot: null,
       associatedEventId: 'c'.repeat(32),
+      filingKey: 'f'.repeat(32),
     });
+    expect(feedbackSubmission(item('feedback', { contexts: {} }), PLACE)).toMatchObject({ filingKey: 'rec-1/2' });
   });
 
-  it('reads the comments and event of a legacy user report', () => {
+  it('reads the comments and event of a legacy user report, keyed by where it sits', () => {
     const report = item('user_report', { event_id: 'd'.repeat(32), name: 'Ada', email: 'ada@example.com', comments: 'it crashed' });
-    expect(feedbackSubmission(report)).toEqual({ message: 'it crashed', screenshot: null, associatedEventId: 'd'.repeat(32) });
+    expect(feedbackSubmission(report, PLACE)).toEqual({
+      message: 'it crashed',
+      screenshot: null,
+      associatedEventId: 'd'.repeat(32),
+      filingKey: 'rec-1/2',
+    });
   });
 
   it('never trusts a name or address the item carries, and never throws on what it reads', () => {
     fc.assert(
       fc.property(fc.constantFrom('feedback', 'user_report'), fc.jsonValue(), (type, payload) => {
-        const submission = feedbackSubmission(item(type, payload));
+        const submission = feedbackSubmission(item(type, payload), PLACE);
         expect(typeof submission.message).toBe('string');
-        expect(Object.keys(submission).sort()).toEqual(['associatedEventId', 'message', 'screenshot']);
+        expect(Object.keys(submission).sort()).toEqual(['associatedEventId', 'filingKey', 'message', 'screenshot']);
       }),
       { numRuns: 200 },
     );

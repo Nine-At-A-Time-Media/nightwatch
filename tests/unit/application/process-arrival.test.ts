@@ -4,13 +4,16 @@
 // processor reaches ProjectDO.
 import { describe, expect, it } from 'vitest';
 import { processArrival, type ProcessArrivalDeps } from '../../../src/application/process-arrival.js';
+import { uploadArtifact } from '../../../src/application/releases/upload-artifact.js';
 import { eventBlobKey } from '../../../src/domain/event/event-summary.js';
 import { gv1 } from '../../../src/domain/grouping/grouping-version.js';
 import type { ArrivalRecord } from '../../../src/domain/ingest/arrival.js';
 import type { ProcessingConfig } from '../../../src/domain/processing/processing.js';
 import { serializeEnvelope } from '../../../src/domain/protocol/envelope.js';
+import { isRefusal } from '../../../src/domain/refusal.js';
+import { CI_TOKEN_SCOPES, tokenBytes } from '../../../src/domain/tenancy/access-token.js';
 import { FakeArchiveSink } from '../../_fakes/fake-archive-sink.js';
-import { ADA, PROJECT, T0, assertionOf, world as reportsWorld } from './reports/world.js';
+import { ADA, ORG, PROJECT, T0, assertionOf, world as reportsWorld } from './reports/world.js';
 
 // --- builders ---
 
@@ -113,7 +116,7 @@ async function storedEvent(
   w: ReturnType<typeof world>,
   eventId = EVENT_ID,
 ): Promise<{ event: Record<string, unknown>; removals: unknown[] }> {
-  const bytes = await w.blobs.get(eventBlobKey(eventId));
+  const bytes = await w.blobs.get(eventBlobKey({ projectId: PROJECT, eventId }));
   if (bytes === null) throw new Error(`no stored event ${eventId}`);
   return JSON.parse(dec(bytes)) as { event: Record<string, unknown>; removals: unknown[] };
 }
@@ -165,7 +168,7 @@ describe('processArrival', () => {
 
   it('Source map applied: Given a matching Artifact was uploaded, When a minified browser error is processed, Then its frames show original file, line and function', async () => {
     const w = world();
-    w.control.addArtifact(PROJECT, artifact);
+    await w.control.putArtifact(ORG, artifact);
     await w.blobs.put('artifacts/map-1', enc(JSON.stringify(rawMap)));
     const result = await processArrival(record([browserError()]), w.deps);
 
@@ -181,9 +184,31 @@ describe('processArrival', () => {
     expect(grouped?.summary.culprit).toBe('src/cart.ts in checkout');
   });
 
+  it('Source map applied: an Artifact uploaded through uploadArtifact is the one processing finds for the Project', async () => {
+    const w = world();
+    const token = 'nw_ci_secret';
+    await w.control.putAccessToken(await w.ids.hashContent(tokenBytes(token)), {
+      organizationId: ORG,
+      scopes: CI_TOKEN_SCOPES,
+      expiresAt: null,
+      revoked: false,
+    });
+    const upload = { release: 'web@1.0.0', debugId: null, fileName: '~/static/app.min.js.map', bytes: enc(JSON.stringify(rawMap)) };
+    const uploaded = await uploadArtifact(upload, token, w);
+    if (isRefusal(uploaded)) throw new Error(uploaded.refusal);
+
+    await processArrival(record([browserError()]), w.deps);
+
+    const stored = await storedEvent(w);
+    expect(stored.event['errors']).toEqual([]);
+    expect(stored.event['exceptions']).toEqual([
+      expect.objectContaining({ frames: [expect.objectContaining({ filename: 'src/cart.ts', function: 'checkout' })] }),
+    ]);
+  });
+
   it('Missing source map: Given no matching Artifact, When a minified error is processed, Then frames stay minified and the event records why', async () => {
     const w = world();
-    w.control.addArtifact(PROJECT, { ...artifact, release: 'web@0.9.0' });
+    await w.control.putArtifact(ORG, { ...artifact, release: 'web@0.9.0' });
     await w.blobs.put('artifacts/map-1', enc(JSON.stringify(rawMap)));
     await processArrival(record([browserError()]), w.deps);
 
@@ -196,12 +221,12 @@ describe('processArrival', () => {
 
   it('Missing source map: an Artifact whose file is gone or is no source map counts as missing, and non-browser events record nothing', async () => {
     const w = world();
-    w.control.addArtifact(PROJECT, artifact);
+    await w.control.putArtifact(ORG, artifact);
     await processArrival(record([browserError()]), w.deps);
     expect((await storedEvent(w)).event['errors']).toEqual([{ path: 'exceptions.0.frames.0', reason: 'missing-artifact' }]);
 
     const v = world();
-    v.control.addArtifact(PROJECT, artifact);
+    await v.control.putArtifact(ORG, artifact);
     await v.blobs.put('artifacts/map-1', enc('not a source map'));
     await processArrival(record([browserError()]), v.deps);
     expect((await storedEvent(v)).event['errors']).toEqual([{ path: 'exceptions.0.frames.0', reason: 'missing-artifact' }]);
@@ -228,6 +253,34 @@ describe('processArrival', () => {
     expect(again.outcomes).toEqual([]);
   });
 
+  it('keys each stored Event by its Project, so two Projects sending one event id keep their own Events', async () => {
+    const w = world();
+    const OTHER = 'project-2';
+    w.control.addProject(ORG, OTHER);
+    w.control.setProcessingConfig(OTHER, config());
+    const stolen = errorEvent({ exception: { values: [{ type: 'PaymentError', value: 'card stolen' }] } });
+    await processArrival(record([errorEvent()]), w.deps);
+    await processArrival(record([stolen], { projectId: OTHER }), w.deps);
+
+    const eventKeys = [...w.blobs.blobs.keys()].filter((key) => key.startsWith('events/'));
+    expect(eventKeys).toHaveLength(2);
+    expect(dec((await w.blobs.get(eventBlobKey({ projectId: PROJECT, eventId: EVENT_ID }))) ?? new Uint8Array())).toContain('declined');
+    expect(dec((await w.blobs.get(eventBlobKey({ projectId: OTHER, eventId: EVENT_ID }))) ?? new Uint8Array())).toContain('card stolen');
+  });
+
+  it('remembers Event ids per Project: the same event id in two Projects is a duplicate in neither', async () => {
+    const w = world();
+    const OTHER = 'project-2';
+    w.control.addProject(ORG, OTHER);
+    w.control.setProcessingConfig(OTHER, config());
+    const first = await processArrival(record([errorEvent()]), w.deps);
+    const second = await processArrival(record([errorEvent()], { projectId: OTHER }), w.deps);
+
+    expect(first.assignments[0]).toMatchObject({ duplicate: false });
+    expect(second.assignments[0]).toMatchObject({ duplicate: false });
+    expect(await w.projects.store(OTHER).listIssues()).toHaveLength(1);
+  });
+
   it('files the Report a signed-in feedback item carries, as the Reporter the forwarded sign-in names', async () => {
     const w = world();
     const feedback = {
@@ -244,6 +297,31 @@ describe('processArrival', () => {
     });
     expect(w.mailer.sentTo(ADA)).toHaveLength(1);
     expect(result.outcomes).toEqual([]);
+  });
+
+  it('Duplicate arrival: Given a feedback item was already filed, When its Arrival Record is delivered again, Then no second Report is filed and no second notice sent', async () => {
+    const w = world();
+    const feedback = { type: 'feedback', payload: { event_id: 'f'.repeat(32), contexts: { feedback: { message: 'it broke' } } } };
+    const arrival = record([feedback], { assertion: assertionOf(ADA) });
+    const first = await processArrival(arrival, w.deps);
+    const again = await processArrival(arrival, w.deps);
+    const resent = await processArrival(record([feedback], { assertion: assertionOf(ADA) }), w.deps);
+
+    expect(again.filingReceipts[0]?.reportId).toBe(first.filingReceipts[0]?.reportId);
+    expect(resent.filingReceipts[0]?.reportId).toBe(first.filingReceipts[0]?.reportId);
+    expect(await w.projects.store(PROJECT).reportsBy({ email: ADA })).toHaveLength(1);
+    expect(w.mailer.sentTo(ADA)).toHaveLength(1);
+  });
+
+  it('Duplicate arrival: a legacy user report is filed once per Arrival Record and item, since its event_id names the Event it is about', async () => {
+    const w = world();
+    const report = { type: 'user_report', payload: { event_id: EVENT_ID, comments: 'it crashed' } };
+    const arrival = record([report, report], { assertion: assertionOf(ADA) });
+    await processArrival(arrival, w.deps);
+    await processArrival(arrival, w.deps);
+
+    expect(await w.projects.store(PROJECT).reportsBy({ email: ADA })).toHaveLength(2);
+    expect(w.mailer.sentTo(ADA)).toHaveLength(2);
   });
 
   it('refuses feedback without a sign-in, with the filing Outcome archived', async () => {
@@ -291,7 +369,7 @@ describe('processArrival', () => {
 
     expect(dropped.assignments).toEqual([{ tombstone: issueId, changes: [], duplicate: false }]);
     expect(dropped.outcomes).toEqual([expect.objectContaining({ kind: 'discarded', reason: 'tombstone', category: 'error' })]);
-    expect(await w.blobs.get(eventBlobKey('b'.repeat(32)))).toBeNull();
+    expect(await w.blobs.get(eventBlobKey({ projectId: PROJECT, eventId: 'b'.repeat(32) }))).toBeNull();
   });
 
   it('reads a body kept in the BlobStore, and refuses a record whose body is gone or whose Project is unknown', async () => {

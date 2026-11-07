@@ -4,6 +4,9 @@
  * Validates what a reporter sends, and decides who may open a Report's
  * Follow-up Page: its Reporter, or a Member of its Project.
  *
+ * A submission may carry a filing key: the same key from the same Reporter
+ * names the same filing, so a resend or a double-submit files one Report.
+ *
  * Times are epoch milliseconds. The Reporter's address is the one a Sign-in
  * asserted, lowercased; Nightwatch never asks for it.
  */
@@ -31,11 +34,13 @@ export type Report = {
   readonly referenceHash: string;
 };
 
-/** What a reporter sends: a message, an optional screenshot, an optional associated event. */
+/** What a reporter sends: a message, an optional screenshot, an optional associated event, an optional filing key. */
 export type ReportSubmission = {
   readonly message: string;
   readonly screenshot: Uint8Array | null;
   readonly associatedEventId: string | null;
+  /** Names this filing, so a repeat of it files nothing new; absent, every submission is a new filing. */
+  readonly filingKey?: string;
 };
 
 /** The fields of a submission as received; nothing in it is trusted yet. */
@@ -43,6 +48,9 @@ export type SubmissionFields = Readonly<Record<string, unknown>>;
 
 /** The bounds a submission must fit, supplied by the composition root. */
 export type SubmissionLimits = { readonly maxMessageLength: number };
+
+/** A filing key is chosen by the sender; this bounds what the Project keeps for it. */
+export const MAX_FILING_KEY_LENGTH = 200;
 
 // --- predicates ---
 
@@ -70,6 +78,12 @@ function associatedEventOf(value: unknown): string | null | Refusal {
   return typeof value === 'string' && value !== '' ? value : refusal('invalid-associated-event');
 }
 
+function filingKeyOf(value: unknown): string | null | Refusal {
+  if (isAbsent(value)) return null;
+  const valid = typeof value === 'string' && value !== '' && value.length <= MAX_FILING_KEY_LENGTH;
+  return valid ? value : refusal('invalid-filing-key');
+}
+
 // --- exports ---
 
 /** Validates a submission: the message must be non-blank and within the bound; the rest is optional. */
@@ -81,10 +95,17 @@ export function validateSubmission(fields: SubmissionFields, limits: SubmissionL
   if (screenshot !== null && !(screenshot instanceof Uint8Array)) return screenshot;
   const associatedEventId = associatedEventOf(fields['associatedEventId']);
   if (associatedEventId !== null && typeof associatedEventId !== 'string') return associatedEventId;
-  return { message, screenshot, associatedEventId };
+  const filingKey = filingKeyOf(fields['filingKey']);
+  if (filingKey !== null && typeof filingKey !== 'string') return filingKey;
+  return filingKey === null ? { message, screenshot, associatedEventId } : { message, screenshot, associatedEventId, filingKey };
+}
+
+/** True when the Report was filed by whom the Sign-in names. */
+export function isFiledBy(report: Report, signIn: SignIn): boolean {
+  return isSameAddress(signIn.email, report.reporter.email);
 }
 
 /** Only the Report's Reporter, or a Member of its Project, may open its Follow-up Page. */
 export function canViewFollowUp(signIn: SignIn, report: Report, isProjectMember: boolean): boolean {
-  return isProjectMember || isSameAddress(signIn.email, report.reporter.email);
+  return isProjectMember || isFiledBy(report, signIn);
 }

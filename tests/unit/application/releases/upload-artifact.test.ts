@@ -5,7 +5,9 @@ import { isRefusal } from '../../../../src/domain/refusal.js';
 import { artifactKey, type ArtifactUpload } from '../../../../src/domain/release/artifact-upload.js';
 import { matchArtifact, normalizedDebugId } from '../../../../src/domain/sourcemap/artifact.js';
 import { CI_TOKEN_SCOPES } from '../../../../src/domain/tenancy/access-token.js';
-import { issueToken, ORG, OTHER_ORG, world } from './world.js';
+import { issueToken, OTHER_ORG, PROJECT, world } from './world.js';
+
+const OTHER_PROJECT = 'project-2';
 
 const SOURCE_MAP = new TextEncoder().encode('{"version":3,"sources":["app.ts"],"mappings":"AAAA"}');
 const BUNDLE_URL = 'https://cdn.example/static/app.min.js';
@@ -23,7 +25,7 @@ describe('uploadArtifact', () => {
     const artifact = await uploadArtifact(sourceMap(), ci, w);
     if (isRefusal(artifact)) throw new Error(artifact.refusal);
 
-    const indexed = await w.control.findArtifacts({ organizationId: ORG, debugIds: [], release: 'web@1.0.0' });
+    const indexed = await w.control.artifactsFor(PROJECT, { debugIds: [], release: 'web@1.0.0' });
     const matched = matchArtifact(frame, { debugImages: [], release: 'web@1.0.0' }, indexed);
     expect(matched).toEqual(artifact);
     expect(await w.blobs.get(artifactKey(artifact.id))).toEqual(SOURCE_MAP);
@@ -37,7 +39,7 @@ describe('uploadArtifact', () => {
     const artifact = await uploadArtifact(sourceMap({ release: null, debugId }), ci, w);
     if (isRefusal(artifact)) throw new Error(artifact.refusal);
 
-    const indexed = await w.control.findArtifacts({ organizationId: ORG, debugIds: [normalizedDebugId(debugId)], release: null });
+    const indexed = await w.control.artifactsFor(PROJECT, { debugIds: [normalizedDebugId(debugId)], release: null });
     const debugImages = [{ type: 'sourcemap', debugId: debugId.toLowerCase(), codeFile: BUNDLE_URL }];
     expect(matchArtifact(frame, { debugImages, release: null }, indexed)).toEqual(artifact);
   });
@@ -53,17 +55,18 @@ describe('uploadArtifact', () => {
     expect(again).toEqual(first);
     expect(elsewhere.id).toBe(first.id);
     expect([...w.blobs.blobs.keys()]).toEqual([artifactKey(first.id)]);
-    expect(await w.control.findArtifacts({ organizationId: ORG, debugIds: [], release: 'web@1.0.0' })).toEqual([first]);
-    expect(await w.control.findArtifacts({ organizationId: ORG, debugIds: [], release: 'web@1.0.1' })).toEqual([elsewhere]);
+    expect(await w.control.artifactsFor(PROJECT, { debugIds: [], release: 'web@1.0.0' })).toEqual([first]);
+    expect(await w.control.artifactsFor(PROJECT, { debugIds: [], release: 'web@1.0.1' })).toEqual([elsewhere]);
   });
 
   it("keeps an Artifact within the token's Organization", async () => {
     const w = world();
     const other = await issueToken(w, 'other', { organizationId: OTHER_ORG, scopes: CI_TOKEN_SCOPES });
+    w.control.addProject(OTHER_ORG, OTHER_PROJECT);
     const artifact = await uploadArtifact(sourceMap(), other, w);
     if (isRefusal(artifact)) throw new Error(artifact.refusal);
-    expect(await w.control.findArtifacts({ organizationId: ORG, debugIds: [], release: 'web@1.0.0' })).toEqual([]);
-    expect(await w.control.findArtifacts({ organizationId: OTHER_ORG, debugIds: [], release: 'web@1.0.0' })).toEqual([artifact]);
+    expect(await w.control.artifactsFor(PROJECT, { debugIds: [], release: 'web@1.0.0' })).toEqual([]);
+    expect(await w.control.artifactsFor(OTHER_PROJECT, { debugIds: [], release: 'web@1.0.0' })).toEqual([artifact]);
   });
 
   it('refuses a token without the release scope, and an unplaced upload, storing nothing', async () => {

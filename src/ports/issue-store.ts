@@ -23,6 +23,7 @@ import type { IssueChange, IssueState } from '../domain/issue/state.js';
 import type { GroupedEvent } from '../domain/issue/tally.js';
 import type { Environment, SessionBucket, SessionCounts, UserCounts } from '../domain/release/health.js';
 import type { Release, ReleaseFirstSeen } from '../domain/release/ordering.js';
+import type { RecordedFiling } from '../domain/report/filing.js';
 import type { Report, Reporter } from '../domain/report/report.js';
 import type { Comment, ReportStatusChange } from '../domain/report/thread.js';
 import type { ExternalLink } from '../domain/tracker/external-link.js';
@@ -136,4 +137,10 @@ export interface IssueStore {
   externalLinkOf(issueId: IssueId): Promise<ExternalLink | null>;
   /** The Issue the Short Id counter names in this Project, or null. */
   issueOfShortId(shortId: number): Promise<IssueId | null>;
+  // --- task-025: filings recorded under a filing key ---
+
+  /** What was filed under the filing key in this Project, or null when nothing was. */
+  recallFiling(filingKey: string): Promise<RecordedFiling | null>;
+  /** Records the filing under the key, replacing what it held. */
+  recordFiling(filingKey: string, filing: RecordedFiling): Promise<void>;
 }

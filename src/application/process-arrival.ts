@@ -6,7 +6,7 @@
  * routes each item by kind.
  *
  * An event item is normalized, scrubbed with the Project's Scrubbing Rules,
- * mapped through its Artifacts when it is a browser Event, stored scrubbed with its Removals at `events/`, summarized, given its
+ * mapped through its Artifacts when it is a browser Event, stored scrubbed with its Removals under `events/<project id>/`, summarized, given its
  * Fingerprints, and assigned through ProjectClient after its Release is
  * recorded as seen. The Issue Changes go to the EffectQueue and the Event
  * Summary to the archive. Processing is idempotent: Event ids key every
@@ -14,7 +14,8 @@
  * and no change, so nothing is enqueued or archived twice.
  *
  * A feedback item is filed as a Report through fileReport, with the sign-in
- * Assertion the tunnel forwarded and the ingest Worker retained. Any other
+ * Assertion the tunnel forwarded and the ingest Worker retained, under a
+ * filing key, so a redelivered record files no second Report. Any other
  * kind (check-ins, sessions, attachments, security reports) is left to its
  * own use case with a `deferred` Outcome.
  *
@@ -79,6 +80,9 @@ export type ProcessArrivalDeps = Omit<FileReportDeps, 'settings'> & {
 /** One record being processed: the record, its envelope header, and its Project's processing config. */
 type Processing = { readonly record: ArrivalRecord; readonly header: Readonly<Record<string, unknown>>; readonly config: ProcessingConfig };
 
+/** An item of the record, with its index among the record's items. */
+type Placed = { readonly item: EnvelopeItem; readonly index: number };
+
 type Scrubbed = { readonly scrubbed: ScrubbedEvent; readonly userKey: string | null };
 
 // --- flow: reading the record ---
@@ -122,8 +126,9 @@ async function applySourceMaps(scrubbed: ScrubbedEvent, processing: Processing, 
 
 // --- flow: storing and assigning ---
 
-async function storeEvent(scrubbed: ScrubbedEvent, blobs: BlobStore): Promise<void> {
-  const stored = await blobs.put(eventBlobKey(scrubbed.event.eventId), encodeScrubbedEvent(scrubbed));
+async function storeEvent(scrubbed: ScrubbedEvent, processing: Processing, blobs: BlobStore): Promise<void> {
+  const key = eventBlobKey({ projectId: processing.record.projectId, eventId: scrubbed.event.eventId });
+  const stored = await blobs.put(key, encodeScrubbedEvent(scrubbed));
   if (!stored.ok) throw new Error(`event ${scrubbed.event.eventId} could not be stored (retryable: ${stored.retryable})`);
 }
 
@@ -149,7 +154,7 @@ async function settle(
 ): Promise<ProcessingResult> {
   const { assignment, summary, item } = placed;
   if ('tombstone' in assignment) {
-    await deps.blobs.delete(eventBlobKey(summary.eventId));
+    await deps.blobs.delete(eventBlobKey({ projectId: processing.record.projectId, eventId: summary.eventId }));
     const outcome = processingOutcome({ record: processing.record, type: item.header.type, kind: 'discarded', reason: 'tombstone' });
     return processingResult({ assignments: [assignment], outcomes: [outcome] });
   }
@@ -169,7 +174,7 @@ async function processEvent(item: EnvelopeItem, processing: Processing, deps: Pr
   }
   const { scrubbed, userKey } = await scrub(normalized, processing, deps.ids);
   const mapped = await applySourceMaps(scrubbed, processing, deps);
-  await storeEvent(mapped, deps.blobs);
+  await storeEvent(mapped, processing, deps.blobs);
 
   // Milestone: the Event is stored scrubbed; only now is it counted.
   const summary = toEventSummary(mapped.event, userKey);
@@ -187,16 +192,18 @@ function filed(filing: FilingReceipt | FilingRefusal): ProcessingResult {
   return processingResult({ outcomes: filing.outcome === undefined ? [] : [filing.outcome] });
 }
 
-/** Files the Report a feedback item carries, as whoever the sign-in the tunnel forwarded names. */
-async function fileFeedback(item: EnvelopeItem, processing: Processing, deps: ProcessArrivalDeps): Promise<ProcessingResult> {
+/** Files the Report a feedback item carries, as whoever the sign-in the tunnel forwarded names, keyed so a redelivery files nothing new. */
+async function fileFeedback(placed: Placed, processing: Processing, deps: ProcessArrivalDeps): Promise<ProcessingResult> {
   const { record } = processing;
-  return filed(await fileReport(record.projectId, feedbackSubmission(item), record.assertion, { ...deps, settings: deps.reportSettings }));
+  const submission = feedbackSubmission(placed.item, { recordId: record.id, index: placed.index });
+  return filed(await fileReport(record.projectId, submission, record.assertion, { ...deps, settings: deps.reportSettings }));
 }
 
-async function processItem(item: EnvelopeItem, processing: Processing, deps: ProcessArrivalDeps): Promise<ProcessingResult> {
+async function processItem(placed: Placed, processing: Processing, deps: ProcessArrivalDeps): Promise<ProcessingResult> {
+  const { item } = placed;
   const route = processingRoute(item.header.type);
   if (route === 'event') return processEvent(item, processing, deps);
-  if (route === 'feedback') return fileFeedback(item, processing, deps);
+  if (route === 'feedback') return fileFeedback(placed, processing, deps);
 
   // Milestone: check-ins, sessions, attachments and security reports wait for their own use cases.
   const outcome = processingOutcome({ record: processing.record, type: item.header.type, kind: 'discarded', reason: 'deferred' });
@@ -205,7 +212,7 @@ async function processItem(item: EnvelopeItem, processing: Processing, deps: Pro
 
 async function processItems(items: readonly EnvelopeItem[], processing: Processing, deps: ProcessArrivalDeps): Promise<ProcessingResult> {
   const results: ProcessingResult[] = [];
-  for (const item of items) results.push(await processItem(item, processing, deps));
+  for (const [index, item] of items.entries()) results.push(await processItem({ item, index }, processing, deps));
   return mergeResults(results);
 }
 

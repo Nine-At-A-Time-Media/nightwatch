@@ -23,6 +23,7 @@ import {
   type UserCounts,
 } from '../../src/domain/release/health.js';
 import type { Release, ReleaseFirstSeen } from '../../src/domain/release/ordering.js';
+import type { RecordedFiling } from '../../src/domain/report/filing.js';
 import type { Report, Reporter } from '../../src/domain/report/report.js';
 import type { Comment, ReportStatusChange } from '../../src/domain/report/thread.js';
 import type { ExternalLink } from '../../src/domain/tracker/external-link.js';
@@ -57,6 +58,8 @@ export class FakeIssueStore implements IssueStore {
   readonly #firings: AlertFiring[] = [];
   readonly #participations: { issueId: IssueId; participation: Participation }[] = [];
   readonly #externalLinks = new Map<IssueId, ExternalLink>();
+  // --- task-025: filings recorded under a filing key ---
+  readonly #filings = new Map<string, RecordedFiling>();
 
   constructor(options: { dedupWindow: number; projectNormalRate?: number }) {
     this.#dedupWindow = options.dedupWindow;
@@ -341,5 +344,15 @@ export class FakeIssueStore implements IssueStore {
 
   async addParticipation(issueId: IssueId, participation: Participation): Promise<void> {
     this.#participations.push({ issueId, participation });
+  }
+
+  // --- task-025: filings recorded under a filing key ---
+
+  async recallFiling(filingKey: string): Promise<RecordedFiling | null> {
+    return this.#filings.get(filingKey) ?? null;
+  }
+
+  async recordFiling(filingKey: string, filing: RecordedFiling): Promise<void> {
+    this.#filings.set(filingKey, filing);
   }
 }
