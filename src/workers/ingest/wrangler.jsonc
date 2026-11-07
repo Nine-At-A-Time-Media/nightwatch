@@ -21,6 +21,8 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["LogDO", "QuotaDO"] }],
   "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "nightwatch-blobs" }],
   "kv_namespaces": [{ "binding": "PROJECT_CONFIG", "id": "nightwatch-project-config-local" }],
+  // Admitted HTTP cron check-ins go on to MonitorDO in the monitors Worker.
+  "services": [{ "binding": "MONITORS", "service": "nightwatch-monitors" }],
   "vars": {
     // Picks the local stand-ins (LogDO for K2, R2 NDJSON for the archive).
     // Any other stage refuses every request until its real adapters exist.
