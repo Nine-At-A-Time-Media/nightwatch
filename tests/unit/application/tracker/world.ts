@@ -4,7 +4,8 @@
 // and a FakeTracker. The Project's state is reached through the
 // FakeProjectClient, as the github runtime reaches it.
 import { notifyReporters } from '../../../../src/application/reports/notify-reporters.js';
-import type { IssueChange } from '../../../../src/domain/issue/state.js';
+import type { IssueChange, IssueState, IssueTransition } from '../../../../src/domain/issue/state.js';
+import { isRefusal, type Refusal } from '../../../../src/domain/refusal.js';
 import type { TrackerSettings } from '../../../../src/domain/tracker/settings.js';
 import { FakeTracker } from '../../../_fakes/fake-tracker.js';
 import { summary } from '../issues/world.js';
@@ -59,4 +60,21 @@ export async function notifyAll(w: World, changes: readonly IssueChange[]) {
 
 export async function shownStatuses(w: World, reportId: string): Promise<string[]> {
   return (await w.projects.store(PROJECT).statusChangesOf(reportId)).map((change) => change.status);
+}
+
+/** Applies a Member's command to a stored Issue, as triageIssue would, and enqueues its changes; returns them. */
+export async function memberCommand(
+  w: World,
+  issueId: string,
+  run: (state: IssueState) => IssueTransition | Refusal,
+): Promise<IssueChange[]> {
+  const store = w.projects.store(PROJECT);
+  const state = await store.getIssue(issueId);
+  if (!state) throw new Error(`no issue ${issueId}`);
+  const result = run(state);
+  if (isRefusal(result)) throw new Error(result.refusal);
+  await store.putIssue(result.state);
+  await store.appendHistory(result.changes);
+  await w.effects.enqueue(result.changes);
+  return [...result.changes];
 }
