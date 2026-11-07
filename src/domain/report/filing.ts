@@ -17,6 +17,8 @@ import type { ReportReference } from './reference.js';
 import type { Reporter } from './report.js';
 import type { ReportStatus } from './status.js';
 
+const REPORT_ATTACHMENTS_PREFIX = 'attachments/reports/';
+
 export const REPORT_FORM_FIELDS = ['message', 'screenshot', 'associatedEventId'] as const;
 
 export type ReportFormField = (typeof REPORT_FORM_FIELDS)[number];
@@ -72,6 +74,11 @@ export function reportForm(signIn: SignIn): ReportForm {
 /** The Outcome of one filing. */
 export function filingOutcome(entry: { projectId: ProjectId; kind: OutcomeKind; reason: string | null; at: number }): Outcome {
   return { projectId: entry.projectId, recordedAt: entry.at, kind: entry.kind, reason: entry.reason, category: 'feedback', quantity: 1 };
+}
+
+/** The BlobStore key of a Report's screenshot. */
+export function reportAttachmentKey(reportId: ReportId): string {
+  return `${REPORT_ATTACHMENTS_PREFIX}${reportId}`;
 }
 
 /** The Follow-up Page link of a Report Reference. */
