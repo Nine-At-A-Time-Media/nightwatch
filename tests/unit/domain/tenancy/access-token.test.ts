@@ -57,7 +57,7 @@ describe('scopesOfRoles', () => {
 
 describe('isScope', () => {
   it('recognises only known scopes', () => {
-    fc.assert(fc.property(fc.string(), (text) => expect(isScope(text)).toBe((SCOPES as readonly string[]).includes(text))));
+    fc.assert(fc.property(fc.string(), (text) => isScope(text) === (SCOPES as readonly string[]).includes(text)));
     for (const scope of SCOPES) expect(isScope(scope)).toBe(true);
   });
 });
@@ -65,6 +65,6 @@ describe('isScope', () => {
 describe('tokenBytes', () => {
   it('encodes a presented token as UTF-8, the same each time', () => {
     expect(tokenBytes('ab')).toEqual(new Uint8Array([97, 98]));
-    fc.assert(fc.property(fc.string(), (token) => expect(tokenBytes(token)).toEqual(tokenBytes(token))));
+    fc.assert(fc.property(fc.string(), (token) => new TextDecoder().decode(tokenBytes(token)) === token));
   });
 });
