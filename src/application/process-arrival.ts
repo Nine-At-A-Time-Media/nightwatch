@@ -6,7 +6,7 @@
  * routes each item by kind.
  *
  * An event item is normalized, scrubbed with the Project's Scrubbing Rules,
- * stored scrubbed with its Removals at `events/`, summarized, given its
+ * mapped through its Artifacts when it is a browser Event, stored scrubbed with its Removals at `events/`, summarized, given its
  * Fingerprints, and assigned through ProjectClient after its Release is
  * recorded as seen. The Issue Changes go to the EffectQueue and the Event
  * Summary to the archive. Processing is idempotent: Event ids key every
@@ -48,6 +48,16 @@ import { isRefusal } from '../domain/refusal.js';
 import type { ReportSettings } from '../domain/report/filing.js';
 import { scrubbingRules } from '../domain/scrub/rules.js';
 import { hashedFrom, scrubEvent, textsToHash, type ScrubbedEvent } from '../domain/scrub/scrub.js';
+import {
+  artifactBlobKey,
+  artifactQuery,
+  isSourceMapped,
+  matchedArtifacts,
+  sourceMapLookup,
+  type Artifact,
+} from '../domain/sourcemap/artifact.js';
+import { mapEventFrames } from '../domain/sourcemap/map-frames.js';
+import { parseSourceMap, type SourceMap } from '../domain/sourcemap/source-map.js';
 import type { ArchiveSink } from '../ports/archive-sink.js';
 import type { BlobStore } from '../ports/blob-store.js';
 import type { Ids } from '../ports/ids.js';
@@ -83,6 +93,25 @@ async function scrub(event: NormalizedEvent, processing: Processing, ids: Ids): 
   const scrubbed = scrubEvent(event, rules, hashedFrom(await hashAll(textsToHash(event, rules), ids)));
   const userText = userKeyText(scrubbed.event, scrubbed.removals);
   return { scrubbed, userKey: userText === null ? null : await ids.hash(userText) };
+}
+
+// --- flow: source maps ---
+
+/** The parsed map of an Artifact, by its id; null when its file is gone or is no source map. */
+async function loadSourceMap(artifact: Artifact, blobs: BlobStore): Promise<readonly [string, SourceMap] | null> {
+  const bytes = await blobs.get(artifactBlobKey(artifact));
+  const map = bytes === null ? null : parseSourceMap(bytes);
+  return map === null || isRefusal(map) ? null : [artifact.id, map];
+}
+
+/** Maps a browser Event's frames through the Artifacts that match them; a frame left minified is recorded on the Event. */
+async function applySourceMaps(scrubbed: ScrubbedEvent, processing: Processing, deps: ProcessArrivalDeps): Promise<ScrubbedEvent> {
+  const { event } = scrubbed;
+  if (!isSourceMapped(event)) return scrubbed;
+  const artifacts = matchedArtifacts(event, await deps.control.artifactsFor(processing.record.projectId, artifactQuery(event)));
+  const loaded = await Promise.all(artifacts.map((artifact) => loadSourceMap(artifact, deps.blobs)));
+  const maps = new Map(loaded.filter((entry) => entry !== null));
+  return { ...scrubbed, event: mapEventFrames(event, sourceMapLookup({ event, artifacts, maps })) };
 }
 
 // --- flow: storing and assigning ---
@@ -128,11 +157,12 @@ async function processEvent(item: EnvelopeItem, processing: Processing, deps: Pr
     return processingResult({ outcomes: [outcome] });
   }
   const { scrubbed, userKey } = await scrub(normalized, processing, deps.ids);
-  await storeEvent(scrubbed, deps.blobs);
+  const mapped = await applySourceMaps(scrubbed, processing, deps);
+  await storeEvent(mapped, deps.blobs);
 
   // Milestone: the Event is stored scrubbed; only now is it counted.
-  const summary = toEventSummary(scrubbed.event, userKey);
-  const fingerprints = deriveFingerprints(toGroupingInput(scrubbed.event), processing.config.grouping);
+  const summary = toEventSummary(mapped.event, userKey);
+  const fingerprints = deriveFingerprints(toGroupingInput(mapped.event), processing.config.grouping);
   const assignment = await assign({ summary, fingerprints }, processing, deps);
   return settle({ assignment, summary, item }, processing, deps);
 }
