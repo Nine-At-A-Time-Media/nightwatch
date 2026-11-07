@@ -8,6 +8,9 @@
  * what the IssueStore holds, as the fake ProjectClient does.
  */
 
+import { searchProjectPage } from '../../application/issues/search-project-page.js';
+import type { SearchContext } from '../../domain/search/match.js';
+import type { IssuePage, SearchPlan } from '../../domain/search/page.js';
 import { claimedProject, claimProject, scheduleSweep } from '../../adapters/do-sqlite/project-identity.js';
 import { assignEvent } from '../../application/issues/assign-event.js';
 import { recordReleaseSeen } from '../../application/issues/record-release-seen.js';
@@ -332,4 +335,15 @@ export async function latestEventOfStep(r: ProjectRuntime, projectId: ProjectId,
 export async function recallFilingStep(r: ProjectRuntime, projectId: ProjectId, filingKey: string): Promise<RecordedFiling | null> {
   await claim(r, projectId);
   return r.issues.recallFiling(filingKey);
+}
+
+// --- task-031: search ---
+
+export async function searchPageStep(
+  r: ProjectRuntime,
+  projectId: ProjectId,
+  search: { plan: SearchPlan; context: SearchContext },
+): Promise<IssuePage> {
+  await claim(r, projectId);
+  return searchProjectPage(projectId, search, { issues: r.issues, memberEmails: new Map() });
 }

@@ -549,3 +549,28 @@ describe('SqliteIssueStore', () => {
       expect(await store.projectNormalRate()).toBe(1);
     }));
 });
+
+describe.each<Subject>([fake, sqlite])('IssueStore retention contract -- $name', ({ run }) => {
+  it('removes only Events before the cutoff, from every Issue, and names them', () =>
+    run(async ({ store }) => {
+      await store.recordEvent('issue-1', event('old-1', T0 - 2, ['fp-1']));
+      await store.recordEvent('issue-2', event('old-2', T0 - 1, ['fp-2']));
+      await store.recordEvent('issue-1', event('kept', T0, ['fp-1']));
+      expect([...(await store.removeEventsBefore(T0))].sort()).toEqual(['old-1', 'old-2']);
+      expect((await store.eventsOf('issue-1')).map((held) => held.summary.eventId)).toEqual(['kept']);
+      expect(await store.eventsOf('issue-2')).toEqual([]);
+      expect(await store.removeEventsBefore(T0)).toEqual([]);
+    }));
+
+  it('lists the Reports filed before the cutoff and forgets only their filing records', () =>
+    run(async ({ store }) => {
+      await store.putReport({ ...report('report-old', 'issue-1', 'ada@example.test'), filedAt: T0 - 1 });
+      await store.putReport(report('report-new', 'issue-1', 'ada@example.test'));
+      await store.recordFiling('key-old', { reportId: 'report-old', noticeSent: true });
+      await store.recordFiling('key-new', { reportId: 'report-new', noticeSent: true });
+      expect((await store.reportsFiledBefore(T0)).map((filed) => filed.id)).toEqual(['report-old']);
+      await store.forgetFilingsOf(['report-old']);
+      expect(await store.recallFiling('key-old')).toBeNull();
+      expect(await store.recallFiling('key-new')).toEqual({ reportId: 'report-new', noticeSent: true });
+    }));
+});
