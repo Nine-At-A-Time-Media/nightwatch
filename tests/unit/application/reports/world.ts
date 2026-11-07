@@ -15,6 +15,7 @@ import { FakeMailer } from '../../../_fakes/fake-mailer.js';
 import { FakeProjectClient } from '../../../_fakes/fake-project-client.js';
 import { FakeQuotaGate } from '../../../_fakes/fake-quota-gate.js';
 import { FakeSignInVerifier } from '../../../_fakes/sign-in-verifier.js';
+import { FakeSpamJudge } from '../../../_fakes/fake-spam-judge.js';
 import { FakeEffectQueue } from '../../../_fakes/effect-queue.js';
 import { DAY, HOUR, MINUTE, T0, policies } from '../../domain/issue/fixtures.js';
 
@@ -65,6 +66,7 @@ export function world(options: { quota?: Record<string, Partial<Record<'feedback
     quota: new FakeQuotaGate(options.quota ?? {}),
     blobs: new FakeBlobStore(),
     mailer: new FakeMailer(),
+    spam: new FakeSpamJudge(),
     settings: SETTINGS,
   };
 }

@@ -133,4 +133,25 @@ describe('fileReport', () => {
     expect(await fileReport(PROJECT, submission('it broke'), assertionOf(ADA), controlDown)).toEqual({ refusal: 'unavailable', retryable: true });
     await nothingFiled(controlDown);
   });
+
+  it('archives a Report the Spam Judge judges spam at the threshold, and still sends the receipt as for any Report', async () => {
+    const w = world();
+    w.spam.verdict = { verdict: 'spam', confidence: 0.95 };
+    const receipt = await filed(w, ADA, 'buy cheap watches');
+    const store = w.projects.store(PROJECT);
+    const report = await store.getReport(receipt.reportId);
+    expect(w.spam.judged).toEqual(['buy cheap watches']);
+    expect(report).toMatchObject({ spam: true });
+    expect(await store.getIssue(report?.issueId ?? '')).toMatchObject({ status: 'archived', substatus: 'forever', spam: true });
+    expect(w.mailer.sentTo(ADA)).toHaveLength(1);
+  });
+
+  it('leaves a Report the Spam Judge is not sure of', async () => {
+    const w = world();
+    w.spam.verdict = { verdict: 'spam', confidence: 0.5 };
+    const receipt = await filed(w, ADA);
+    const report = await w.projects.store(PROJECT).getReport(receipt.reportId);
+    expect(report).toMatchObject({ spam: false });
+    expect(await w.projects.store(PROJECT).getIssue(report?.issueId ?? '')).toMatchObject({ status: 'unresolved' });
+  });
 });
