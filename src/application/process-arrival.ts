@@ -13,12 +13,17 @@
  * write, and ProjectDO answers a duplicate Event with the earlier target
  * and no change, so nothing is enqueued or archived twice.
  *
- * Every Outcome processing decides (an event refused or dropped, an item
- * left to another use case) is archived. A write that fails throws, so the
+ * A feedback item is filed as a Report through fileReport, with the sign-in
+ * Assertion the tunnel forwarded and the ingest Worker retained. Any other
+ * kind (check-ins, sessions, attachments, security reports) is left to its
+ * own use case with a `deferred` Outcome.
+ *
+ * Every Outcome processing decides (an event refused or dropped, a filing
+ * refused, an item left to another use case) is archived. A write that fails throws, so the
  * pump retries the record.
  *
  * Ports: ControlStore, BlobStore, ProjectClient, EffectQueue, ArchiveSink,
- * Clock, Ids.
+ * Clock, Ids; and fileReport's SignInVerifier, QuotaGate, SpamJudge, Mailer.
  */
 
 import { deriveFingerprints } from '../domain/grouping/derive.js';
@@ -45,7 +50,8 @@ import {
 } from '../domain/processing/processing.js';
 import type { EnvelopeItem } from '../domain/protocol/envelope.js';
 import { isRefusal } from '../domain/refusal.js';
-import type { ReportSettings } from '../domain/report/filing.js';
+import type { FilingReceipt, FilingRefusal, ReportSettings } from '../domain/report/filing.js';
+import { feedbackSubmission } from '../domain/processing/feedback.js';
 import { scrubbingRules } from '../domain/scrub/rules.js';
 import { hashedFrom, scrubEvent, textsToHash, type ScrubbedEvent } from '../domain/scrub/scrub.js';
 import {
@@ -61,7 +67,7 @@ import { parseSourceMap, type SourceMap } from '../domain/sourcemap/source-map.j
 import type { ArchiveSink } from '../ports/archive-sink.js';
 import type { BlobStore } from '../ports/blob-store.js';
 import type { Ids } from '../ports/ids.js';
-import type { FileReportDeps } from './reports/file-report.js';
+import { fileReport, type FileReportDeps } from './reports/file-report.js';
 
 /** fileReport's ports, for feedback items, and the processor's own. */
 export type ProcessArrivalDeps = Omit<FileReportDeps, 'settings'> & {
@@ -172,9 +178,27 @@ async function processEvent(item: EnvelopeItem, processing: Processing, deps: Pr
   return settle({ assignment, summary, item }, processing, deps);
 }
 
+// --- flow: feedback ---
+
+/** A filing storage could not take is thrown, so the record is retried; any other refusal stands with its Outcome. */
+function filed(filing: FilingReceipt | FilingRefusal): ProcessingResult {
+  if (!isRefusal(filing)) return processingResult({ filingReceipts: [filing] });
+  if (filing.retryable !== undefined) throw new Error(`feedback could not be filed: ${filing.refusal} (retryable: ${filing.retryable})`);
+  return processingResult({ outcomes: filing.outcome === undefined ? [] : [filing.outcome] });
+}
+
+/** Files the Report a feedback item carries, as whoever the sign-in the tunnel forwarded names. */
+async function fileFeedback(item: EnvelopeItem, processing: Processing, deps: ProcessArrivalDeps): Promise<ProcessingResult> {
+  const { record } = processing;
+  return filed(await fileReport(record.projectId, feedbackSubmission(item), record.assertion, { ...deps, settings: deps.reportSettings }));
+}
+
 async function processItem(item: EnvelopeItem, processing: Processing, deps: ProcessArrivalDeps): Promise<ProcessingResult> {
   const route = processingRoute(item.header.type);
   if (route === 'event') return processEvent(item, processing, deps);
+  if (route === 'feedback') return fileFeedback(item, processing, deps);
+
+  // Milestone: check-ins, sessions, attachments and security reports wait for their own use cases.
   const outcome = processingOutcome({ record: processing.record, type: item.header.type, kind: 'discarded', reason: 'deferred' });
   return processingResult({ outcomes: [outcome] });
 }
