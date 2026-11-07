@@ -119,6 +119,7 @@ describe('advanceMonitor', () => {
       projectId: PROJECT,
       issueId: null,
       url: URL,
+      interval: MINUTE,
       config: { uptimeFailureCount: 3, recoveryCount: 1 },
       state: NEW_UPTIME_MONITOR,
     });
