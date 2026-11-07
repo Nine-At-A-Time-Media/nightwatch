@@ -1,6 +1,7 @@
 // Trace, at the records level: every row of the design's Behaviors tables
 // resolves to exactly one use case in the architecture record's use-case
-// surface, and every use case named there is backed by a design row.
+// surface, and every use case named there is backed by a design row. A row
+// whose first cell is parenthesized is infrastructure with no design row.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -17,7 +18,8 @@ function firstCells(table: string, header: string): string[] {
   return table
     .split('\n')
     .filter((line) => line.startsWith('| ') && !line.startsWith(`| ${header}`))
-    .map((line) => line.split('|')[1]?.trim() ?? '');
+    .map((line) => line.split('|')[1]?.trim() ?? '')
+    .filter((cell) => !cell.startsWith('('));
 }
 
 const behaviors = firstCells(section(design, '## Behaviors', '## State Machine'), 'Behavior');
