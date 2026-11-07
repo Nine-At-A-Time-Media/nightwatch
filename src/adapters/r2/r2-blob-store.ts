@@ -29,4 +29,8 @@ export class R2BlobStore implements BlobStore {
     const object = await this.#bucket.get(key);
     return object === null ? null : new Uint8Array(await object.arrayBuffer());
   }
+
+  async delete(key: string): Promise<void> {
+    await this.#bucket.delete(key);
+  }
 }

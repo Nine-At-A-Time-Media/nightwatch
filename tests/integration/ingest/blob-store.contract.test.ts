@@ -32,6 +32,13 @@ describe.each<{ name: string; make: () => BlobStore }>([
     expect(await store.get(key)).toEqual(bytes(9));
   });
 
+  it('a deleted key reads as null, and deleting a missing key does nothing', async () => {
+    await store.put(key, bytes(1));
+    await store.delete(key);
+    await store.delete(`${key}-never-put`);
+    expect(await store.get(key)).toBeNull();
+  });
+
   it('a key never put reads as null', async () => {
     expect(await store.get(key)).toBeNull();
   });

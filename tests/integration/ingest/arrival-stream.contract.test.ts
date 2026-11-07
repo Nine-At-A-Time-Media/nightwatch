@@ -78,7 +78,7 @@ describe.each<{ name: string; make: (clock: FakeClock) => Log }>([
     await log.subscribe({ subscription: SUBSCRIPTION, start: 'earliest' });
     await appendAll(log, ['a']);
     await log.pull({ subscription: SUBSCRIPTION, workerId: 'w1', max: 10 });
-    clock.time += LEASE_MS - 1;
+    clock.advance(LEASE_MS - 1);
     expect(await log.pull({ subscription: SUBSCRIPTION, workerId: 'w2', max: 10 })).toEqual([]);
   });
 
@@ -87,7 +87,7 @@ describe.each<{ name: string; make: (clock: FakeClock) => Log }>([
     await appendAll(log, ['a', 'b']);
     const leased = await log.pull({ subscription: SUBSCRIPTION, workerId: 'w1', max: 10 });
     await log.ack({ subscription: SUBSCRIPTION, workerId: 'w1', offsets: [leased[0]!.offset] });
-    clock.time += LEASE_MS;
+    clock.advance(LEASE_MS);
     expect(ids(await log.pull({ subscription: SUBSCRIPTION, workerId: 'w1', max: 10 }))).toEqual(['b']);
   });
 
@@ -95,7 +95,7 @@ describe.each<{ name: string; make: (clock: FakeClock) => Log }>([
     await log.subscribe({ subscription: SUBSCRIPTION, start: 'earliest' });
     await appendAll(log, ['a']);
     await log.pull({ subscription: SUBSCRIPTION, workerId: 'w1', max: 10 });
-    clock.time += LEASE_MS;
+    clock.advance(LEASE_MS);
     expect(ids(await log.pull({ subscription: SUBSCRIPTION, workerId: 'w2', max: 10 }))).toEqual(['a']);
   });
 
@@ -111,11 +111,11 @@ describe.each<{ name: string; make: (clock: FakeClock) => Log }>([
     await log.subscribe({ subscription: SUBSCRIPTION, start: 'earliest' });
     await appendAll(log, ['a']);
     const leased = await log.pull({ subscription: SUBSCRIPTION, workerId: 'w1', max: 10 });
-    clock.time += LEASE_MS - 1;
+    clock.advance(LEASE_MS - 1);
     await log.extend({ subscription: SUBSCRIPTION, workerId: 'w1', offsets: leased.map((l) => l.offset) });
-    clock.time += LEASE_MS - 1;
+    clock.advance(LEASE_MS - 1);
     expect(await log.pull({ subscription: SUBSCRIPTION, workerId: 'w2', max: 10 })).toEqual([]);
-    clock.time += 1;
+    clock.advance(1);
     expect(ids(await log.pull({ subscription: SUBSCRIPTION, workerId: 'w2', max: 10 }))).toEqual(['a']);
   });
 
@@ -123,10 +123,10 @@ describe.each<{ name: string; make: (clock: FakeClock) => Log }>([
     await log.subscribe({ subscription: SUBSCRIPTION, start: 'earliest' });
     await appendAll(log, ['a']);
     const stale = await log.pull({ subscription: SUBSCRIPTION, workerId: 'w1', max: 10 });
-    clock.time += LEASE_MS;
+    clock.advance(LEASE_MS);
     await log.pull({ subscription: SUBSCRIPTION, workerId: 'w2', max: 10 });
     await log.ack({ subscription: SUBSCRIPTION, workerId: 'w1', offsets: stale.map((l) => l.offset) });
-    clock.time += LEASE_MS;
+    clock.advance(LEASE_MS);
     expect(ids(await log.pull({ subscription: SUBSCRIPTION, workerId: 'w3', max: 10 }))).toEqual(['a']);
   });
 

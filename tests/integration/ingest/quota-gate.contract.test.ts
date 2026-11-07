@@ -89,7 +89,7 @@ describe('DurableQuotaGate', () => {
     const gate = await durableGate({ [project]: { error: 1 } }, clock);
     await check(gate, project, 'error', 1);
     expect(await check(gate, project, 'error', 1)).toMatchObject({ allowed: false, advice: { retryAfterSeconds: 20 } });
-    clock.time += 20_000;
+    clock.advance(20_000);
     expect(await check(gate, project, 'error', 1)).toEqual({ allowed: true });
   });
 });
