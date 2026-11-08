@@ -1,0 +1,17 @@
+node_modules
+.wrangler
+.state
+pnpm-lock.yaml
+reports
+docs
+tasks
+*.md
+.designomatic.yml
+.claude
+.agents
+.codex
+**/worker-configuration.d.ts
+widget/dist
+console/.nuxt
+console/.output
+console/.data

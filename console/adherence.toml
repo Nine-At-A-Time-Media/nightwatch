@@ -1,0 +1,21 @@
+# adherence.toml -- the console package's declaration to the adherence suite
+# (tds-utils docs/design/DESIGN.ARCH-ADHERENCE.md). Paths are relative to
+# console/. The records (design and architecture) live at the repository
+# root, docs/design/; this declaration carries no [records] (architecture
+# record, Adherence).
+#
+# server/ is the console Worker's composition root: each Nitro route under
+# server/api/ is an entry point that builds deps (server/deps.ts) and calls
+# one handler (server/handlers/), which parses, calls one use case of the
+# root package and shapes the answer. app/ (pages and components) is the
+# browser adapter.
+#
+# Left UNDECLARED on purpose: build and tool configuration (nuxt.config.ts,
+# vitest.*.config.ts, tsconfig.json, tests/tsconfig.*.json, package.json,
+# wrangler.jsonc, worker-configuration.d.ts) and the build output
+# (.nuxt/, .output/, gitignored).
+
+[layers]
+adapters = ["app/**"]
+"composition root" = ["server/**"]
+test = ["tests/**"]

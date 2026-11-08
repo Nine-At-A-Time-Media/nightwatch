@@ -1,0 +1,5 @@
+{
+  "extends": "../.nuxt/tsconfig.app.json",
+  "compilerOptions": { "exactOptionalPropertyTypes": true },
+  "include": ["./components/**/*.ts", "../app/**/*.vue", "../.nuxt/nuxt.d.ts", "../worker-configuration.d.ts"]
+}

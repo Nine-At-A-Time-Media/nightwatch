@@ -1,0 +1,35 @@
+# adherence.toml -- Nightwatch's declaration to the adherence suite
+# (tds-utils docs/design/DESIGN.ARCH-ADHERENCE.md). Layers mirror the Module
+# map in docs/design/ARCHITECTURE.NIGHTWATCH.md. Paths are relative to the
+# repository root. A new file under a declared tree needs its layer in the
+# change that creates it.
+#
+# Left UNDECLARED on purpose: build and tool configuration at the root
+# (*.config.ts, eslint.config.js, wrangler.jsonc files) and scripts/ --
+# tooling, not product. console/ and widget/ carry their own declarations
+# when they land; their records live here at the root.
+#
+# No [radar] yet: docs/TECH-RADAR.md lands with the first code that uses a
+# proposed row, and the radar key is added in that change.
+
+[layers]
+domain = ["src/domain/**"]
+ports = ["src/ports/**"]
+application = ["src/application/**"]
+adapters = ["src/adapters/**"]
+"composition root" = ["src/workers/**"]
+test = ["tests/**", "dev/**"]
+
+[records]
+design = "docs/design/DESIGN.NIGHTWATCH.md"
+architecture = "docs/design/ARCHITECTURE.NIGHTWATCH.md"
+
+[runtimes]
+"ingest worker" = ["src/workers/ingest/**"]
+"processor worker" = ["src/workers/processor/**"]
+"core worker" = ["src/workers/core/**"]
+"notifier worker" = ["src/workers/notifier/**"]
+"github worker" = ["src/workers/github/**"]
+"inbound-mail worker" = ["src/workers/inbound-mail/**"]
+"monitors worker" = ["src/workers/monitors/**"]
+"scheduler worker" = ["src/workers/scheduler/**"]

@@ -1,0 +1,45 @@
+// The core Worker -- hosts ProjectDO, one Durable Object per Project, which
+// holds the Project's issue state in its SQLite storage.
+// The top level is the local stage (architecture, Local development): it
+// declares no remote-only binding. Adopters add `nonprod` and `prod`
+// environment blocks and repeat every binding there; bindings do not inherit.
+{
+  "$schema": "../../../node_modules/wrangler/config-schema.json",
+  "name": "nightwatch-core",
+  "main": "index.ts",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": false,
+  "observability": { "enabled": true },
+  // LogDO and QuotaDO stay in the ingest Worker for now: a cross-script
+  // Durable Object binding needs a pre-bundled auxiliary Worker under the
+  // Vitest plugin (task-015, task-028).
+  "durable_objects": {
+    "bindings": [{ "name": "PROJECT", "class_name": "ProjectDO" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ProjectDO"] }],
+  // Issue Changes leave ProjectDO on the effects queue.
+  "queues": { "producers": [{ "binding": "EFFECTS", "queue": "nightwatch-effects" }] },
+  // Retention deletes the removed Events' and Reports' blobs from the bucket
+  // ingest and processing write (task-034), and a discarded Issue's (task-038).
+  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "nightwatch-blobs" }],
+  "vars": {
+    // Any other stage refuses to build a ProjectDO until its adapters exist.
+    "STAGE": "local",
+    // ProjectDO settings, in milliseconds unless named otherwise. The
+    // IssuePolicies values move to D1 project config with the ControlStore.
+    "DEDUP_WINDOW_MS": 86400000,
+    "SWEEP_INTERVAL_MS": 3600000,
+    "NEW_ISSUE_AGE_MS": 259200000,
+    "SETTLE_AGE_MS": 604800000,
+    "INBOX_EXPIRY_MS": 604800000,
+    // 0 means the Project never auto-resolves.
+    "AUTO_RESOLVE_AGE_MS": 0,
+    "EARLY_ESCALATION_YOUNG_AGE_MS": 86400000,
+    "EARLY_ESCALATION_MINIMUM_COUNT": 10,
+    "EARLY_ESCALATION_RATE_MULTIPLE": 5,
+    "FORECAST_WINDOW_MS": 86400000,
+    "FORECAST_SPREAD_MULTIPLE": 3,
+    "FORECAST_FLOOR": 10,
+    "FORECAST_REFRESH_INTERVAL_MS": 3600000,
+  },
+}

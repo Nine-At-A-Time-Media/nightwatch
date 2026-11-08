@@ -1,0 +1,5 @@
+{
+  "extends": "../.nuxt/tsconfig.server.json",
+  "compilerOptions": { "exactOptionalPropertyTypes": true },
+  "include": ["./server/**/*.ts", "../worker-configuration.d.ts"]
+}

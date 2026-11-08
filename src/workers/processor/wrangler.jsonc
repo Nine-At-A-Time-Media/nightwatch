@@ -1,0 +1,72 @@
+// The processor Worker -- hosts StreamPumpDO, which pulls the arrival log
+// and runs processArrival on each record (architecture, Mechanism: Stream
+// consumption and processing).
+// The top level is the local stage (architecture, Local development): it
+// declares no remote-only binding. Adopters add `nonprod` and `prod`
+// environment blocks and repeat every binding there; bindings do not inherit.
+{
+  "$schema": "../../../node_modules/wrangler/config-schema.json",
+  "name": "nightwatch-processor",
+  "main": "index.ts",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": false,
+  "observability": { "enabled": true },
+  "durable_objects": {
+    "bindings": [
+      { "name": "PUMP", "class_name": "StreamPumpDO" },
+      // The arrival log (the K2 stand-in) and Quota counters live in the
+      // ingest Worker; each Project's state lives in the core Worker.
+      { "name": "LOG", "class_name": "LogDO", "script_name": "nightwatch-ingest" },
+      { "name": "QUOTA", "class_name": "QuotaDO", "script_name": "nightwatch-ingest" },
+      { "name": "PROJECT", "class_name": "ProjectDO", "script_name": "nightwatch-core" },
+    ],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["StreamPumpDO"] }],
+  // Same bucket and database as the ingest Worker: raw/ bodies are read from
+  // it, events/ and deadletter/ written to it; D1 is the control plane.
+  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "nightwatch-blobs" }],
+  "d1_databases": [
+    {
+      "binding": "CONTROL",
+      "database_name": "nightwatch-control",
+      "database_id": "nightwatch-control-local",
+      "migrations_dir": "../../../migrations",
+    },
+  ],
+  // Issue Changes leave on the effects queue.
+  "queues": { "producers": [{ "binding": "EFFECTS", "queue": "nightwatch-effects" }] },
+  // Outbound mail (receipts of feedback Reports). Locally Wrangler writes
+  // each message as an .eml file instead of sending it.
+  "send_email": [{ "name": "EMAIL" }],
+  // The safety net: each minute every pump is kicked, so a pump whose alarm
+  // chain broke starts again.
+  "triggers": { "crons": ["* * * * *"] },
+  "vars": {
+    // Picks the local stand-ins (LogDO for K2, R2 NDJSON for the archive,
+    // the local issuer Worker for Access). Any other stage refuses.
+    "STAGE": "local",
+    // Pumps: how many StreamPumpDO instances share the subscription, records
+    // per pull, deliveries before a record is dead-lettered, and the alarm
+    // interval and lease length in milliseconds.
+    "PUMP_COUNT": 1,
+    "PUMP_BATCH_SIZE": 50,
+    "PUMP_RETRY_BOUND": 5,
+    "PUMP_INTERVAL_MS": 1000,
+    "PUMP_LEASE_MS": 60000,
+    // ProcessingSettings: the Clock-drift clamp (ms) and the longest tag value.
+    "CLAMP_FUTURE_MS": 60000,
+    "MAX_TAG_VALUE_LENGTH": 200,
+    // ReportSettings for feedback filed through an SDK.
+    "FOLLOW_UP_BASE_URL": "http://localhost:8787/follow-up",
+    "MAX_MESSAGE_LENGTH": 10000,
+    "SPAM_THRESHOLD": 0.9,
+    "MAIL_FROM": "nightwatch@localhost",
+  },
+  // The local stage reads issuer keys from the local issuer Worker
+  // (dev/local-issuer). Never bound on a deployed stage.
+  // Envelope check-in items go on to MonitorDO through the monitors Worker.
+  "services": [
+    { "binding": "LOCAL_ISSUER", "service": "nightwatch-local-issuer" },
+    { "binding": "MONITORS", "service": "nightwatch-monitors" },
+  ],
+}

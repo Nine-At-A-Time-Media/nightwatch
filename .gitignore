@@ -1,0 +1,26 @@
+# Clean-room backstop: reference checkouts never live in this tree (AGENTS.md).
+sentry/
+sentry-*/
+getsentry*/
+relay/
+snuba/
+self-hosted/
+reference/
+
+node_modules/
+.wrangler/
+.dev.vars
+
+# Provisioned agent skills (clai); generated each session, not source.
+.claude/skills/
+.agents/
+.codex/
+
+# designomatic run artifacts
+.designomatic/
+# local tool state (hermetic)
+.state/
+node_modules/
+/reports/
+.stryker-tmp/
+.claude/worktrees/
