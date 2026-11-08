@@ -30,10 +30,17 @@ remaining tasks are gaps the agents reported while building them.
 
 ## Now
 
-- task-026 -- the rest of the processing gaps: screenshots in the envelope, the grouping transition window.
-- task-037 -- reprocessing past the dedup window must replace an Event's derived state, not recount it.
-- task-039 -- alert signals per Event (frequency triggers) and the GitHub alert action.
-- task-040 -- Issue Changes name their Project; remove the console `lastProject()` workaround.
+The retrospective of 2026-11-08 walked both records against the code.
+Decisions needed first, then the remaining drift:
+
+- task-042 -- decision: the Access assertion sits in raw retention (security).
+- task-041 -- decision: monitor issues break the Issue invariant.
+- task-043, task-044 -- erasure misses raw retention; the alert quiet period is not atomic.
+- task-049, task-040 -- signatures vs the use-case surface; Issue Changes name their Project.
+- task-039, task-026, task-037 -- alert signals per Event; processing gaps; reprocessing past dedup.
+- task-045, task-046, task-047 -- notices, search tags, Suspect Commit display.
+- task-048 -- deployed-stage adapters (K2, Basin, Workers AI) before any release.
+- task-050 -- behavior built without a design: decide what gets designed.
 
 ## Blockers
 
@@ -48,3 +55,13 @@ remaining tasks are gaps the agents reported while building them.
   `docs/TECH-RADAR.md` proposes `@cloudflare/vitest-plugin`.
 
 ## Lessons Learned
+
+### Port-extending tasks conflict when run in parallel
+
+about: wip
+
+Domain-only tasks run in parallel merged with no conflicts. Every wave of
+use-case tasks that appended to IssueStore, ControlStore and ProjectClient
+conflicted, and union merges dropped braces. Sequence port-extending tasks,
+or give one task ownership of each shared port per wave, until the shared
+ports stop growing.

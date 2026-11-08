@@ -669,6 +669,10 @@ visibility nor plan gates the feature.
 | A13 | Console | Nuxt on Workers, merging the API, triage UI and Follow-up Page | Fleet Adopt row; one Access application. | Drafting |
 | A14 | Local stand-ins | `LogDO` for K2, R2 NDJSON for Basin Pipelines, D1 roll-up for Basin SQL, own JWT check for Access | Those products have no working local emulation (spike, 2026-11-07); design G21 requires every behavior to run locally. | Drafting, from the spike |
 | A15 | Who verifies an Assertion | The use case, through `SignInVerifier`; entry points pass the raw Assertion | Keeps the trust decision in one tested place; entry points stay thin. | Drafting, from task-010 |
+| A16 | Effect messages | Each Issue Change travels with its Project id | An Issue Change names no Project; the notifier needs one. Interim until task-040. | Implementation, task-033 |
+| A17 | Hashing | `Ids` carries reference, content and value hashing (Web Crypto) | Keeps crypto out of the core behind one existing port. | Implementation, task-009 and task-022 |
+| A18 | Ingest-side config on the local stage | Read from D1 directly; deployed stages read the KV copy | No KV-sync step is needed to develop locally. | Implementation, task-032 |
+| A19 | Use-case signatures | Leading project argument and extra deps where the record's signature lacked them | Recorded as drift for a decision. | Drift task-049 |
 
 ---
 

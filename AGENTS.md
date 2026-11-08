@@ -75,6 +75,8 @@ See `LICENSE.md`, Acknowledgements.
   the fake and the real one.
 - After a union merge of two appended sections, check for a closing brace
   dropped before a banner and for duplicate import lines.
+- An Agent-tool worktree may start at the repository's initial commit,
+  not the current branch tip; reset it to the tip before the first edit.
 
 ## Git
 

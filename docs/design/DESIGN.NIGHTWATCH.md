@@ -697,6 +697,9 @@ triage console.
 | D10 | Platform limits | Free-plan allocations are soft limits; beta account caps are accepted | Keeps cost near zero; an overrun is a signal to review, not an outage. | Owner, 2026-11-07 |
 | D11 | Reporter identity | Every reporter is signed in; the sign-in asserts their email | All users carry an Access token naming their email; anonymous Reports, human checks and contact forms are not needed. | Owner, 2026-11-07 |
 | D12 | Project form | Open source, no hosting guaranteed, developed and tested locally | Anyone can run it; contributors need no account; the hosted stage is an adopter's choice. | Owner, 2026-11-07 |
+| D13 | Who may share a GitHub comment with a reporter (Q3) | Only commenters mapped to a Member of the Organization | A collaborator who is not a Member is not accountable to the reporter. | Implementation, task-011 |
+| D14 | Assignment | A Member action through `assignIssue`; it marks the Issue reviewed and makes the assignee a follower | The design has no Behaviors row for assignment; recorded so it can get one. | Implementation, task-030; drift task-050 |
+| D15 | Moving a Report to another Issue | `moveReport`; the reporter hears the new Issue's next change | Design Reports > Duplicates allows the move; no row covers its notice. | Implementation, task-027 |
 
 ---
 
